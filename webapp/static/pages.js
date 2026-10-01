@@ -262,8 +262,8 @@ const BAR_ANIMATION_MS = 900;
 
 // Раздел открыли: заголовок, описание и остальное содержимое страницы
 // появляются по очереди (так же, как карточки).
-function viewEnter(el) {
-  [...el.children].forEach((child, i) => {
+function viewEnter(el, items = null) {
+  (items || [...el.children]).forEach((child, i) => {
     child.style.setProperty("--i", i);
     child.classList.add("enter");
     child.addEventListener("animationend", () => child.classList.remove("enter"), { once: true });
@@ -1162,29 +1162,56 @@ const Pages = {
   // -- настройки ------------------------------------------------------------------------
   async settings() {
     const el = document.getElementById("view-settings");
+    // Пока настройки грузятся, прошлое содержимое не показываем (иначе оно
+    // мелькало и потом "появлялось" ещё раз – анимация как будто дважды).
+    el.innerHTML = "";
     const s = await Api.settings();
+    const field = (id, label, control, hint) =>
+      `<div class="field"><label class="field-label" for="${id}">${label}</label>${control}` +
+      (hint ? `<div class="field-hint">${hint}</div>` : "") + "</div>";
+    const quality = [[0, "Лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
+      .map(([h, name]) => `<option value="${h}" ${Number(s.download_max_height) === h ? "selected" : ""}>${name}</option>`).join("");
+    const modelField = (id, pickId, listId, label, value, hint) => field(id, label,
+      `<div class="secret-row picker"><input id="${id}" class="wide" value="${escapeHtml(value || "")}" placeholder="anthropic/claude-sonnet-5.5">` +
+      `<button id="${pickId}" class="icon-btn" title="Выбрать из списка">▾</button><div id="${listId}" class="model-list hidden"></div></div>`, hint);
+    // Настройки – карточками по темам; кнопки – внизу справа.
     el.innerHTML = `<h1>Настройки</h1>
-      <table class="stats" id="settings-form">
-        <tr><td>Колода Anki</td><td><input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}">
-          <div class="muted small">Карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются</div>
-          <div id="deck-sync" class="small"></div></td></tr>
-        <tr><td>Запас до и после отрезка</td><td><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"> сек <div class="muted small">По умолчанию для всех видео; уже отредактированные фрагменты не меняются</div></td></tr>
-        <tr><td>Качество скачивания</td><td><select id="set-quality">
-          ${[[0, "лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
-            .map(([h, name]) => `<option value="${h}" ${Number(s.download_max_height) === h ? "selected" : ""}>${name}</option>`).join("")}
-          </select><div class="muted small">По умолчанию для видео, добавленных по ссылке; клипы для Anki режутся из скачанного</div></td></tr>
-        <tr><td>После добавления</td><td><label class="check"><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> Сразу обрабатывать</label>
-          <div class="muted small">Видео, добавленное по ссылке или файлом, сразу уходит в обработку (распознавание и нарезка)</div></td></tr>
-        <tr><td>Ключ OpenRouter</td><td><div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div><div class="muted small">Для агента перевода</div></td></tr>
-        <tr><td>Модель перевода</td><td><div class="secret-row picker"><input id="set-model" class="wide" value="${escapeHtml(s.openrouter_model || "")}" placeholder="anthropic/claude-sonnet-5.5"><button id="set-model-pick" class="icon-btn" title="Выбрать из списка">▾</button>
-          <div id="model-list" class="model-list hidden"></div></div>
-          <div class="muted small">Можно вписать свою (идентификатор на OpenRouter) или выбрать из списка; цена – $ за миллион токенов (вход / выход)</div></td></tr>
-        <tr><td>Модель поиска</td><td><div class="secret-row picker"><input id="set-search-model" class="wide" value="${escapeHtml(s.search_model || "")}" placeholder="anthropic/claude-sonnet-5.5"><button id="set-search-pick" class="icon-btn" title="Выбрать из списка">▾</button>
-          <div id="search-model-list" class="model-list hidden"></div></div>
-          <div class="muted small">Агент поиска источников текста для сверки (с веб-поиском OpenRouter); лучше брать сильную модель – запросов мало</div></td></tr>
-      </table>
-      <div class="actions"><button id="settings-save" class="step-btn">Сохранить</button><button id="settings-cancel" class="step-btn">Отменить</button></div>`;
-    viewEnter(el); // заголовок, описание и содержимое появляются по очереди
+      <p class="muted small page-note">Общие для всех видео. Изменения применяются после «Сохранить».</p>
+      <div id="settings-form" class="settings-grid">
+        <section class="set-card">
+          <h2>Anki</h2>
+          ${field("set-deck", "Колода", `<input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}">`,
+            "Карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются")}
+          <div id="deck-sync" class="small"></div>
+        </section>
+        <section class="set-card">
+          <h2>Редактор</h2>
+          ${field("set-padding", "Запас до и после отрезка",
+            `<div class="with-unit"><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"><span>сек</span></div>`,
+            "По умолчанию для всех видео; уже отредактированные фрагменты не меняются")}
+        </section>
+        <section class="set-card">
+          <h2>Добавление видео</h2>
+          ${field("set-quality", "Качество скачивания", `<select id="set-quality">${quality}</select>`,
+            "Для видео, добавленных по ссылке; клипы для Anki режутся из скачанного")}
+          <div class="field"><label class="check"><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> Сразу обрабатывать</label>
+            <div class="field-hint">Добавленное видео сразу уходит в распознавание и нарезку</div></div>
+        </section>
+        <section class="set-card wide-card">
+          <h2>Агенты (OpenRouter)</h2>
+          ${field("set-key", "Ключ", `<div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div>`,
+            "Для перевода и поиска источников")}
+          <div class="field-row">
+            ${modelField("set-model", "set-model-pick", "model-list", "Модель перевода", s.openrouter_model,
+              "Своя (идентификатор на OpenRouter) или из списка; цена – $ за миллион токенов (вход / выход)")}
+            ${modelField("set-search-model", "set-search-pick", "search-model-list", "Модель поиска", s.search_model,
+              "Ищет источники текста для сверки (с веб-поиском); запросов мало – лучше сильная модель")}
+          </div>
+        </section>
+      </div>
+      <div class="settings-actions"><button id="settings-cancel" class="step-btn">Отменить</button><button id="settings-save" class="step-btn primary">Сохранить</button></div>`;
+    // Заголовок, описание, карточки по очереди, кнопки.
+    viewEnter(el, [el.querySelector("h1"), el.querySelector(".page-note"), ...el.querySelectorAll(".set-card"), el.querySelector(".settings-actions")]);
     const showDeckSync = (state) => {
       const box = document.getElementById("deck-sync");
       if (!box || !state) return;

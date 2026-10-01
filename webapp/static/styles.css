@@ -1008,3 +1008,38 @@ textarea.grow { line-height: 20px; padding-top: 5px; padding-bottom: 5px; min-he
 /* Пояснения к флажкам: тот же размер шрифта и та же линия, что у подписи,
    отступ – как пробел. */
 label.check .muted { font-size: inherit; margin-left: calc(0.28em - 8px); }
+
+/* ---- Настройки: карточки по темам ---- */
+.settings-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px;
+  max-width: 1080px; margin-top: 14px;
+}
+.set-card {
+  background: #141418; border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px;
+  padding: 16px 18px 6px;
+}
+.set-card.wide-card { grid-column: 1 / -1; }
+.view .set-card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); }
+.field { margin-bottom: 14px; }
+.field-label { display: block; font-size: 13px; margin-bottom: 6px; color: var(--text); }
+.field-hint { font-size: 12px; color: var(--dim); margin-top: 6px; line-height: 1.4; }
+.field .check { margin: 0; }
+.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 16px; }
+#view-settings input.wide, #view-settings select { width: 100%; }
+.with-unit { display: flex; align-items: center; gap: 8px; }
+.with-unit input { width: 110px; }
+.with-unit span { color: var(--dim); font-size: 13px; }
+.settings-actions { display: flex; justify-content: flex-end; gap: 8px; max-width: 1080px; margin-top: 16px; }
+#deck-sync:empty { display: none; }
+#deck-sync { margin: -6px 0 14px; }
+
+/* Появление карточек и разделов: подъём через top (не transform) – иначе в
+   конце анимации текст перерисовывался и сдвигался на пиксель-другой. */
+@keyframes card-in-top { from { opacity: 0; top: 8px; } to { opacity: 1; top: 0; } }
+.enter { position: relative; animation-name: card-in-top; }
+
+/* Текст в серых кнопках — по центру (раньше чуть выше). */
+.step-btn, a.step-btn { padding-bottom: 2px; }
+/* Поля настроек — шрифтом приложения; подпись флажка — как подписи полей. */
+#view-settings input, #view-settings select { font-family: var(--font); }
+.set-card .field .check { font-size: 13px; }
