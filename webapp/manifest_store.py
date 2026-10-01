@@ -211,13 +211,30 @@ class ManifestStore:
             self.save(manifest)
         return manifest
 
+    @_locked
+    def set_default_padding(self, seconds: float) -> None:
+        """Общий запас до/после отрезка поменяли в настройках приложения."""
+        manifest = Manifest.load(self.manifest_path)
+        if manifest.settings.get("context_padding_seconds") == seconds:
+            return
+        manifest.settings["context_padding_seconds"] = seconds
+        self._apply_context_padding(manifest)
+        self.save(manifest)
+
     def _apply_context_padding(self, manifest: Manifest) -> None:
         """
         Пользователь поменял settings.context_padding_seconds — пересчитываем
-        запас каждого фрагмента от его исходных границ. Если отрезок уже
-        отредактирован и выходит за новый запас, запас расширяется до него.
+        запас фрагментов от их исходных границ. Уже просмотренные (до скрытой
+        метки — последнего изменённого фрагмента) не трогаются, как и запас,
+        заданный вручную. Если отрезок выходит за новый запас — запас
+        расширяется до него.
         """
-        for fragment in manifest.fragments:
+        touched = [i for i, f in enumerate(manifest.fragments)
+                   if f.exported or f.status != STATUS_ACTIVE or f.edited or f.context_custom or f.merged_from or f.split_from]
+        reviewed = max(touched, default=-1)
+        for index, fragment in enumerate(manifest.fragments):
+            if index <= reviewed:
+                continue
             if not fragment.context_custom:
                 fragment.context_start_frame, fragment.context_end_frame = self._default_context(manifest, fragment)
         manifest.applied_context_padding_seconds = manifest.settings["context_padding_seconds"]

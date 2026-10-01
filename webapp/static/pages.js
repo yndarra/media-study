@@ -1,14 +1,14 @@
 // Страницы приложения вокруг редактора и переходы между ними.
 //
-// Адрес страницы — в #-части ссылки, поэтому работают кнопки "назад/вперёд"
+// Адрес страницы – в #-части ссылки, поэтому работают кнопки "назад/вперёд"
 // браузера и обновление страницы:
-//   #/videos        — библиотека: все видео, сгруппированные по автору;
-//   #/video/<код>   — страница видео: прогресс, статистика, "Править";
-//   #/edit/<код>    — редактор фрагментов этого видео;
-//   #/process       — обработка (этап 1): источники текста, запуск, ход;
-//   #/add           — добавить видео или аудио: ссылка или свой файл;
-//   #/settings      — настройки приложения.
-// Anki (прогресс, очередь, проверка флагов) — внутри раздела "Видео".
+//   #/videos        – библиотека: все видео, сгруппированные по автору;
+//   #/video/<код>   – страница видео: прогресс, статистика, "Править";
+//   #/edit/<код>    – редактор фрагментов этого видео;
+//   #/process       – обработка (этап 1): источники текста, запуск, ход;
+//   #/add           – добавить видео или аудио: ссылка или свой файл;
+//   #/settings      – настройки приложения.
+// Anki (прогресс, очередь, проверка флагов) – внутри раздела "Видео".
 // Боковые панели скрываются и открываются кнопками; выбор запоминается.
 const Panels = {
   init() {
@@ -25,7 +25,7 @@ const Panels = {
       try {
         localStorage.setItem(`panel-${side}`, closed ? "closed" : "open");
       } catch (_) {}
-      // Ширина редактора поменялась — дорожку надо перерисовать под неё.
+      // Ширина редактора поменялась – дорожку надо перерисовать под неё.
       if (State.view === "editor") requestAnimationFrame(() => (Timeline._resize(), App.renderAll()));
     });
   },
@@ -54,7 +54,7 @@ const Router = {
     }
     Player.pauseIfPlaying();
     if (page === "video" && id) {
-      // Подробности видео — окно поверх списка видео.
+      // Подробности видео – окно поверх списка видео.
       if (!document.getElementById("modal-overlay")) {
         this.show("videos", "videos");
         await Pages.videos();
@@ -86,7 +86,7 @@ const Router = {
     document.body.classList.toggle("no-fraglist", view !== "editor");
     // Фон "удалено"/"в Anki" относится к фрагменту в редакторе, не к другим страницам.
     if (view !== "editor") document.body.classList.remove("frag-deleted", "frag-locked");
-    // Ссылка "сейчас правится" в меню — чтобы вернуться в редактор одним кликом.
+    // Ссылка "сейчас правится" в меню – чтобы вернуться в редактор одним кликом.
     const editing = document.getElementById("menu-editing");
     editing.classList.toggle("hidden", !State.project);
     if (State.project) {
@@ -113,8 +113,8 @@ function progressBar(done, total, label) {
     `<span class="progress-label">${escapeHtml(label)}</span></div>`;
 }
 
-// Полоса из цветных отрезков: segments = [{n, cls}] — слева направо; последний
-// отрезок с right: true прижимается к правому краю (между ними — серое).
+// Полоса из цветных отрезков: segments = [{n, cls}] – слева направо; последний
+// отрезок с right: true прижимается к правому краю (между ними – серое).
 function segmentBar(segments, total, label) {
   const pct = (n) => (total ? Math.max(0, Math.min(100, (n / total) * 100)) : 0);
   const left = segments.filter((s) => !s.right && s.n > 0);
@@ -126,15 +126,15 @@ function segmentBar(segments, total, label) {
 }
 
 function formatSize(bytes) {
-  if (!bytes) return "0";
+  if (!bytes) return "0 МБ";
   return bytes >= 2 ** 30 ? `${(bytes / 2 ** 30).toFixed(1)} ГБ` : `${Math.round(bytes / 2 ** 20)} МБ`;
 }
 
 // Две полосы видео.
-// "Отредактировано" (слева направо, до скрытой метки — последнего
-//   изменённого фрагмента): светло-серое — просмотрено и принято без правок;
-//   жёлтое — изменено; красное — удалено; серое — ещё не тронуто.
-// "Передано в Anki" — живые фрагменты на этапе 3; справа фиолетовые —
+// "Отредактировано" (слева направо, до скрытой метки – последнего
+//   изменённого фрагмента): синее – просмотрено и принято без правок;
+//   жёлтое – изменено; красное – удалено; серое – ещё не тронуто.
+// "Передано в Anki" – живые фрагменты на этапе 3; справа фиолетовые —
 //   карточки с флагом "обрезка/текст" (оранжевый, красный).
 function videoBars(v) {
   const e = v.edit_bar || { accepted: 0, changed: 0, deleted: 0 };
@@ -209,7 +209,7 @@ function processingBar(v) {
   return progressBar(v.percent, 100, `${v.status}: ${Math.floor(v.percent)}%`);
 }
 
-// Список сгруппирован по автору: группы по алфавиту, внутри — как пришло (новые первыми).
+// Список сгруппирован по автору: группы по алфавиту, внутри – как пришло (новые первыми).
 function groupByAuthor(items) {
   const groups = new Map();
   for (const item of items) {
@@ -241,7 +241,7 @@ const Pages = {
           <button id="open-flags" class="step-btn">Проверка флагов</button>
           <button id="open-translate" class="step-btn">Перевод</button>
         </div></div>
-      <p class="muted small">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» — докуда дошла правка (светло-серое — принято без правок, жёлтое — изменено, красное — удалено), «Передано в Anki» — сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
+      <p class="muted small">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
       <div id="videos-list"><p class="muted">Загрузка…</p></div>`;
     el.querySelector("#open-flags").addEventListener("click", () => this.flagsModal());
     el.querySelector("#open-translate").addEventListener("click", () => this.translateModal());
@@ -260,7 +260,7 @@ const Pages = {
       const translateButton = document.getElementById("open-translate");
       if (translateButton) translateButton.textContent = toTranslate ? `Перевод (${toTranslate})` : "Перевод";
       if (!items.length) {
-        box.innerHTML = '<p class="muted">Готовых видео пока нет — добавьте их в разделе «Добавить», затем обработайте в «Обработке».</p>';
+        box.innerHTML = '<p class="muted">Готовых видео пока нет – добавьте их в разделе «Добавить», затем обработайте в «Обработке».</p>';
         return;
       }
       box.innerHTML = groupByAuthor(items).map(([group, list]) =>
@@ -294,7 +294,7 @@ const Pages = {
       const proposals = state.proposals;
       body.innerHTML = `
         <h2>Перевод</h2>
-        <p class="muted small">Агент готовит перевод на обороте карточек с <span class="flag-dot f3"></span> зелёным и <span class="flag-dot f1"></span> красным флагом по правилам оформления, учитывает ваши комментарии со звёздочкой (*поясни за слово …) и убирает их. В Anki ничего не меняется, пока вы не одобрите. Одобренное: лицо — без комментариев, оборот — новый, метка «агент_перевод»; зелёный флаг снимается, красный становится оранжевым (обрезку ещё править).</p>
+        <p class="muted small">Агент готовит перевод на обороте карточек с <span class="flag-dot f3"></span> зелёным и <span class="flag-dot f1"></span> красным флагом по правилам оформления, учитывает ваши комментарии со звёздочкой (*поясни за слово …) и убирает их. В Anki ничего не меняется, пока вы не одобрите. Одобренное: лицо – без комментариев, оборот – новый, метка «агент_перевод»; зелёный флаг снимается, красный становится оранжевым (обрезку ещё править).</p>
         <div class="muted small">Карточек с флагом «перевод» в Anki: ${flagged}${statusLine ? ` · ${statusLine}` : ""}${st.model ? ` · модель ${escapeHtml(st.model)}` : ""}</div>
         <div class="actions"><button id="agent-run" class="step-btn" ${running || !flagged ? "disabled" : ""}>Подготовить переводы</button></div>
         <div class="agent-list">${proposals.length ? proposals.map((p) => `
@@ -338,21 +338,21 @@ const Pages = {
         body.querySelector("#agent-approve").addEventListener("click", () => act(true));
         body.querySelector("#agent-reject").addEventListener("click", () => act(false));
       }
-      // Пока агент работает — обновляем окно, чтобы видеть ход.
+      // Пока агент работает – обновляем окно, чтобы видеть ход.
       if (running) setTimeout(() => document.getElementById("modal-overlay") && body.isConnected && draw(), 3000);
     };
     await draw();
   },
 
   // Окно "Проверка флагов": карточки приложения с флагами в Anki; оранжевые и
-  // красные можно вернуть в редактор, перевод — в окне "Перевод".
+  // красные можно вернуть в редактор, перевод – в окне "Перевод".
   flagsModal() {
     const body = Modal.show(`
       <h2>Проверка флагов</h2>
       <p class="muted small">Флаги карточек приложения в Anki:
-        <span class="flag-dot f2"></span> оранжевый — поправить обрезку или английский текст (вернуть в редактор);
-        <span class="flag-dot f3"></span> зелёный — поправить перевод (агент);
-        <span class="flag-dot f1"></span> красный — и то, и другое. Anki должен быть открыт.</p>
+        <span class="flag-dot f2"></span> оранжевый – поправить обрезку или английский текст (вернуть в редактор);
+        <span class="flag-dot f3"></span> зелёный – поправить перевод (агент);
+        <span class="flag-dot f1"></span> красный – и то, и другое. Anki должен быть открыт.</p>
       <div class="actions">
         <button id="anki-check" class="step-btn">Проверить</button>
         <button id="to-translate" class="step-btn">Перейти к переводу</button>
@@ -397,8 +397,8 @@ const Pages = {
         const links = Object.entries(result.returned).map(([pid, n]) =>
           `<a class="big-btn" href="#/edit/${encodeURIComponent(pid)}">править ${escapeHtml(pid)} (${n})</a>`).join(" ");
         box.querySelector("#anki-return-result").innerHTML =
-          `<p>Вернули на доработку. В редакторе они отмечены флажком ⚑ — фильтр «помечены в Anki».</p>${links}`;
-        // Открытое в редакторе видео надо перечитать — его фрагменты разблокировались.
+          `<p>Вернули на доработку. В редакторе они отмечены флажком ⚑ – фильтр «помечены в Anki».</p>${links}`;
+        // Открытое в редакторе видео надо перечитать – его фрагменты разблокировались.
         if (State.project && result.returned[State.project]) {
           State.manifest = null;
           const id = State.project;
@@ -409,7 +409,7 @@ const Pages = {
     });
   },
 
-  // Подробности видео — окно поверх списка (#/video/<код>): статистика, место
+  // Подробности видео – окно поверх списка (#/video/<код>): статистика, место
   // на диске, правка названия и автора.
   async videoModal(id) {
     const body = Modal.show('<p class="muted">Загрузка…</p>', () => {
@@ -427,7 +427,7 @@ const Pages = {
     const d = data.disk;
     const row = (name, value) => (value === null || value === undefined || value === "" ? "" : `<tr><td>${name}</td><td>${value}</td></tr>`);
     const spread = (x, unit = "") => (x ? `в среднем ${x.mean}${unit}, медиана ${x.median}${unit}, от ${x.min} до ${x.max}${unit}` : "");
-    const lines = Object.entries(s.lines_per_card).map(([n, c]) => `${n} стр. — ${c}`).join(", ");
+    const lines = Object.entries(s.lines_per_card).map(([n, c]) => `${n} стр. – ${c}`).join(", ");
     body.innerHTML = `
       <div class="modal-head">
         <label>Название <input id="title-input" class="wide" value="${escapeHtml(v.title)}"></label>
@@ -437,25 +437,19 @@ const Pages = {
       ${videoNotes(v)}
       <h2>Статистика</h2>
       <table class="stats">
-        ${row("Ролик", formatDuration(s.video_seconds))}
-        ${row("Карточек (фраз)", s.cards)}
-        ${row("В клипах", `${formatDuration(s.kept_seconds)} — ${(s.kept_share * 100).toFixed(1)}% ролика`)}
-        ${row("Удалено", `${s.deleted} фрагментов, ${s.deleted_seconds} с`)}
-        ${row("Длина клипа, с", spread(s.clip_seconds))}
-        ${row("Слов", `${s.words_total}; ${spread(s.words_per_card)} на карточку; темп речи ${s.words_per_minute} слов/мин`)}
+        ${row("Ролик", `${formatDuration(s.video_seconds)}, карточек ${s.cards}`)}
+        ${row("В клипах", `${formatDuration(s.kept_seconds)} – ${(s.kept_share * 100).toFixed(1)}% ролика, удалено ${s.deleted} фрагментов (${Math.round(s.deleted_seconds)} сек)`)}
+        ${row("Длина клипа, сек", s.clip_seconds ? `${s.clip_seconds.mean} в среднем, ${s.clip_seconds.median} медиана, ${s.clip_seconds.min} минимально, ${s.clip_seconds.max} максимально` : "")}
         ${row("Строк в карточке", lines)}
         ${row("Правка текста", `${s.text_edited} из ${s.cards}`)}
         ${row("Правка границ", `${s.bounds_edited} из ${s.cards}` + (s.bound_shift_frames ? `; сдвиг ${spread(s.bound_shift_frames, " кадр.")}` : ""))}
-        ${row("Помечено «проверить текст»", s.needs_review)}
-        ${row("Клипов выгружено", s.clips ? `${s.clips}; ${spread(s.clip_megabytes, " МБ")}; ${s.megabytes_per_second} МБ на секунду видео` : "0")}
-        ${row("Колода Anki", v.anki_deck ? escapeHtml(v.anki_deck) : "создастся при первой передаче")}
+        ${row("Колода Anki", v.anki_deck ? escapeHtml(v.anki_deck) : "нет")}
       </table>
       <h2>Место на диске</h2>
       <table class="stats">
-        ${row("Оригинал (скачанный)", `${formatSize(d.master)} <span class="muted small">— из него режутся клипы для Anki, поэтому хранится</span>`)}
-        ${row("Копия для редактора (этап 2)", formatSize(d.editor))}
-        ${row("Звук и волна редактора", formatSize(d.editor_audio))}
-        ${row("Клипы для Anki (этап 3)", formatSize(d.clips))}
+        ${row("Оригинал", formatSize(d.master))}
+        ${row("Копия для редактора, звук", `${formatSize(d.editor)}, ${formatSize(d.editor_audio)}`)}
+        ${row("Клипы для Anki", formatSize(d.clips))}
         ${row("Всего", `<b>${formatSize(d.total)}</b>`)}
       </table>
       <div class="modal-actions">
@@ -484,7 +478,7 @@ const Pages = {
       if (!box) return;
       const items = (await Api.projects()).filter((v) => v.state !== "ready");
       if (!items.length) {
-        box.innerHTML = '<p class="muted">Нечего обрабатывать — добавьте видео или аудио в разделе «Добавить».</p>';
+        box.innerHTML = '<p class="muted">Нечего обрабатывать – добавьте видео или аудио в разделе «Добавить».</p>';
         return;
       }
       box.innerHTML = groupByAuthor(items).map(([group, list]) =>
@@ -525,7 +519,7 @@ const Pages = {
       <label class="muted small">Текст для сверки (ссылки, по одной в строке)</label>
       <textarea class="sources" rows="4" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
       <label class="small"><input type="checkbox" class="agent" ${v.agent ? "checked" : ""}> агент сам найдёт достоверный источник (глубокий поиск)</label>
-      <div class="muted small">Агента пока нет — пока по ссылкам разбирается Claude в чате.</div>
+      <div class="muted small">Агента пока нет – пока по ссылкам разбирается Claude в чате.</div>
       ${disk ? `<h2>Место на диске</h2><table class="stats">
         ${row("Оригинал (скачанный)", formatSize(disk.master))}
         ${row("Копия для редактора", formatSize(disk.editor))}
@@ -563,7 +557,7 @@ const Pages = {
     const el = document.getElementById("view-add");
     el.innerHTML = `<h1>Добавить</h1>
       <h2>По ссылке</h2>
-      <p class="muted small">YouTube и всё, что умеет yt-dlp. Видео скачается в максимальном качестве.</p>
+      <p class="muted small">YouTube и всё, что умеет yt-dlp. Видео скачается в качестве, заданном в «Настройках».</p>
       <div class="author-row"><input id="download-url" class="wide" placeholder="https://youtu.be/…"><button id="download-go" class="step-btn">Скачать</button></div>
       <h2>Свой файл</h2>
       <p class="muted small">Видео или аудио любого распространённого формата (mp4, mkv, webm, mov, mp3, m4a, wav, flac, ogg…).</p>
@@ -571,7 +565,7 @@ const Pages = {
       <div id="add-note" class="muted small"></div>`;
     const note = document.getElementById("add-note");
     const done = (id) => {
-      note.innerHTML = `Добавлено: ${escapeHtml(id)}. Дальше — <a href="#/process">Обработка</a>.`;
+      note.innerHTML = `Добавлено: ${escapeHtml(id)}. Дальше – <a href="#/process">Обработка</a>.`;
     };
     const fail = (err) => {
       let message = err.message;
@@ -607,15 +601,28 @@ const Pages = {
     el.innerHTML = `<h1>Настройки</h1>
       <table class="stats">
         <tr><td>Колода Anki</td><td><input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}"><div class="muted small">карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;</div></td></tr>
-        <tr><td>Запас до и после отрезка</td><td><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"> с <div class="muted small">для новых видео</div></td></tr>
+        <tr><td>Запас до и после отрезка</td><td><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"> сек <div class="muted small">по умолчанию для всех видео; уже просмотренные фрагменты (синие, жёлтые, красные) и запас, заданный вручную, не меняются</div></td></tr>
+        <tr><td>Качество скачивания</td><td><select id="set-quality">
+          ${[[0, "лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
+            .map(([h, name]) => `<option value="${h}" ${Number(s.download_max_height) === h ? "selected" : ""}>${name}</option>`).join("")}
+          </select><div class="muted small">по умолчанию для видео, добавленных по ссылке; клипы для Anki режутся из скачанного</div></td></tr>
         <tr><td>После добавления</td><td><label><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> сразу обрабатывать (без прикрепления источников)</label></td></tr>
+        <tr><td>Ключ OpenRouter</td><td><div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div><div class="muted small">для агента перевода</div></td></tr>
+        <tr><td>Модель перевода</td><td><input id="set-model" class="wide" value="${escapeHtml(s.openrouter_model || "")}"><div class="muted small">идентификатор модели на OpenRouter</div></td></tr>
       </table>
       <div class="actions"><button id="settings-save" class="step-btn">Сохранить</button><span id="settings-note" class="muted small"></span></div>`;
+    document.getElementById("set-key-eye").addEventListener("click", () => {
+      const input = document.getElementById("set-key");
+      input.type = input.type === "password" ? "text" : "password";
+    });
     document.getElementById("settings-save").addEventListener("click", async () => {
       await Api.saveSettings({
         anki_deck_root: document.getElementById("set-deck").value.trim(),
         context_padding_seconds: Number(document.getElementById("set-padding").value),
+        download_max_height: Number(document.getElementById("set-quality").value),
         auto_process: document.getElementById("set-auto").checked,
+        openrouter_key: document.getElementById("set-key").value.trim(),
+        openrouter_model: document.getElementById("set-model").value.trim(),
       });
       document.getElementById("settings-note").textContent = "сохранено";
     });

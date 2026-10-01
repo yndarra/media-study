@@ -26,6 +26,7 @@ def main() -> None:
     parser.add_argument("--file", help="Свой файл (видео или аудио) вместо ссылки")
     parser.add_argument("--only-add", action="store_true", help="Только добавить (скачать/принять), без обработки")
     parser.add_argument("--process", action="store_true", help="Только обработать уже добавленный проект --project-dir")
+    parser.add_argument("--max-height", type=int, default=None, help="Скачивать не выше этой высоты кадра (1440 = 2K)")
     parser.add_argument(
         "--transcript",
         help="Путь к пользовательскому текстовому транскрипту без таймкодов (например, вики по игре); "
@@ -52,7 +53,7 @@ def main() -> None:
 
         # Уже скачанное (например, после обрыва) повторно не качается.
         if master_path(project_dir) is None or not (project_dir / "video_info.json").exists():
-            acquire_url(args.url, project_dir)
+            acquire_url(args.url, project_dir, args.max_height or None)
     if args.only_add:
         print(f"Добавлено: {project_dir}")
         return

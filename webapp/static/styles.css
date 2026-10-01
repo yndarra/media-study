@@ -657,9 +657,16 @@ textarea.sources {
 .agent-back.old { opacity: 0.75; }
 .agent-back ul { margin: 4px 0 0 18px; padding: 0; }
 
-/* Полоса "Отредактировано": просмотрено и принято без правок — светло-серое. */
-.seg.accepted { background: #8b8b95; }
+/* Полоса "Отредактировано": просмотрено и принято без правок — синее. */
+.seg.accepted { background: #2f5f9e; }
 
 /* Заголовок раздела с кнопками справа (Видео: Проверка флагов, Перевод). */
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .page-head .head-actions { display: flex; gap: 8px; }
+
+/* Поле с секретом (ключ OpenRouter) и кнопка "показать/скрыть". */
+.secret-row { display: flex; gap: 6px; align-items: center; }
+.secret-row input { flex: 1; }
+#view-settings select, #view-settings input:not([type=checkbox]) {
+  background: #18181d; color: inherit; border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+}

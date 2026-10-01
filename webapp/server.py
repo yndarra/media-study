@@ -251,8 +251,11 @@ def download(body: DownloadRequest):
     project_dir = DATA_DIR / project_id
     if (project_dir / "manifest.json").exists():
         raise HTTPException(status_code=400, detail="это видео уже обработано")
-    auto = library.app_settings(DATA_DIR)["auto_process"]
-    _spawn_phase1(project_dir, [url] if auto else [url, "--only-add"])
+    settings = library.app_settings(DATA_DIR)
+    args = [url] if settings["auto_process"] else [url, "--only-add"]
+    if settings.get("download_max_height"):
+        args += ["--max-height", str(int(settings["download_max_height"]))]
+    _spawn_phase1(project_dir, args)
     return {"id": project_id}
 
 
@@ -314,14 +317,42 @@ def process(project_id: str):
 # -- настройки и текущая активность ---------------------------------------------------
 
 
+OPENROUTER_KEY_FILE = "openrouter_key.txt"  # в data/ — в git не попадает
+
+
+def _openrouter_key() -> str:
+    path = library.app_settings(DATA_DIR).get("openrouter_key_file") or ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip() if path else ""
+    except OSError:
+        return ""
+
+
 @app.get("/api/settings")
 def get_settings():
-    return library.app_settings(DATA_DIR)
+    # Ключ OpenRouter отдаётся только локальной странице настроек (поле со "скрыть/показать").
+    return {**library.app_settings(DATA_DIR), "openrouter_key": _openrouter_key()}
 
 
 @app.patch("/api/settings")
 def update_settings(body: dict):
-    return library.save_app_settings(DATA_DIR, body)
+    """
+    Общие настройки. Ключ OpenRouter пишется в data/openrouter_key.txt. Новый
+    запас до/после отрезка применяется ко всем видео — к фрагментам, которые
+    ещё не просмотрены (после скрытой метки); просмотренные не меняются.
+    """
+    key = (body.pop("openrouter_key", None) or "").strip()
+    if key and key != _openrouter_key():
+        path = DATA_DIR / OPENROUTER_KEY_FILE
+        path.write_text(key, encoding="utf-8")
+        body["openrouter_key_file"] = str(path)
+    old_padding = library.app_settings(DATA_DIR)["context_padding_seconds"]
+    saved = library.save_app_settings(DATA_DIR, body)
+    if saved["context_padding_seconds"] != old_padding:
+        for item in library.list_projects(DATA_DIR):
+            if item["state"] == "ready":
+                project(item["id"]).store.set_default_padding(saved["context_padding_seconds"])
+    return {**saved, "openrouter_key": _openrouter_key()}
 
 
 # Для оценки оставшегося времени этапа 1: когда и с какого процента начался шаг.
