@@ -1433,3 +1433,14 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 
 /* Полосы – снова 20 px. */
 .progress:not(.thin) { height: 20px; }
+
+/* "Перевести" – полосы ещё в 1.27 раза шире (231 px); "Выполняется
+   перевод…" – в 6 раз уже (15 px) и ещё в 1.5 раза быстрее. */
+.card-action.translate:not(.busy) { --period: 462px; }
+.card-action.translate.busy { --period: 30px; }
+.card-action.translate:not(.busy)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='462' height='20' viewBox='0 0 462 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 239,0 231,20 0,20' fill='%23a3407a'/%3E%3Cpolygon points='-454,0 -223,0 -231,20 -462,20' fill='%23a3407a'/%3E%3C/svg%3E"); animation-duration: 14215ms; }
+.card-action.translate.busy::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='20' viewBox='0 0 30 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 23,0 15,20 0,20' fill='%23a3407a'/%3E%3Cpolygon points='-22,0 -7,0 -15,20 -30,20' fill='%23a3407a'/%3E%3C/svg%3E"); animation-duration: 410ms; }
+
+/* Название группы → карточки: чуть больше (14 px), но меньше, чем от
+   последней карточки до следующей группы (22 px). */
+.view h2.group-title { margin-bottom: 14px; }

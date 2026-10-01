@@ -230,7 +230,7 @@ function cardState(v) {
 // Фаза бегущих полос – от часов, а не от момента создания кнопки: список
 // перерисовывается каждые 3 с, и без этого анимация каждый раз начиналась
 // заново (рывок). Длительности – как в styles.css (.card-action::before).
-const ZEBRA_MS = { send: 1600, sendBusy: 2600, translate: 11200, translateBusy: 3733 };
+const ZEBRA_MS = { send: 1600, sendBusy: 2600, translate: 14215, translateBusy: 410 };
 function zebraPhase(kind) {
   const ms = ZEBRA_MS[kind];
   return `style="--zdelay:-${Date.now() % ms}ms"`;
