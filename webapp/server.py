@@ -592,7 +592,15 @@ def _compute_stage3_status(p: Project) -> dict:
 
 
 class QueueRequest(BaseModel):
-    through_fragment_id: str
+    # Не задан — всё видео (кнопка "Передать в Anki" на карточке в списке видео).
+    through_fragment_id: str | None = None
+
+
+@app.post("/api/p/{project_id}/finish")
+def finish_project(project_id: str):
+    """Кнопка "Финиш" в редакторе: всё видео считается отредактированным."""
+    manifest = project(project_id).store.mark_finished()
+    return {"manifest": _public(manifest)}
 
 
 @app.post("/api/p/{project_id}/stage3/queue")
@@ -600,6 +608,11 @@ def queue_stage3(project_id: str, body: QueueRequest):
     from phase3_export.worker import default_deck
 
     p = project(project_id)
+    if not body.through_fragment_id:
+        fragments = p.store.load().fragments
+        if not fragments:
+            raise HTTPException(status_code=404, detail="в видео нет фрагментов")
+        body.through_fragment_id = fragments[-1].id
     try:
         manifest, queued = p.store.queue_for_stage3(body.through_fragment_id, default_deck(p.dir))
     except KeyError as error:
@@ -689,10 +702,14 @@ def anki_overview():
             and item["translated"] >= item["cards_total"] > 0
         )
         # Всё, что можно, отредактировано (не тронутых и вернувшихся нет), но
-        # ещё не всё передано в Anki — синяя карточка.
+        # ещё не всё передано в Anki — синяя карточка с кнопкой "Передать в Anki".
         item["ready_to_send"] = bool(
             item["active_total"] and not item["awaiting"] and item["exported"] < item["active_total"]
         )
+        # Идёт передача в Anki (клипы кодируются / карточки создаются) — карточка
+        # синяя, пока очередь не кончится.
+        q = item["stage3"] or {}
+        item["sending"] = bool(q.get("pending") or q.get("notes_left"))
         # Всё передано в Anki, править нечего, осталось только перевести —
         # розоватая карточка с кнопкой "Перевести".
         item["ready_to_translate"] = bool(

@@ -137,7 +137,12 @@ def is_touched(fragment) -> bool:
 
 
 def last_touched_index(manifest: Manifest) -> int:
-    """Индекс последнего изменённого фрагмента (-1 — ничего не меняли)."""
+    """
+    Индекс последнего изменённого фрагмента (-1 — ничего не меняли). После
+    кнопки "Финиш" в редакторе (settings.finished) просмотрено всё видео.
+    """
+    if manifest.settings.get("finished") and manifest.fragments:
+        return len(manifest.fragments) - 1
     return max((i for i, f in enumerate(manifest.fragments) if is_touched(f)), default=-1)
 
 

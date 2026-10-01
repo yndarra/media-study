@@ -219,6 +219,14 @@ class ManifestStore:
         self.save(manifest)
 
     @_locked
+    def mark_finished(self) -> Manifest:
+        """Кнопка "Финиш" на последнем фрагменте: всё видео считается отредактированным."""
+        manifest = Manifest.load(self.manifest_path)
+        manifest.settings["finished"] = True
+        self.save(manifest)
+        return manifest
+
+    @_locked
     def set_default_padding(self, seconds: float) -> None:
         """Общий запас до/после отрезка поменяли в настройках приложения."""
         manifest = Manifest.load(self.manifest_path)
@@ -239,6 +247,8 @@ class ManifestStore:
         touched = [i for i, f in enumerate(manifest.fragments)
                    if f.exported or f.status != STATUS_ACTIVE or f.edited or f.context_custom or f.merged_from or f.split_from]
         reviewed = max(touched, default=-1)
+        if manifest.settings.get("finished"):
+            reviewed = len(manifest.fragments) - 1  # "Финиш": просмотрено всё видео
         for index, fragment in enumerate(manifest.fragments):
             if index <= reviewed:
                 continue

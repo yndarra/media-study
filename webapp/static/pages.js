@@ -132,6 +132,34 @@ function progressBar(done, total, label) {
     `<span class="progress-label">${escapeHtml(label)}</span></div>`;
 }
 
+// Оформление карточки видео по этапу (фон-градиент и обводка):
+//   готово (всё переведено) – розовое; идёт перевод или осталось перевести –
+//   бледно-розовое; идёт передача в Anki или всё отредактировано, но не
+//   передано – синее; иначе (идёт правка) – обычное серое.
+function cardState(v) {
+  if (v.complete) return " complete";
+  if (v.translating) return " to-translate";
+  if (v.sending) return " to-send";
+  if (v.ready_to_translate) return " to-translate";
+  if (v.ready_to_send) return " to-send";
+  return "";
+}
+
+// Кнопка следующего шага на карточке: зелёная "Передать в Anki" или розовая
+// "Перевести". Пока шаг идёт (или его только что нажали) – кнопки нет.
+function cardAction(v) {
+  const pressed = Pages.pressedActions.get(v.id);
+  if (pressed && Date.now() - pressed < 20000) return "";
+  if (v.translating || v.sending) return "";
+  if (v.ready_to_send) {
+    return `<button class="card-action send" data-action="send" data-id="${escapeHtml(v.id)}">Передать в Anki</button>`;
+  }
+  if (v.ready_to_translate) {
+    return `<button class="card-action translate" data-action="translate" data-id="${escapeHtml(v.id)}">Перевести</button>`;
+  }
+  return "";
+}
+
 // Полоса из цветных отрезков: segments = [{n, cls}] – слева направо; последний
 // отрезок с right: true прижимается к правому краю (между ними – серое).
 // name – подпись слева, done / total – справа. Стыки цветов – под наклоном
@@ -487,12 +515,13 @@ const Pages = {
     const el = document.getElementById("view-videos");
     el.innerHTML = `<div class="page-head"><h1>Видео</h1>
         <div class="head-actions">
+          <span id="flags-status" class="muted small"></span>
           <button id="open-flags" class="step-btn">Проверка флагов</button>
           <button id="open-translate" class="step-btn">Перевод</button>
         </div></div>
       <p class="muted small page-note">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
       <div id="videos-list"><p class="muted">Загрузка…</p></div>`;
-    el.querySelector("#open-flags").addEventListener("click", () => this.flagsModal());
+    el.querySelector("#open-flags").addEventListener("click", () => this.checkFlags());
     el.querySelector("#open-translate").addEventListener("click", () => this.translateModal());
     const render = async () => {
       const box = document.getElementById("videos-list");
@@ -515,32 +544,35 @@ const Pages = {
       const first = !box.querySelector("a.card");
       renderSmooth(box, groupByAuthor(items, byPendingWork).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
-          `<a class="card${v.complete ? " complete" : v.ready_to_translate ? " to-translate" : v.ready_to_send ? " to-send" : ""}" ` +
-          `href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
-          videoBars(v) + videoNotes(v) +
-          // Осталось только перевести – большая розовая кнопка прямо на карточке.
-          (v.ready_to_translate ? `<button class="card-translate" data-id="${escapeHtml(v.id)}" ${v.translating ? "disabled" : ""}>` +
-            `${v.translating ? "Переводится…" : "Перевести"}</button>` : "") +
+          `<a class="card${cardState(v)}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
+          videoBars(v) + videoNotes(v) + cardAction(v) +
           "</a>").join("") + "</div>",
       ).join(""), first);
     };
-    // Кнопка "Перевести" на карточке: запуск перевода видео, окно не открывается.
+    // Кнопки на карточке ("Передать в Anki", "Перевести"): действие сразу, окно
+    // не открывается; кнопка плавно сворачивается, карточка уменьшается.
     // Обработчик на самой странице – вешается один раз (страница перерисовывается).
-    if (!el.dataset.translateBound) {
-      el.dataset.translateBound = "1";
+    if (!el.dataset.actionsBound) {
+      el.dataset.actionsBound = "1";
       el.addEventListener("click", async (e) => {
-        const button = e.target.closest(".card-translate");
+        const button = e.target.closest(".card-action");
         if (!button) return;
         e.preventDefault();
         e.stopPropagation();
+        const id = button.dataset.id;
+        Pages.pressedActions.set(id, Date.now());
         button.disabled = true;
-        button.textContent = "Переводится…";
+        button.style.height = `${button.offsetHeight}px`;
+        button.getBoundingClientRect();
+        button.classList.add("gone");
         try {
-          await Api.agentRun({ project: button.dataset.id, batch: false });
+          if (button.dataset.action === "send") await Api.queueProject(id);
+          else await Api.agentRun({ project: id, batch: false });
         } catch (err) {
-          button.textContent = "Ошибка";
-          button.title = err.message;
+          Pages.pressedActions.delete(id);
+          console.error(err); // кнопка вернётся при перерисовке – можно нажать ещё раз
         }
+        if (Pages.videosRender) Pages.videosRender();
       });
     }
     this.videosRender = render;
@@ -650,67 +682,51 @@ const Pages = {
 
   // Окно "Проверка флагов": карточки приложения с флагами в Anki; оранжевые и
   // красные можно вернуть в редактор, перевод – в окне "Перевод".
-  flagsModal() {
-    const body = Modal.show(`
-      <h2>Проверка флагов</h2>
-      <p class="muted small">Флаги карточек приложения в Anki:
-        <span class="flag-dot f2"></span> оранжевый – поправить обрезку или английский текст (вернуть в редактор);
-        <span class="flag-dot f3"></span> зелёный – поправить перевод (агент);
-        <span class="flag-dot f1"></span> красный – и то, и другое. Anki должен быть открыт.</p>
-      <div class="actions">
-        <button id="anki-check" class="step-btn">Проверить</button>
-        <button id="to-translate" class="step-btn">Перейти к переводу</button>
-      </div>
-      <div id="anki-check-result"></div>`);
-    body.querySelector("#to-translate").addEventListener("click", () => this.translateModal());
-    body.querySelector("#anki-check").addEventListener("click", async () => {
-      const box = body.querySelector("#anki-check-result");
-      box.innerHTML = '<p class="muted">Проверяю…</p>';
-      let found;
-      try {
-        found = await Api.ankiCheck();
-      } catch (err) {
-        let message = err.message;
-        try {
-          message = JSON.parse(message).detail;
-        } catch (_) {}
-        box.innerHTML = `<p class="muted">Не получилось: ${escapeHtml(message)}</p>`;
-        return;
-      }
-      if (!found.length) {
-        box.innerHTML = '<p class="muted">Помеченных карточек нет.</p>';
-        return;
-      }
-      const flagNames = { 1: "красный: обрезка и перевод", 2: "оранжевый: обрезка/текст", 3: "зелёный: перевод (агент)",
-        4: "синий", 5: "розовый", 6: "бирюзовый", 7: "фиолетовый" };
-      // В редактор возвращаются только карточки с флагом обрезки/текста (красный, оранжевый).
-      const returnable = (item) => item.state === "in_anki" && (item.flag === 1 || item.flag === 2);
-      box.innerHTML = `<table class="stats flagged">` + found.map((item, i) =>
-        `<tr><td><input type="checkbox" data-i="${i}" ${returnable(item) ? "checked" : "disabled"}></td>` +
-        `<td><span class="flag-dot f${item.flag}"></span> ${escapeHtml(item.project)} · ${escapeHtml(item.fragment_id)}</td>` +
-        `<td>${escapeHtml(item.text.replace(/\n/g, " / "))}</td>` +
-        `<td class="muted small">${flagNames[item.flag] || item.flag}${item.state === "returned" ? " · уже на доработке" : ""}</td></tr>`,
-      ).join("") + `</table><button id="anki-return" class="step-btn">Вернуть отмеченные на доработку</button><div id="anki-return-result"></div>`;
-      box.querySelector("#anki-return").addEventListener("click", async () => {
-        const items = [...box.querySelectorAll("input[data-i]:checked")].map((cb) => {
-          const item = found[Number(cb.dataset.i)];
-          return { project: item.project, fragment_id: item.fragment_id };
-        });
-        if (!items.length) return;
-        const result = await Api.ankiReturn(items);
-        const links = Object.entries(result.returned).map(([pid, n]) =>
-          `<a class="big-btn" href="#/edit/${encodeURIComponent(pid)}">править ${escapeHtml(pid)} (${n})</a>`).join(" ");
-        box.querySelector("#anki-return-result").innerHTML =
-          `<p>Вернули на доработку. В редакторе они отмечены флажком ⚑ – фильтр «помечены в Anki».</p>${links}`;
+  // "Проверка флагов": спросить Anki и сразу вернуть в редактор карточки с
+  // флагом обрезки/текста (оранжевый, красный); зелёные (и красные) ждут
+  // перевода – их готовит окно "Перевод". Итог – слева от кнопки.
+  pressedActions: new Map(), // видео, где только что нажали кнопку на карточке: {id: время}
+
+  async checkFlags() {
+    const status = document.getElementById("flags-status");
+    const button = document.getElementById("open-flags");
+    const say = (text, hint = "") => {
+      status.textContent = text;
+      status.title = hint;
+    };
+    button.disabled = true;
+    say("Проверяю…");
+    try {
+      const found = await Api.ankiCheck();
+      const returnable = found.filter((item) => item.state === "in_anki" && (item.flag === 1 || item.flag === 2));
+      const translation = found.filter((item) => item.flag === 1 || item.flag === 3).length;
+      const already = found.filter((item) => item.state === "returned").length;
+      let returned = {};
+      if (returnable.length) {
+        returned = (await Api.ankiReturn(returnable.map((item) => ({ project: item.project, fragment_id: item.fragment_id })))).returned;
         // Открытое в редакторе видео надо перечитать – его фрагменты разблокировались.
-        if (State.project && result.returned[State.project]) {
-          State.manifest = null;
+        if (State.project && returned[State.project]) {
           const id = State.project;
+          State.manifest = null;
           State.project = null;
           if (State.view === "editor") App.openProject(id);
         }
-      });
-    });
+      }
+      const parts = [];
+      if (returnable.length) parts.push(`на правку: ${returnable.length}`);
+      if (already) parts.push(`уже на правке: ${already}`);
+      if (translation) parts.push(`на перевод: ${translation}`);
+      say(parts.length ? parts.join(" · ") : "Помеченных карточек нет",
+        returnable.length ? "Вернулись в редактор – фильтр «помечены в Anki»" : "");
+    } catch (err) {
+      let message = err.message;
+      try {
+        message = JSON.parse(message).detail;
+      } catch (_) {}
+      say("Не получилось", message);
+    }
+    button.disabled = false;
+    if (this.videosRender) this.videosRender();
   },
 
   // Подробности видео – окно поверх списка (#/video/<код>): статистика, место

@@ -127,6 +127,20 @@ const Api = {
     return this.json("/api/anki/overview");
   },
 
+  // Кнопка "Финиш" в редакторе: всё видео считается отредактированным.
+  finish(project) {
+    return this.json(`/api/p/${encodeURIComponent(project)}/finish`, { method: "POST" });
+  },
+
+  // Передать в Anki всё видео (кнопка на карточке в списке видео).
+  queueProject(project) {
+    return this.json(`/api/p/${encodeURIComponent(project)}/stage3/queue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+  },
+
   ankiCheck() {
     return this.json("/api/anki/check", { method: "POST" });
   },

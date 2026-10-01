@@ -422,6 +422,24 @@ const App = {
     $("nav-back-10").disabled = index - 10 < 0;
     $("nav-fwd-1").disabled = index >= last;
     $("nav-fwd-10").disabled = index + 10 > last;
+    // Последний фрагмент: вместо кнопок вперёд — "Финиш".
+    const atEnd = index >= last;
+    $("nav-fwd-1").classList.toggle("hidden", atEnd);
+    $("nav-fwd-10").classList.toggle("hidden", atEnd);
+    $("finish-btn").classList.toggle("hidden", !atEnd);
+    const finished = !!(State.manifest.settings || {}).finished;
+    $("finish-btn").textContent = finished ? "Финиш ✓" : "Финиш";
+    $("finish-btn").title = finished ? "Всё видео уже отмечено отредактированным"
+      : "Отметить всё видео отредактированным (полоса «Отредактировано» – целиком)";
+  },
+
+  async finish() {
+    await this.flushSaves();
+    const result = await this._call(Api.finish(State.project));
+    if (!result) return;
+    State.manifest.settings = result.manifest.settings;
+    this.renderNav();
+    this.flash("Всё видео отмечено отредактированным");
   },
 
   // Скорость воспроизведения: значение и доступность кнопок на краях диапазона.
@@ -784,6 +802,7 @@ $("nav-back-10").addEventListener("click", () => App.go(State.fragmentIndex - 10
 $("nav-back-1").addEventListener("click", () => App.go(State.fragmentIndex - 1));
 $("nav-fwd-1").addEventListener("click", () => App.go(State.fragmentIndex + 1));
 $("nav-fwd-10").addEventListener("click", () => App.go(State.fragmentIndex + 10));
+$("finish-btn").addEventListener("click", () => App.finish());
 
 // Браузер сам ничего в фразе не меняет: каждое действие перехватывается и
 // применяется к токенам (правила — в textedit.js).
