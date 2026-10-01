@@ -1398,3 +1398,8 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
   animation: modal-in 0.15s ease-out;
 }
 .zoom-frame.fade { opacity: 0; transition: opacity 0.35s ease-in 0.1s, transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1); }
+/* Подстройка на глаз: "Место на диске" – на 2 px выше (снизу +2 px), название –
+   на 1 px ниже (до полосы −1 px); полосы и высота карточки не меняются. */
+.card > .muted.small { margin-top: 10px; margin-bottom: 2px; }
+.card { padding-top: 12px; }
+.card-title + .progress, .card-title + .card-status, .card-title + .muted { margin-top: 10.86px; }
