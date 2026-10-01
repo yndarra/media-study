@@ -131,19 +131,16 @@ function formatSize(bytes) {
 }
 
 // Две полосы видео.
-// "Отредактировано" (слева направо): зелёное — передано в Anki; фиолетовое —
-//   вернулось из Anki на правку; светло-серое — просмотрено и принято без
-//   правок (до скрытой метки — последнего изменённого фрагмента); жёлтое —
-//   изменено; красное — удалено; серое — ещё не тронуто.
+// "Отредактировано" (слева направо, до скрытой метки — последнего
+//   изменённого фрагмента): светло-серое — просмотрено и принято без правок;
+//   жёлтое — изменено; красное — удалено; серое — ещё не тронуто.
 // "Передано в Anki" — живые фрагменты на этапе 3; справа фиолетовые —
 //   карточки с флагом "обрезка/текст" (оранжевый, красный).
 function videoBars(v) {
-  const e = v.edit_bar || { exported: 0, returned: 0, accepted: 0, changed: 0, deleted: 0 };
-  const edited = e.exported + e.returned + e.accepted + e.changed + e.deleted;
+  const e = v.edit_bar || { accepted: 0, changed: 0, deleted: 0 };
+  const edited = e.accepted + e.changed + e.deleted;
   const total = v.bar_total || v.fragments_total;
   return segmentBar([
-    { n: e.exported, cls: "ok", title: `передано в Anki: ${e.exported}` },
-    { n: e.returned, cls: "returned", title: `вернулись из Anki: ${e.returned}` },
     { n: e.accepted, cls: "accepted", title: `приняты без правок: ${e.accepted}` },
     { n: e.changed, cls: "changed", title: `изменены: ${e.changed}` },
     { n: e.deleted, cls: "deleted", title: `удалены: ${e.deleted}` },
@@ -154,14 +151,23 @@ function videoBars(v) {
   ], v.active_total, `Передано в Anki ${v.exported} / ${v.active_total}`);
 }
 
-// Строка под полосами: ждут правки, помечены на удаление, вернулись, очередь.
+// Строка под полосами (только если есть что сказать): вернулись из Anki,
+// ждут перевода, очередь Anki.
 function videoNotes(v) {
   const q = v.stage3 || {};
   const queue = q.state === "waiting_anki" ? "ждёт Anki" : q.notes_left ? `в очереди Anki ${q.notes_left}, ≈ ${Math.max(1, Math.ceil(q.eta_seconds / 60))} мин` : "";
-  return `<div class="muted small">Ожидает правок: ${v.awaiting} · Помечено на удаление: ${v.deleted_total || 0}` +
-    (v.flagged ? ` · <span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "") +
-    (v.flag_translation ? ` · <span class="translation-text">Перевод: ${v.flag_translation}</span>` : "") +
-    (queue ? ` · ${escapeHtml(queue)}` : "") + "</div>";
+  const parts = [
+    v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
+    v.flag_translation ? `<span class="translation-text">Перевод: ${v.flag_translation}</span>` : "",
+    queue ? escapeHtml(queue) : "",
+  ].filter(Boolean);
+  return parts.length ? `<div class="muted small">${parts.join(" · ")}</div>` : "";
+}
+
+// Заголовок карточки видео: длительность перед названием.
+function cardTitle(v) {
+  return `<div class="card-title"><span class="card-time">${formatDuration(v.duration)}</span> ${escapeHtml(v.title)}` +
+    `${v.audio_only ? ' <span class="muted small">· аудио</span>' : ""}</div>`;
 }
 
 // Всплывающее окно поверх страницы (подробности видео и т.п.).
@@ -235,6 +241,7 @@ const Pages = {
           <button id="open-flags" class="step-btn">Проверка флагов</button>
           <button id="open-translate" class="step-btn">Перевод</button>
         </div></div>
+      <p class="muted small">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» — докуда дошла правка (светло-серое — принято без правок, жёлтое — изменено, красное — удалено), «Передано в Anki» — сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
       <div id="videos-list"><p class="muted">Загрузка…</p></div>`;
     el.querySelector("#open-flags").addEventListener("click", () => this.flagsModal());
     el.querySelector("#open-translate").addEventListener("click", () => this.translateModal());
@@ -258,8 +265,7 @@ const Pages = {
       }
       box.innerHTML = groupByAuthor(items).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
-          `<a class="card" href="#/video/${encodeURIComponent(v.id)}"><div class="card-title">${escapeHtml(v.title)}</div>` +
-          `<div class="muted">${formatDuration(v.duration)} · фрагментов ${v.fragments_total}</div>` +
+          `<a class="card" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
           videoBars(v) + videoNotes(v) + "</a>").join("") + "</div>",
       ).join("");
     };
@@ -484,8 +490,8 @@ const Pages = {
       box.innerHTML = groupByAuthor(items).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card" href="#/process/${encodeURIComponent(v.id)}">` +
-          `<div class="card-title">${escapeHtml(v.title)}${v.audio_only ? ' <span class="muted small">· аудио</span>' : ""}</div>` +
-          `<div class="muted">${formatDuration(v.duration)}${(v.sources || []).length ? ` · ссылок на текст: ${v.sources.length}` : ""}</div>` +
+          cardTitle(v) +
+          ((v.sources || []).length ? `<div class="muted small">ссылок на текст: ${v.sources.length}</div>` : "") +
           (v.state === "processing" ? processingBar(v) : `<div class="card-status">добавлено, ждёт обработки</div>`) +
           "</a>").join("") + "</div>",
       ).join("");

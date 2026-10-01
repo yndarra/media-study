@@ -155,7 +155,8 @@ body.left-closed #main { padding-left: 60px; }
 
 .anki-row { margin-bottom: 10px; max-width: 900px; }
 a.card:hover { border-color: #5a5a66; }
-.card-title { font-weight: 600; margin-bottom: 6px; }
+.card-title { font-weight: 600; font-size: 14px; line-height: 1.35; margin-bottom: 6px; }
+.card-time { color: var(--dim); font-weight: 400; font-variant-numeric: tabular-nums; margin-right: 4px; }
 .card-status { font-family: Consolas, monospace; font-size: 12px; color: var(--dim); margin-top: 6px; word-break: break-all; }
 
 .progress {

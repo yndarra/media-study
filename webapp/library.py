@@ -200,18 +200,15 @@ def summary(project_dir: Path) -> dict:
     reviewed = last_touched_index(manifest) + 1
     returned = [f for f in active if f.anki_flagged and not f.exported]  # вернулись из Anki на правку
     head = fragments[:reviewed]
-    # Полоса "Отредактировано" (слева направо): передано в Anki, вернулись из
-    # Anki на правку, просмотрено и принято без правок (до скрытой метки),
-    # изменено, удалено; остальное — ещё не тронуто.
+    # Полоса "Отредактировано" (слева направо), до скрытой метки: принято без
+    # правок, изменено, удалено; остальное — ещё не тронуто. Передано ли в
+    # Anki — не важно (это видно на полосе "Передано в Anki").
     # Удалён пользователем (а не исходник объединения/разделения — те
     # заменены своим результатом и в полосе не считаются).
     removed = lambda f: f.status != STATUS_ACTIVE and not f.absorbed_into and not f.split_into
-    waiting = lambda f: f.status == STATUS_ACTIVE and not f.exported and not (f.anki_flagged and not f.exported)
     edit_bar = {
-        "exported": sum(f.exported for f in active),
-        "returned": len(returned),
-        "accepted": sum(waiting(f) and not is_edited(f) for f in head),
-        "changed": sum(waiting(f) and is_edited(f) for f in head),
+        "accepted": sum(f.status == STATUS_ACTIVE and not is_edited(f) for f in head),
+        "changed": sum(f.status == STATUS_ACTIVE and is_edited(f) for f in head),
         "deleted": sum(removed(f) for f in head),
     }
     return {
