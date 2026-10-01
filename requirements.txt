@@ -1,0 +1,8 @@
+yt-dlp
+faster-whisper
+imageio-ffmpeg
+fastapi
+uvicorn
+# Модель границ фраз (Segment any Text) — работает на onnxruntime, PyTorch не нужен.
+wtpsplit
+onnxruntime

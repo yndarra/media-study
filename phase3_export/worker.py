@@ -1,0 +1,291 @@
+# -*- coding: utf-8 -*-
+"""
+Фоновая очередь этапа 3: переданные фрагменты -> клипы -> карточки Anki.
+
+Кнопка "добавить в Anki" в редакторе только помечает фрагменты exported
+(мгновенно) и запускает этот процесс. Он живёт отдельно от редактора: его
+не останавливает ни перезапуск редактора, ни переключение на другое видео,
+а повторное нажатие кнопки просто добавляет фрагменты в хвост очереди —
+процесс перечитывает манифесты по кругу, пока есть работа. Одновременно
+работает только один такой процесс (блокировка файла data/.stage3_worker.lock).
+
+Для каждого проекта в data/ (папка с manifest.json):
+  1. каждый переданный, живой фрагмент с текстом, которого ещё нет в
+     export/index.json, превращается в клип (phase3_export.export_clips.render_clip)
+     и запись в index.json;
+  2. для каждой записи без карточки создаётся карточка в Anki. Если Anki
+     закрыт, клипы продолжают резаться, а карточки создаются, как только он
+     откроется (повтор раз в ANKI_RETRY_SECONDS).
+Манифест процесс только читает; пишет он index.json и файл состояния
+export/stage3_status.json (редактор берёт из него скорость кодирования,
+чтобы показать оставшееся время).
+
+Запуск вручную: py -3.12 -m phase3_export.worker --data-dir data
+"""
+import argparse
+import json
+import msvcrt
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+from common.manifest_schema import Manifest, STATUS_ACTIVE, replace_file, retry_windows_lock
+
+from . import anki
+from .export_clips import render_clip
+
+DEFAULT_SECONDS_PER_FRAME = 0.16  # ~13 с на 3-секундный клип 4K (замер на RTX 5070 + CPU libx265)
+ANKI_RETRY_SECONDS = 30
+STATUS_FILE = "stage3_status.json"
+
+
+def default_deck(project_dir: Path) -> str:
+    """Claude::2. VIDEOS::<автор>::<видео>; автор — заданный в приложении или канал."""
+    from webapp.library import app_settings, group_of, video_info
+
+    def clean(name: str) -> str:
+        return " ".join(name.replace("::", " ").replace('"', "").split()) or Path(project_dir).name
+
+    group = clean(group_of(project_dir))
+    title = clean(video_info(project_dir).get("title") or "")
+    deck_root = app_settings(Path(project_dir).parent)["anki_deck_root"].strip(":") or "Claude::2. VIDEOS"
+    return f"{deck_root}::{group}::{title}"
+
+
+def read_json(path: Path, default):
+    try:
+        return json.loads(retry_windows_lock(lambda: path.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path: Path, data) -> None:
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Windows: файл могут в этот момент читать (сервер редактора) — с повторами.
+    replace_file(tmp_path, path)
+
+
+def known_speakers(project: Path, manifest: Manifest) -> set[str]:
+    """
+    Говорящие этого видео: из источника текста (transcript.txt, строки
+    "Имя: реплика") и из начал строк фрагментов — чтобы при записи в Anki
+    отличать имя персонажа от обычного текста с двоеточием.
+    """
+    from phase1_ingest.sources.notion import dialogue_line
+
+    names = set()
+    transcript = project / "transcript.txt"
+    if transcript.exists():
+        for line in transcript.read_text(encoding="utf-8").splitlines():
+            parsed = dialogue_line(line)
+            if parsed:
+                names.add(parsed[0])
+    return names
+
+
+def pending_fragments(manifest: Manifest, index: list[dict]) -> list:
+    """Переданные фрагменты, по которым клипа ещё нет или его надо переделать (вернулся из Anki)."""
+    done = {entry["fragment_id"] for entry in index if not entry.get("redo")}
+    return [
+        f for f in manifest.fragments
+        if f.exported and f.status == STATUS_ACTIVE and f.text.strip() and f.id not in done
+    ]
+
+
+class Worker:
+    def __init__(self, data_dir: Path, only_project: Path | None = None):
+        self.data_dir = Path(data_dir)
+        self.only_project = Path(only_project) if only_project else None
+        self.anki_ready = False
+        self.speakers: dict[str, set[str]] = {}  # говорящие по видео (для меток Anki)
+        self.anki_down_until = 0.0
+
+    def projects(self) -> list[Path]:
+        if self.only_project:
+            return [self.only_project]
+        return sorted(d for d in self.data_dir.iterdir() if (d / "manifest.json").exists())
+
+    def status(self, project: Path, state: str, message: str = "", **extra) -> None:
+        out_dir = project / "export"
+        out_dir.mkdir(exist_ok=True)
+        previous = read_json(out_dir / STATUS_FILE, {})
+        write_json(out_dir / STATUS_FILE, {
+            "state": state,
+            "message": message,
+            "seconds_per_frame": extra.get("seconds_per_frame", previous.get("seconds_per_frame", DEFAULT_SECONDS_PER_FRAME)),
+            "updated": time.time(),
+        })
+
+    def _anki_available(self) -> bool:
+        return time.time() >= self.anki_down_until
+
+    def _make_note(self, project: Path, deck: str, entry: dict) -> bool:
+        """Создаёт карточку для записи index.json. False — Anki сейчас недоступен."""
+        if not self._anki_available():
+            return False
+        try:
+            if not self.anki_ready:
+                anki.ensure_model()
+                self.anki_ready = True
+            anki.ensure_deck(deck)
+            try:
+                entry["anki_note_id"] = anki.add_clip_note(
+                    deck,
+                    project / "export" / entry["clip"],
+                    f"{project.name}_{entry['clip']}",
+                    entry["text"],
+                    project.name,
+                    entry["fragment_id"],
+                    entry["clip"],
+                    self.speakers.get(project.name, set()),
+                )
+            except RuntimeError as error:
+                # Карточка уже создана прошлым запуском, который упал, не успев
+                # записать её номер в index.json, — находим её по тегу фрагмента.
+                if "duplicate" not in str(error):
+                    raise
+                found = anki.invoke("findNotes", query=f'"tag:media-study::{project.name}::{entry["fragment_id"]}"')
+                if not found:
+                    raise
+                entry["anki_note_id"] = found[0]
+                print(f"{project.name}: {entry['clip']} — карточка уже была в Anki, привязал её", flush=True)
+            entry["anki_deck"] = deck
+            return True
+        except anki.AnkiUnavailable as error:
+            print(f"Anki недоступен: {error} — карточки создадутся позже", flush=True)
+            self.anki_down_until = time.time() + ANKI_RETRY_SECONDS
+            return False
+
+    def _update_note(self, project: Path, entry: dict) -> bool:
+        """Обновляет существующую карточку переделанным клипом и текстом. False — Anki недоступен."""
+        if not self._anki_available():
+            return False
+        try:
+            anki.update_clip_note(
+                entry["anki_note_id"], project / "export" / entry["clip"], f"{project.name}_{entry['clip']}", entry["text"],
+                project.name, entry["fragment_id"], self.speakers.get(project.name, set()),
+            )
+            entry.pop("anki_update_pending", None)
+            return True
+        except anki.AnkiUnavailable as error:
+            print(f"Anki недоступен: {error} — карточка обновится позже", flush=True)
+            self.anki_down_until = time.time() + ANKI_RETRY_SECONDS
+            return False
+
+    def process_project(self, project: Path) -> tuple[bool, bool]:
+        """Один проход по проекту. Возвращает (что-то сделано, остались карточки без Anki)."""
+        manifest = Manifest.load(project / "manifest.json")
+        self.speakers[project.name] = known_speakers(project, manifest)
+        out_dir = project / "export"
+        out_dir.mkdir(exist_ok=True)
+        index_path = out_dir / "index.json"
+        index = read_json(index_path, [])
+        deck = manifest.settings.get("anki_deck") or default_deck(project)
+        fps = manifest.video.fps
+        master = project / (manifest.video.master_file or manifest.video.source_file)
+        spf = read_json(out_dir / STATUS_FILE, {}).get("seconds_per_frame", DEFAULT_SECONDS_PER_FRAME)
+        # Аудио без видео -> звуковые клипы .m4a.
+        audio_only = bool(read_json(project / "video_info.json", {}).get("audio_only"))
+        ext = ".m4a" if audio_only else ".mp4"
+        did = False
+
+        for fragment in pending_fragments(manifest, index):
+            self.status(project, "encoding", f"кодирую {fragment.id}", seconds_per_frame=spf)
+            # Вернувшийся из Anki фрагмент переделывается под тем же именем клипа
+            # (и обновляет ту же карточку), новый — получает следующий номер.
+            redo = next((e for e in index if e["fragment_id"] == fragment.id and e.get("redo")), None)
+            number = int(redo["clip"].split(".")[0]) if redo else max((int(e["clip"].split(".")[0]) for e in index), default=0) + 1
+            name = f"{number:04d}"
+            clip_path = out_dir / f"{name}{ext}"
+            frames = fragment.algo_end_frame - fragment.algo_start_frame
+            started = time.time()
+            height = render_clip(master, project / "audio.pcm", clip_path, fragment.algo_start_frame, fragment.algo_end_frame, fps, audio_only)
+            # Скорость кодирования — скользящее среднее, по ней редактор считает оставшееся время.
+            spf = 0.7 * spf + 0.3 * (time.time() - started) / max(frames, 1)
+            (out_dir / f"{name}.txt").write_text(fragment.text + "\n", encoding="utf-8")
+            entry = {
+                "clip": f"{name}{ext}",
+                "text_file": f"{name}.txt",
+                "text": fragment.text,
+                "fragment_id": fragment.id,
+                "start_frame": fragment.algo_start_frame,
+                "end_frame": fragment.algo_end_frame,
+                "start_seconds": round(fragment.algo_start_frame / fps, 6),
+                "end_seconds": round(fragment.algo_end_frame / fps, 6),
+                "frames": frames,
+                "fps": fps,
+                "height": height or "исходное",
+                "size_bytes": clip_path.stat().st_size,
+                "exported_at": datetime.now().isoformat(timespec="seconds"),
+            }
+            if redo:
+                entry["anki_note_id"] = redo.get("anki_note_id")
+                entry["anki_deck"] = redo.get("anki_deck")
+                entry["redone_at"] = entry["exported_at"]
+                index[index.index(redo)] = entry
+            else:
+                index.append(entry)
+            write_json(index_path, index)
+            print(f"{project.name}: {name}.mp4 ({frames} кадров, {clip_path.stat().st_size / 2**20:.1f} МБ) {fragment.text.splitlines()[0][:50]}", flush=True)
+            if redo and entry.get("anki_note_id"):
+                entry["anki_update_pending"] = True
+                self._update_note(project, entry)
+            else:
+                self._make_note(project, deck, entry)
+            write_json(index_path, index)
+            did = True
+
+        for entry in [e for e in index if e.get("anki_update_pending")]:
+            if not self._update_note(project, entry):
+                break
+            write_json(index_path, index)
+            did = True
+        without_note = [e for e in index if not e.get("anki_note_id")]
+        for entry in without_note:
+            self.status(project, "anki", "создаю карточки", seconds_per_frame=spf)
+            if not self._make_note(project, deck, entry):
+                break
+            write_json(index_path, index)
+            did = True
+        waiting = any(not e.get("anki_note_id") or e.get("anki_update_pending") for e in index)
+        self.status(project, "waiting_anki" if waiting else "idle",
+                    "жду Anki, чтобы создать карточки" if waiting else "", seconds_per_frame=spf)
+        return did, waiting
+
+    def run(self) -> None:
+        while True:
+            did_any = False
+            waiting_any = False
+            for project in self.projects():
+                did, waiting = self.process_project(project)
+                did_any |= did
+                waiting_any |= waiting
+            if did_any:
+                continue
+            if waiting_any:
+                time.sleep(ANKI_RETRY_SECONDS)
+                continue
+            return
+
+
+def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    parser = argparse.ArgumentParser(description="Фоновая очередь этапа 3: клипы и карточки Anki.")
+    parser.add_argument("--data-dir", default="data")
+    parser.add_argument("--project-dir", help="Обработать только этот проект")
+    args = parser.parse_args()
+    data_dir = Path(args.data_dir)
+    lock = open(data_dir / ".stage3_worker.lock", "a+")
+    try:
+        msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+    except OSError:
+        print("Очередь этапа 3 уже обрабатывается другим процессом.", flush=True)
+        return
+    Worker(data_dir, args.project_dir).run()
+    print("Очередь этапа 3 пуста.", flush=True)
+
+
+if __name__ == "__main__":
+    main()

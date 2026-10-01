@@ -1,0 +1,568 @@
+:root {
+  --bg: #1b1b1f;
+  --bg-deleted: #2e1518;
+  --panel: #141418;
+  --border: #3a3a42;
+  --text: #ececf0;
+  --dim: #8a8a94;
+  --accent-edit: #e0b416;
+  --font: "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  transition: background 0.15s;
+}
+
+/* Оболочка: меню слева, страница по центру, список фрагментов справа
+   (он виден только в редакторе). Боковые панели — отдельные полупрозрачные
+   "окна" одинаковой ширины со скруглёнными углами; каждую можно скрыть. */
+:root {
+  --side-width: 260px;
+  --side-gap: 12px;
+}
+
+#shell {
+  display: grid;
+  grid-template-columns: calc(var(--side-width) + 2 * var(--side-gap)) minmax(0, 1fr) calc(var(--side-width) + 2 * var(--side-gap));
+  min-height: 100vh;
+}
+
+body.left-closed #shell { grid-template-columns: 0 minmax(0, 1fr) calc(var(--side-width) + 2 * var(--side-gap)); }
+body.right-closed #shell,
+body.no-fraglist #shell { grid-template-columns: calc(var(--side-width) + 2 * var(--side-gap)) minmax(0, 1fr) 0; }
+body.left-closed.right-closed #shell,
+body.left-closed.no-fraglist #shell { grid-template-columns: 0 minmax(0, 1fr) 0; }
+body.left-closed #menu,
+body.right-closed #fraglist { display: none; }
+/* Столбцы закреплены явно: иначе при скрытом меню страница сама съезжает
+   в первый (нулевой ширины) столбец и вёрстка разваливается. */
+#menu { grid-column: 1; grid-row: 1; }
+#main { grid-column: 2; grid-row: 1; }
+#fraglist { grid-column: 3; grid-row: 1; }
+
+.sidebar {
+  position: sticky;
+  top: var(--side-gap);
+  margin: var(--side-gap);
+  height: calc(100vh - 2 * var(--side-gap));
+  box-sizing: border-box;
+  background: rgba(24, 24, 30, 0.72);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+#menu {
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.panel-close,
+.panel-open {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-open {
+  position: fixed;
+  top: 14px;
+  z-index: 20;
+  display: none;
+  backdrop-filter: blur(10px);
+  background: rgba(24, 24, 30, 0.72);
+}
+
+#open-left { left: 14px; }
+#open-right { right: 14px; }
+body.left-closed #open-left { display: block; }
+body.right-closed:not(.no-fraglist) #open-right { display: block; }
+
+#menu .brand {
+  font-weight: 600;
+  color: var(--dim);
+  margin: 0 8px;
+}
+
+#menu a[data-menu] {
+  color: var(--text);
+  text-decoration: none;
+  padding: 7px 10px;
+  border-radius: 6px;
+}
+
+#menu a[data-menu]:hover { background: #24242b; }
+#menu a[data-menu].active { background: #2c2c33; }
+
+.menu-editing {
+  margin-top: 16px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.menu-editing a { color: #9ec9ff; text-decoration: none; font-size: 13px; }
+
+#main {
+  padding: 16px;
+  min-width: 0;
+}
+/* Меню скрыто — слева висит кнопка ☰, контент не должен под неё залезать. */
+body.left-closed #main { padding-left: 60px; }
+
+.view h1 { font-size: 22px; margin: 4px 0 16px; }
+.view h2 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
+.muted { color: var(--dim); }
+.small { font-size: 13px; }
+
+.group-title { color: var(--text) !important; }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.card, .anki-row {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.anki-row { margin-bottom: 10px; max-width: 900px; }
+a.card:hover { border-color: #5a5a66; }
+.card-title { font-weight: 600; margin-bottom: 6px; }
+.card-status { font-family: Consolas, monospace; font-size: 12px; color: var(--dim); margin-top: 6px; word-break: break-all; }
+
+.progress {
+  position: relative;
+  height: 20px;
+  background: #23232a;
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 8px 0 6px;
+}
+
+.progress-fill { height: 100%; background: #1f5a33; }
+.progress-label { position: absolute; left: 8px; top: 1px; font-size: 12px; }
+
+.author-row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+.author-row input, #download-url {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-family: var(--font);
+}
+
+#download-url { width: 520px; max-width: 100%; }
+.actions { display: flex; align-items: center; gap: 14px; margin: 14px 0; }
+
+.big-btn {
+  display: inline-block;
+  background: #214a73;
+  color: #e6f2ff;
+  text-decoration: none;
+  padding: 8px 18px;
+  border-radius: 6px;
+}
+
+.back-link { color: var(--dim); text-decoration: none; font-size: 13px; }
+table.stats { border-collapse: collapse; max-width: 900px; }
+table.stats td { padding: 5px 12px 5px 0; vertical-align: top; border-bottom: 1px solid #26262d; }
+table.stats td:first-child { color: var(--dim); white-space: nowrap; }
+.flagged-text { color: #ffa657; }
+
+/* Правый список фрагментов. */
+#fraglist {
+  display: flex;
+  flex-direction: column;
+}
+
+.fraglist-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#fraglist-filter {
+  background: #2c2c33;
+  color: var(--text);
+  border: 1px solid #45454e;
+  border-radius: 5px;
+  padding: 4px;
+  font-family: var(--font);
+}
+
+#fraglist-items { overflow-y: auto; flex: 1; }
+
+.frag-row {
+  display: flex;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.frag-row:hover { background: #22222a; }
+.frag-row.current { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.frag-num { min-width: 30px; text-align: right; opacity: 0.7; }
+.frag-text { overflow: hidden; text-overflow: ellipsis; }
+/* Текст строки — состояние правки; номер — прошёл ли фрагмент этап 3
+   (зелёный, даже если он удалён и в колоду не попал). */
+.frag-row.edited .frag-text { color: #ffd75e; }
+.frag-row.deleted .frag-text { color: #ff7b72; }
+.frag-row.flagged .frag-text { color: #ffa657; }
+.frag-row.anki .frag-num { color: #7ee787; opacity: 1; font-weight: 600; }
+.frag-row.anki.pending .frag-num { color: #a9cfae; font-weight: 400; font-style: italic; }
+.frag-empty { padding: 12px; color: var(--dim); font-size: 13px; }
+
+/* Удалённый фрагмент — красноватый фон всего интерфейса. */
+body.frag-deleted {
+  background: var(--bg-deleted);
+}
+
+/* Страница во всю высоту окна: ряд переключения фрагментов прижат к низу. */
+#app {
+  max-width: 1100px;
+  min-height: calc(100vh - 32px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#nav-row {
+  margin-top: auto;
+}
+
+#video-wrap {
+  background: #000;
+  position: relative;
+}
+
+/* Снимок кадра остановки — ровно поверх видео. */
+#freeze {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+#video {
+  width: 100%;
+  max-height: 540px;
+  display: block;
+  cursor: pointer;
+}
+
+/* Ряд из трёх зон: прижато влево / по центру / прижато вправо. */
+.row3 {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Ряд из пяти групп: крайние прижаты к краям, остальные — равными
+   промежутками между ними (крайние пары симметричны, поэтому средняя
+   группа остаётся точно по центру). */
+.row5 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group.left { justify-self: start; }
+.group.center { justify-self: center; }
+.group.right { justify-self: end; }
+
+button {
+  font-family: var(--font);
+  background: #2c2c33;
+  color: var(--text);
+  border: 1px solid #45454e;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #3a3a43;
+}
+
+button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn.danger:not(:disabled) {
+  color: #ff8a8a;
+}
+
+.step-btn {
+  min-width: 46px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+#timeline {
+  width: 100%;
+  height: 72px;
+  display: block;
+  background: #101014;
+  border-radius: 5px;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.badge {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  border: none;
+}
+
+.badge.edited { background: #5c4a08; color: #ffe27a; }
+.badge.review { background: #4b2a6b; color: #e2c6ff; cursor: pointer; }
+.badge.deleted { background: #7a1f27; color: #ffd0d4; }
+.badge.origin { background: #1d3f63; color: #bfe0ff; }
+.badge.info { background: #34343c; color: #c4c4cc; }
+
+.hidden { display: none !important; }
+
+/* Нижний ряд: слева назад, между ним и счётчиком — «добавить в Anki»,
+   счётчик строго по центру, справа вперёд. */
+.nav-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-grid .group.stage3 { justify-self: center; }
+
+/* Фрагмент передан в Anki: только просмотр, желтоватый фон. */
+body.frag-locked {
+  background: #2a2614;
+}
+
+.badge.stage3 { background: #5c4a08; color: #ffe27a; }
+.badge.stage3.done { background: #1f4a2a; color: #b6f0c2; }
+
+/* Вкладка устарела: сервер перезапущен, свежая вкладка — другая. */
+.stale-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #7a1f27;
+  color: #ffd0d4;
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.readout,
+#fragment-status {
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.toast {
+  font-size: 13px;
+  color: #ffb3b3;
+}
+
+#text-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Три фразы (серая, белая, серая) — по центру, как настоящие субтитры,
+   с заметным отступом от кнопок сверху. */
+#context-preview {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  padding: 0 12px;
+  margin-top: 22px;
+  text-align: center;
+}
+
+/* Белая фраза правится на месте: при фокусе не меняется ничего, кроме
+   появившейся каретки. min-height — чтобы в пустую строку можно было кликнуть. */
+/* Белая фраза: новый (набранный/вставленный) текст — зелёный, удалённый
+   исходный — красный (остаётся на месте, в текст фрагмента не входит). */
+#cur-text .ins {
+  color: #7ee787;
+}
+
+/* Исходный текст, записанный на слух (не из источника вроде Notion), —
+   голубой: на него стоит обратить внимание. */
+#cur-text .heard {
+  color: #79c0ff;
+}
+
+#cur-text .del {
+  color: #ff7b72;
+}
+
+/* Пробелы среди нового и удалённого текста видны как полупрозрачная точка
+   (как в редакторах кода): зелёная — новый пробел, красная — удалённый.
+   Сам пробел остаётся настоящим, точка — только рисунок поверх. */
+#cur-text .sp {
+  position: relative;
+}
+
+#cur-text .sp::after {
+  content: "·";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+#cur-text .ins .sp::after { color: rgba(126, 231, 135, 0.35); }
+#cur-text .del .sp::after { color: rgba(255, 123, 114, 0.4); }
+
+/* Новый перенос строки: зелёный знак "↵" в конце строки. */
+#cur-text .ins .nl::before {
+  content: "↵";
+  color: rgba(126, 231, 135, 0.8);
+}
+
+#cur-text {
+  min-height: 1.5em;
+  outline: none;
+  cursor: text;
+}
+
+.ctx {
+  white-space: pre-wrap;
+}
+
+.ctx.dim { color: var(--dim); }
+.ctx.cur { color: var(--text); }
+
+#position-indicator {
+  font-family: Consolas, monospace;
+  font-size: 14px;
+  color: var(--dim);
+}
+
+
+/* Блок "Сейчас идёт" внизу меню. */
+.activity {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.activity-title { font-size: 12px; color: var(--dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.activity-item { margin-bottom: 10px; font-size: 12px; }
+.activity-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.progress.thin { height: 5px; margin: 4px 0 0; }
+
+textarea.sources {
+  width: 100%;
+  max-width: 700px;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-family: var(--font);
+  margin: 4px 0;
+}
+
+#set-deck { width: 360px; }
+#set-padding { width: 70px; }
+
+/* Полосы прокрутки под тёмную тему (иначе браузер рисует белый ползунок —
+   особенно заметно в списке фрагментов справа). */
+:root { color-scheme: dark; }
+* { scrollbar-width: thin; scrollbar-color: #3a3a44 transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a3a44; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #50505c; }
+
+/* Скорость воспроизведения рядом с Reset. */
+.speed-btn { font-size: 16px; line-height: 1; }
+.speed-value {
+  min-width: 44px;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  color: var(--muted, #9a9aa5);
+  font: 12px ui-monospace, Consolas, monospace;
+  cursor: pointer;
+}
+.speed-value.changed { color: #ffc857; }
