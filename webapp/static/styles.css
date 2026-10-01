@@ -1347,3 +1347,20 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 .process-form label.check { margin-top: 4px; margin-bottom: 4px; }
 .process-form > label.check:first-of-type { margin-top: 14px; }
 .sources-box label.check { margin-top: 8px; margin-bottom: 0; }
+
+/* Окно "Обработки" во время обработки: ход справа (вместо "Сохранить"). */
+.process-status { margin-left: auto; font-size: 12px; color: #79b8ff; white-space: nowrap; }
+.ask-text b { color: var(--text); font-weight: 600; }
+.ask.danger .ask-icon { background: rgba(255, 123, 114, 0.12); }
+.ask.danger .ask-icon svg { fill: #ff7b72; }
+.ask { width: 360px; }
+.ask-text { line-height: 1.45; }
+
+/* ---- Карточки видео: равные отступы по вертикали ----
+   сверху до названия = снизу до "Место на диске" (12 px, поля карточки);
+   название → первая полоса = последняя полоса → "Место на диске" (12 px);
+   строка "Место на диске" и кнопка шага – одной высоты (20 px), поэтому
+   карточка с кнопкой той же высоты, что и без неё. */
+.card > .muted.small, .card > .card-action, .card > .card-status { margin-top: 12px; }
+.card > .muted.small { height: 20px; line-height: 20px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.card > .card-action { height: 20px; }

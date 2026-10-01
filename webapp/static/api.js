@@ -132,6 +132,11 @@ const Api = {
     return this.json(`/api/p/${encodeURIComponent(project)}/finish`, { method: "POST" });
   },
 
+  // Отменить скачивание/обработку видео (готовые шаги сохраняются).
+  cancelProcess(project) {
+    return this.json(`/api/p/${encodeURIComponent(project)}/process/cancel`, { method: "POST" });
+  },
+
   // Остановить передачу в Anki (непереданное возвращается в правку).
   stopStage3(project) {
     return this.json(`/api/p/${encodeURIComponent(project)}/stage3/stop`, { method: "POST" });

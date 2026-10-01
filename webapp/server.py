@@ -272,7 +272,7 @@ def _spawn_phase1(project_dir: Path, args: list[str]) -> None:
     """Этап 1 в фоне; вывод — в data/<id>/phase1.log, ход — в phase1_status.json."""
     project_dir.mkdir(parents=True, exist_ok=True)
     log = open(project_dir / "phase1.log", "a", encoding="utf-8")
-    subprocess.Popen(
+    process = subprocess.Popen(
         [sys.executable, "-u", "-m", "phase1_ingest.cli", *args, "--project-dir", str(project_dir)],
         cwd=str(REPO_DIR),
         stdout=log,
@@ -282,6 +282,44 @@ def _spawn_phase1(project_dir: Path, args: list[str]) -> None:
         close_fds=True,
         env={**os.environ, "PYTHONIOENCODING": "utf-8"},
     )
+    # Чтобы обработку можно было отменить из окна видео (см. cancel_process).
+    (project_dir / PHASE1_PID_FILE).write_text(str(process.pid), encoding="utf-8")
+
+
+PHASE1_PID_FILE = "phase1.pid"
+
+
+@app.post("/api/p/{project_id}/process/cancel")
+def cancel_process(project_id: str):
+    """
+    Отменить идущее скачивание/обработку: процесс этапа 1 (со всеми дочерними —
+    ffmpeg, распознавание) завершается. Готовые шаги остаются (при следующем
+    запуске не переделываются), скачивание продолжится с места остановки.
+    """
+    project_dir = DATA_DIR / project_id
+    pid_path = project_dir / PHASE1_PID_FILE
+    if not pid_path.exists():
+        raise HTTPException(status_code=400, detail="обработка не запущена из приложения")
+    pid = pid_path.read_text(encoding="utf-8").strip()
+    # Номер процесса мог достаться другой программе (обработка давно кончилась) —
+    # завершаем, только если это и правда этап 1 этого видео.
+    command = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine"],
+        capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW,
+    ).stdout
+    if "phase1_ingest.cli" not in command or project_id not in command:
+        pid_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="обработка этого видео сейчас не идёт")
+    subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    pid_path.unlink(missing_ok=True)
+    from common.progress import report
+
+    report(project_dir, "failed", None, force=True)
+    status_path = project_dir / "phase1_status.json"
+    data = json.loads(status_path.read_text(encoding="utf-8"))
+    data["label"] = "Обработка отменена – можно запустить снова"
+    status_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return library.summary(project_dir)
 
 
 class DownloadRequest(BaseModel):

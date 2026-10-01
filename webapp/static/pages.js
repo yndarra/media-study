@@ -30,17 +30,37 @@ const Panels = {
   },
 };
 
+// Что будет при отмене обработки на каждом шаге (готовое не переделывается).
+const PROCESS_CANCEL_EFFECT = {
+  download: "Скачанная часть видео <b>сохранится</b>; при следующем запуске скачивание продолжится с места остановки.",
+  proxy: "Скачанное видео <b>сохранится</b>. Копия для редактора не готова – при следующем запуске она начнётся <b>заново</b>.",
+  transcribe: "Видео и копия для редактора <b>сохранятся</b>. Распознавание речи не готово – при следующем запуске начнётся <b>заново</b> (это самый долгий шаг).",
+  agent_search: "Видео, копия и распознанная речь <b>сохранятся</b>. Поиск текста для сверки начнётся <b>заново</b> (агент – снова платный запрос).",
+  search: "Видео, копия и распознанная речь <b>сохранятся</b>. Сверка с текстом начнётся <b>заново</b>.",
+  segment: "Видео, копия, распознанная речь и текст для сверки <b>сохранятся</b>. Нарезка на фразы начнётся <b>заново</b> (это быстро).",
+  assets: "Всё <b>сохранится</b>, кроме звуковой дорожки для редактора – её построение начнётся <b>заново</b> (это быстро).",
+  default: "Готовые шаги <b>сохранятся</b>, незаконченный начнётся <b>заново</b> при следующем запуске.",
+};
+
 // Вопрос о несохранённых изменениях – поверх всего (и окон, и страниц).
 // Возвращает "save", "drop" ("Нет") или null (клик мимо / Esc – остаться).
 function askSave() {
+  return askConfirm({ title: "Несохранённые изменения", text: "Сохранить их?", yes: "Сохранить", no: "Нет", yesValue: "save", noValue: "drop" });
+}
+
+// Вопрос с подтверждением (поверх всего). yes – синяя кнопка (или красная,
+// danger: true), no – вторая; клик мимо / Esc – null.
+function askConfirm({ title, text, yes, no, yesValue = "yes", noValue = "no", danger = false, icon = null }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "ask-overlay";
-    overlay.innerHTML = `<div class="ask" role="dialog">
-        <div class="ask-icon"><svg viewBox="0 0 20 20"><path d="M4 14.5V16h1.5l8.6-8.6-1.5-1.5L4 14.5z"/><path d="M13.6 4.9l1.5 1.5 1.2-1.2a1 1 0 0 0 0-1.4l-.1-.1a1 1 0 0 0-1.4 0l-1.2 1.2z"/></svg></div>
-        <div class="ask-title">Несохранённые изменения</div>
-        <div class="ask-text">Сохранить их?</div>
-        <div class="ask-actions"><button class="step-btn danger" data-a="drop">Нет</button><button class="step-btn primary" data-a="save">Сохранить</button></div>
+    const pen = '<svg viewBox="0 0 20 20"><path d="M4 14.5V16h1.5l8.6-8.6-1.5-1.5L4 14.5z"/><path d="M13.6 4.9l1.5 1.5 1.2-1.2a1 1 0 0 0 0-1.4l-.1-.1a1 1 0 0 0-1.4 0l-1.2 1.2z"/></svg>';
+    overlay.innerHTML = `<div class="ask${danger ? " danger" : ""}" role="dialog">
+        <div class="ask-icon">${icon || pen}</div>
+        <div class="ask-title">${escapeHtml(title)}</div>
+        <div class="ask-text">${text}</div>
+        <div class="ask-actions"><button class="step-btn${danger ? "" : " danger"}" data-a="${noValue}">${escapeHtml(no)}</button>` +
+        `<button class="step-btn ${danger ? "danger" : "primary"}" data-a="${yesValue}">${escapeHtml(yes)}</button></div>
       </div>`;
     const finish = (answer) => {
       document.removeEventListener("keydown", onKey, true);
@@ -61,7 +81,7 @@ function askSave() {
       if (action) finish(action.dataset.a);
     });
     document.body.appendChild(overlay);
-    overlay.querySelector("[data-a=save]").focus();
+    overlay.querySelector(`[data-a="${yesValue}"]`).focus();
   });
 }
 
@@ -1302,8 +1322,9 @@ const Pages = {
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
       </table>` : ""}
       <div class="modal-actions">
-        ${v.state === "processing" ? "" : '<button class="step-btn primary process-go">Обработать</button>'}
+        ${v.state === "processing" ? '<button class="step-btn process-cancel">Отменить</button>' : '<button class="step-btn primary process-go">Обработать</button>'}
         <span class="muted small note"></span>
+        ${v.state === "processing" ? '<span class="process-status"></span>' : ""}
         <button class="step-btn info-save">Сохранить</button>
       </div>`;
     body.querySelectorAll("textarea.grow").forEach(autoGrow);
@@ -1313,6 +1334,40 @@ const Pages = {
       const saveBtn = body.querySelector(".info-save");
       saveBtn.disabled = true;
       saveBtn.classList.add("hidden");
+    }
+    // Идёт обработка: справа – её ход (обновляется), слева – "Отменить" с
+    // вопросом: что сохранится, а что начнётся заново на этом шаге.
+    const statusBox = body.querySelector(".process-status");
+    if (statusBox) {
+      const showStatus = async () => {
+        if (!body.isConnected) return;
+        const now = (await Api.projects()).find((item) => item.id === id);
+        if (!now) return;
+        if (now.state !== "processing") {
+          statusBox.textContent = cap(now.status || "Готово");
+          return;
+        }
+        statusBox.textContent = cap(now.status) + (now.percent !== null && now.percent !== undefined ? `: ${Math.floor(now.percent)}%` : "");
+        setTimeout(showStatus, 2000);
+      };
+      showStatus();
+      body.querySelector(".process-cancel").addEventListener("click", async () => {
+        const now = (await Api.projects()).find((item) => item.id === id) || v;
+        const answer = await askConfirm({
+          title: "Отменить обработку?", text: PROCESS_CANCEL_EFFECT[now.step] || PROCESS_CANCEL_EFFECT.default,
+          yes: "Отменить обработку", no: "Продолжить", danger: true,
+        });
+        if (answer !== "yes") return;
+        try {
+          await Api.cancelProcess(id);
+        } catch (err) {
+          statusBox.textContent = "Не удалось отменить";
+          statusBox.title = err.message;
+          return;
+        }
+        Pages.flashId = id;
+        Modal.close();
+      });
     }
     const deep = body.querySelector(".agent-deep");
     const search = body.querySelector(".agent-search");
