@@ -776,3 +776,9 @@ textarea.grow {
 /* Таблицы в окнах (статистика, место на диске): значения прижаты к правому краю. */
 .modal table.stats td:last-child { text-align: right; padding-right: 0; }
 .modal table.stats td:first-child { padding-right: 24px; }
+
+/* Кнопка того же вида, что "Сохранить", но синяя (Править). */
+a.step-btn { display: inline-flex; align-items: center; box-sizing: border-box; text-decoration: none; color: var(--text);
+  background: #1f1f25; border: 1px solid #45454e; border-radius: 5px; }
+.step-btn.primary { background: #214a73; border-color: #2f5f9e; color: #fff; }
+.step-btn.primary:hover { background: #285a8a; }

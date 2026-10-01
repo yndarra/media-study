@@ -511,8 +511,13 @@ const Pages = {
     const s = data.stats;
     const d = data.disk;
     const row = (name, value) => (value === null || value === undefined || value === "" ? "" : `<tr><td>${name}</td><td>${value}</td></tr>`);
-    const spread = (x, unit = "") => (x ? `в среднем ${x.mean}${unit}, медиана ${x.median}${unit}, от ${x.min} до ${x.max}${unit}` : "");
-    const lines = Object.entries(s.lines_per_card).map(([n, c]) => `${n} стр. – ${c}`).join(", ");
+    // Строк в карточке: по 6 записей в строке таблицы, дальше — перенос.
+    const lineItems = Object.entries(s.lines_per_card).map(([n, c]) => `${n} стр. – ${c}`);
+    const lines = lineItems.reduce((acc, item, i) => acc + (i === 0 ? "" : i % 6 === 0 ? ",<br>" : ", ") + item, "");
+    const pct = (n) => (s.cards ? `${Math.round((n / s.cards) * 100)}%` : "0%");
+    const shift = s.bound_shift_frames;
+    // Карточек в Anki без перевода (кнопка "Перевести" — пока без действия).
+    const untranslated = Math.max(0, (v.notes_in_anki || 0) - (v.translated || 0));
     body.innerHTML = `
       <div class="modal-head">
         <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
@@ -524,10 +529,10 @@ const Pages = {
       <table class="stats">
         ${row("Ролик", `${formatDuration(s.video_seconds)}, карточек ${s.cards}`)}
         ${row("В клипах", `${formatDuration(s.kept_seconds)} – ${(s.kept_share * 100).toFixed(1)}% ролика, удалено ${s.deleted} фрагментов (${Math.round(s.deleted_seconds)} сек)`)}
-        ${row("Длина клипа, сек", s.clip_seconds ? `${s.clip_seconds.mean} в среднем, ${s.clip_seconds.median} медиана, ${s.clip_seconds.min} минимально, ${s.clip_seconds.max} максимально` : "")}
+        ${row("Длина клипа, сек", s.clip_seconds ? `${s.clip_seconds.mean} в среднем, ${s.clip_seconds.median} медиана, ${s.clip_seconds.min} мин., ${s.clip_seconds.max} макс.` : "")}
         ${row("Строк в карточке", lines)}
-        ${row("Правка текста", `${s.text_edited} из ${s.cards}`)}
-        ${row("Правка границ", `${s.bounds_edited} из ${s.cards}` + (s.bound_shift_frames ? `; сдвиг ${spread(s.bound_shift_frames, " кадр.")}` : ""))}
+        ${row("Правка текста и границ", `${s.text_edited} фрагментов (${pct(s.text_edited)}), ${s.bounds_edited} фрагментов (${pct(s.bounds_edited)})`)}
+        ${row("Сдвиг границ, кадр", shift ? `${shift.mean} в среднем, ${shift.median} медиана, ${shift.min} мин., ${shift.max} макс.` : "")}
         ${row("Колода Anki", v.anki_deck ? escapeHtml(v.anki_deck) : "Нет")}
       </table>
       <h2>Место на диске</h2>
@@ -542,7 +547,8 @@ const Pages = {
         </table>
       </div>
       <div class="modal-actions">
-        <a class="big-btn" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
+        <a class="step-btn primary" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
+        <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn">Сохранить</button>
       </div>`;
