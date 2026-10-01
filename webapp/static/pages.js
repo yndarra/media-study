@@ -126,9 +126,9 @@ function formatDuration(seconds) {
   return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
 }
 
-function progressBar(done, total, label) {
+function progressBar(done, total, label, cls = "") {
   const share = total ? Math.min(1, done / total) : 0;
-  return `<div class="progress" title="${escapeHtml(label)}"><div class="progress-fill" style="width:${(share * 100).toFixed(1)}%"></div>` +
+  return `<div class="progress${cls ? ` ${cls}` : ""}" title="${escapeHtml(label)}"><div class="progress-fill" style="width:${(share * 100).toFixed(1)}%"></div>` +
     `<span class="progress-label">${escapeHtml(label)}</span></div>`;
 }
 
@@ -281,12 +281,12 @@ function videoBars(v) {
   const edited = e.accepted + e.changed + e.deleted;
   const total = v.bar_total || v.fragments_total;
   return segmentBar([
-    { n: e.accepted, cls: "accepted", title: `приняты без правок: ${e.accepted}` },
-    { n: e.changed, cls: "changed", title: `изменены: ${e.changed}` },
+    { n: e.accepted, cls: "accepted", title: `Приняты без правок: ${e.accepted}` },
+    { n: e.changed, cls: "changed", title: `Изменены: ${e.changed}` },
     { n: e.deleted, cls: "deleted", title: `удалены: ${e.deleted}` },
   ], total, "Отредактировано", edited) +
   segmentBar([
-    { n: v.exported - (v.flag_interval || 0), cls: "ok", title: `передано: ${v.exported}` },
+    { n: v.exported - (v.flag_interval || 0), cls: "ok", title: `Передано: ${v.exported}` },
     { n: v.flag_interval || 0, cls: "returned", right: true, title: `флаг «обрезка/текст» в Anki: ${v.flag_interval || 0}` },
   ], v.active_total, "Передано в Anki", v.exported) +
   // Переведено: в Anki (оборот заполнен) + переведённые заранее, ждущие передачи в Anki;
@@ -294,7 +294,7 @@ function videoBars(v) {
   (() => {
     const done = (v.translated || 0) + (v.translated_waiting || 0);
     return segmentBar([
-      { n: done, cls: "translated", title: `переведено: ${done}` + (v.translated_waiting ? `, из них ждут передачи в Anki: ${v.translated_waiting}` : "") },
+      { n: done, cls: "translated", title: `Переведено: ${done}` + (v.translated_waiting ? `, из них ждут передачи в Anki: ${v.translated_waiting}` : "") },
     ], v.cards_total, "Переведено", done);
   })();
 }
@@ -337,7 +337,7 @@ function groupBatches(proposals) {
 // ждут перевода, очередь Anki.
 function videoNotes(v) {
   const q = v.stage3 || {};
-  const queue = q.state === "waiting_anki" ? "ждёт Anki" : q.notes_left ? `в очереди Anki ${q.notes_left}, ≈ ${Math.max(1, Math.ceil(q.eta_seconds / 60))} мин` : "";
+  const queue = q.state === "waiting_anki" ? "Ждёт Anki" : q.notes_left ? `В очереди Anki ${q.notes_left}` : "";
   const parts = [
     v.disk_total !== undefined ? `Место на диске: ${formatSize(v.disk_total)}` : "",
     v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
@@ -422,9 +422,48 @@ const Modal = {
     });
     overlay.querySelector(".modal-close").addEventListener("click", () => this.requestClose());
     document.body.appendChild(overlay);
+    this.animateHeight(overlay.querySelector(".modal"), overlay.querySelector(".modal-body"));
     this.onClose = onClose || null;
     this.guard = guard;
     return overlay.querySelector(".modal-body");
+  },
+
+  // Содержимое окна сменилось (например, "Загрузка…" -> подробности) – окно
+  // не прыгает, а плавно раздвигается (или сжимается) до новой высоты.
+  animateHeight(modal, body) {
+    let height = modal.offsetHeight;
+    let frame = 0;
+    new MutationObserver(() => {
+      // Высота "до" – та, что была на экране; окно держим на ней, пока
+      // новое содержимое не уложится (поля подстраивают высоту, полосы и т.п.),
+      // и только потом меряем высоту "после" – иначе в конце был рывок.
+      const from = modal.style.height ? parseFloat(modal.style.height) : height;
+      modal.style.transition = "none";
+      // Высоты меряются целиком, с отступами и рамкой (offsetHeight), поэтому
+      // и задаются так же – иначе в конце прибавлялись бы отступы (рывок).
+      modal.style.boxSizing = "border-box";
+      modal.style.height = `${from}px`;
+      modal.style.overflow = "hidden";
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        modal.style.height = "auto";
+        const to = modal.offsetHeight;
+        height = to;
+        modal.style.height = `${from}px`;
+        modal.getBoundingClientRect();
+        const done = () => {
+          modal.style.transition = "";
+          modal.style.height = "";
+          modal.style.overflow = "";
+          modal.style.boxSizing = "";
+          modal.removeEventListener("transitionend", done);
+        };
+        if (Math.abs(to - from) < 2) return done();
+        modal.style.transition = "height 0.28s cubic-bezier(0.22, 0.61, 0.36, 1)";
+        modal.style.height = `${to}px`;
+        modal.addEventListener("transitionend", done);
+      });
+    }).observe(body, { childList: true });
   },
 
   // Закрыть по крестику / клику мимо / Esc: с вопросом, если есть несохранённое.
@@ -471,11 +510,18 @@ document.addEventListener("keydown", (e) => {
 });
 
 // Ход этапа 1: шаг и процент (если шаг умеет его считать).
+// Полоса – синяя, без процентов в подписи (процент виден по заполнению).
 function processingBar(v) {
   if (v.percent === null || v.percent === undefined) {
-    return `<div class="card-status">${escapeHtml(v.status || "обрабатывается")}…</div>`;
+    return `<div class="card-status">${escapeHtml(cap(v.status || "Обрабатывается"))}…</div>`;
   }
-  return progressBar(v.percent, 100, `${v.status}: ${Math.floor(v.percent)}%`);
+  return progressBar(v.percent, 100, cap(v.status), "processing");
+}
+
+// Первая буква – заглавная (статусы и подсказки всегда с большой буквы).
+function cap(text) {
+  const s = String(text || "");
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 // Список сгруппирован по автору; внутри группы – как пришло (новые первыми).
@@ -596,7 +642,7 @@ const Pages = {
       const flagged = items.reduce((sum, v) => sum + (v.flag_translation || 0), 0);
       const st = state.status || {};
       const running = st.state === "running";
-      const statusLine = running ? `работает: ${st.done || 0} / ${st.total || "…"}${st.spent ? `, потрачено $${st.spent}` : ""}`
+      const statusLine = running ? `Работает: ${st.done || 0} / ${st.total || "…"}${st.spent ? `, потрачено $${st.spent}` : ""}`
         : st.state === "error" ? `ошибка: ${escapeHtml(st.message || "")}` : "";
       const proposals = state.proposals;
       body.innerHTML = `
@@ -608,7 +654,7 @@ const Pages = {
           `${escapeHtml(j.project)} – ${j.cards} карточек (${escapeHtml(j.state)})`).join("; ")}</div>` : ""}
         <div class="agent-list">${proposals.length ? groupBatches(proposals).map(([batch, list]) => `
           <div class="agent-batch" data-batch="${escapeHtml(batch)}">
-            <div class="agent-batch-head"><b>${escapeHtml(batch || "без пачки")}</b> <span class="muted small">· ${list.length} карточек</span>
+            <div class="agent-batch-head"><b>${escapeHtml(batch || "Без пачки")}</b> <span class="muted small">· ${list.length} карточек</span>
               <span class="spacer"></span>
               <button class="step-btn batch-reject">Отклонить пачку</button>
               <button class="step-btn primary batch-approve">Одобрить пачку</button></div>
@@ -620,8 +666,8 @@ const Pages = {
               <div class="agent-en">${escapeHtml(p.text || "")}</div>
               ${(p.comments || []).length ? `<div class="agent-comments">Ваши комментарии: ${p.comments.map((c) => `«${escapeHtml(c)}»`).join(", ")}</div>` : ""}
               <div class="agent-diff">
-                <div><div class="muted small">было</div><div class="agent-back old">${p.back_old || '<span class="muted">пусто</span>'}</div></div>
-                <div><div class="muted small">станет <span class="muted">(можно поправить)</span></div><div class="agent-back new" contenteditable="true">${p.back_new}</div></div>
+                <div><div class="muted small">Было</div><div class="agent-back old">${p.back_old || '<span class="muted">Пусто</span>'}</div></div>
+                <div><div class="muted small">Станет <span class="muted">(можно поправить)</span></div><div class="agent-back new" contenteditable="true">${p.back_new}</div></div>
               </div>
             </div>`).join("")}
           </div>`).join("") : '<p class="muted">Предложений нет.</p>'}</div>
@@ -713,10 +759,10 @@ const Pages = {
         }
       }
       const parts = [];
-      if (returnable.length) parts.push(`на правку: ${returnable.length}`);
+      if (returnable.length) parts.push(`На правку: ${returnable.length}`);
       if (already) parts.push(`уже на правке: ${already}`);
       if (translation) parts.push(`на перевод: ${translation}`);
-      say(parts.length ? parts.join(" · ") : "Помеченных карточек нет",
+      say(parts.length ? cap(parts.join(" · ")) : "Помеченных карточек нет",
         returnable.length ? "Вернулись в редактор – фильтр «помечены в Anki»" : "");
     } catch (err) {
       let message = err.message;
@@ -747,6 +793,11 @@ const Pages = {
     const v = data.summary;
     const s = data.stats;
     const d = data.disk;
+    // Градиент и обводка окна – как у карточки этого видео в списке.
+    const modalBox = body.closest(".modal");
+    modalBox.classList.remove("complete", "to-translate", "to-send");
+    const state = cardState(v).trim();
+    if (state) modalBox.classList.add(state);
     const row = tableRow;
     // Строк в карточке: по 6 записей в строке, дальше — следующие строки (свёрнуты).
     const lineItems = Object.entries(s.lines_per_card).map(([n, c]) => `${n} стр. – ${c}`);
@@ -814,7 +865,7 @@ const Pages = {
       }
       const sync = saved.deck_sync || {};
       const savedNote = body.querySelector("#info-note");
-      savedNote.textContent = !v.anki_deck ? "" : sync.pending ? "колода – при запуске Anki" : "колода переименована";
+      savedNote.textContent = !v.anki_deck ? "" : sync.pending ? "Колода – при запуске Anki" : "Колода переименована";
       savedNote.title = !v.anki_deck ? "" : sync.pending ? "Колода Anki переименуется, когда Anki откроется" : "Колода Anki переименована";
     };
     saveButton.addEventListener("click", save);
@@ -849,8 +900,8 @@ const Pages = {
       // Ход перевода – коротко и зелёным (места в строке кнопок немного).
       const progress = st.state === "running" && st.project === id && st.total;
       note.classList.toggle("running", !!progress);
-      if (progress) setNote(`пачка ${Math.min((st.done || 0) + 1, st.total)} из ${st.total}`);
-      else if (waitingBatch) setNote("ждём ответ пакета");
+      if (progress) setNote(`Перевод ${st.done || 0}/${st.total}`);
+      else if (waitingBatch) setNote("Ждём ответ пакета");
       if (running || wasRunning) refreshBars();
       wasRunning = running;
       if (running) setTimeout(refreshTranslate, 3000);
@@ -869,16 +920,16 @@ const Pages = {
         if (running) {
           await Api.agentStop(id);
           note.classList.remove("running");
-          setNote("остановлено", "Перевод остановлен – уже переведённое сохранено");
+          setNote("Остановлено", "Перевод остановлен – уже переведённое сохранено");
         } else {
           await Api.agentRun({ project: id, batch: batchBox.checked });
           note.classList.add("running");
-          if (batchBox.checked) setNote("заявка отправлена", "Переводы запишутся, когда OpenRouter их вернёт");
-          else setNote("запускаю…", "Переданные в Anki получат перевод сразу, остальные – когда их передадут");
+          if (batchBox.checked) setNote("Заявка отправлена", "Переводы запишутся, когда OpenRouter их вернёт");
+          else setNote("Запускаю…", "Переданные в Anki получат перевод сразу, остальные – когда их передадут");
         }
       } catch (err) {
         note.classList.remove("running");
-        setNote("ошибка", err.message);
+        setNote("Ошибка", err.message);
       }
       setTimeout(refreshTranslate, 800);
     });
@@ -887,7 +938,7 @@ const Pages = {
         await Api.agentStop(id);
         await Api.agentRun({ project: id, batch: false });
         note.classList.add("running");
-        setNote("перевожу сразу", "Пакетная заявка отменена – перевожу сразу");
+        setNote("Перевожу сразу", "Пакетная заявка отменена – перевожу сразу");
         setTimeout(refreshTranslate, 800);
       }
     });
@@ -912,7 +963,7 @@ const Pages = {
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card" href="#/process/${encodeURIComponent(v.id)}">` +
           cardTitle(v) +
-          ((v.sources || []).length ? `<div class="muted small">ссылок на текст: ${v.sources.length}</div>` : "") +
+          ((v.sources || []).length ? `<div class="muted small">Ссылок на текст: ${v.sources.length}</div>` : "") +
           (v.state === "processing" ? processingBar(v) : `<div class="card-status">Добавлено, ждёт обработки</div>`) +
           "</a>").join("") + "</div>",
       ).join("");
@@ -946,7 +997,7 @@ const Pages = {
           <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
           <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
         </div>
-        ${v.audio_only ? '<div class="muted">аудио</div>' : ""}
+        ${v.audio_only ? '<div class="muted">Аудио</div>' : ""}
         ${v.state === "processing" ? processingBar(v) : ""}
         <label class="check"><input type="checkbox" class="agent-search" ${v.agent === "search" ? "checked" : ""}> Поиск достоверных источников с помощью агента <span class="muted small">(ссылки не нужны)</span></label>
         <div class="sources-box">
@@ -1094,7 +1145,7 @@ const Pages = {
       const moved = (state.moved || []).map((m) => `${escapeHtml(m.to)} (${m.cards})`).join("; ");
       box.innerHTML = state.pending
         ? `<span class="flagged-text">${escapeHtml(state.message)} – жду подключения…</span>`
-        : moved ? `<span class="muted">переименовано: ${moved}</span>` : "";
+        : moved ? `<span class="muted">Переименовано: ${moved}</span>` : "";
     };
     const watchDeckSync = (state) => {
       showDeckSync(state);
@@ -1118,7 +1169,7 @@ const Pages = {
           return;
         }
         list.classList.remove("hidden");
-        list.innerHTML = '<div class="muted small">загрузка…</div>';
+        list.innerHTML = '<div class="muted small">Загрузка…</div>';
         try {
           const models = await Api.openrouterModels();
           list.innerHTML = models.map((m) =>
@@ -1130,7 +1181,7 @@ const Pages = {
             list.classList.add("hidden");
           }));
         } catch (err) {
-          list.innerHTML = `<div class="muted small">не удалось загрузить список: ${escapeHtml(err.message)}</div>`;
+          list.innerHTML = `<div class="muted small">Не удалось загрузить список: ${escapeHtml(err.message)}</div>`;
         }
       });
     };
@@ -1168,7 +1219,7 @@ const Activity = {
     } catch (_) {
       return;
     }
-    // Нет фоновых процессов — блок "Сейчас идёт" (с разделителем) не показывается.
+    // Нет фоновых процессов — блок фоновых процессов (с разделителем) не показывается.
     box.closest(".activity").classList.toggle("hidden", !items.length);
     if (!items.length) {
       box.textContent = "";
@@ -1177,12 +1228,12 @@ const Activity = {
     // Полоса – тот же отрезок, что и в библиотеке: доезжает до нового значения плавно.
     const snap = barSnapshot(box);
     box.innerHTML = items.map((a) => {
-      const eta = a.eta_seconds ? ` · ≈ ${a.eta_seconds < 60 ? "<1" : Math.ceil(a.eta_seconds / 60)} мин` : "";
       const has = a.percent !== null && a.percent !== undefined;
-      const cls = a.kind === "translate" ? "translated" : "ok"; // перевод – розовым, как полоса "Переведено"
+      // Перевод – розовым (как полоса "Переведено"), обработка – синим, Anki – зелёным.
+      const cls = a.kind === "translate" ? "translated" : a.kind === "phase1" ? "accepted" : "ok";
       const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ${cls}" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
       return `<div class="activity-item" data-key="${escapeHtml(`${a.kind}:${a.id}`)}"><div class="activity-name">${escapeHtml(a.title)}</div>` +
-        `<div>${escapeHtml(a.label)}${has ? ` (${Math.floor(a.percent)}%)` : ""}${eta}</div>${bar}</div>`;
+        `<div>${escapeHtml(cap(a.label))}${has ? ` (${Math.floor(a.percent)}%)` : ""}</div>${bar}</div>`;
     }).join("");
     animateBars(box, snap);
   },

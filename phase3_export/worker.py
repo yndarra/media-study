@@ -302,7 +302,7 @@ class Worker:
         did = False
 
         for fragment in pending_fragments(manifest, index):
-            self.status(project, "encoding", f"кодирую {fragment.id}", seconds_per_frame=spf)
+            self.status(project, "encoding", f"Кодирую {fragment.id}", seconds_per_frame=spf)
             # Вернувшийся из Anki фрагмент переделывается под тем же именем клипа
             # (и обновляет ту же карточку), новый — получает следующий номер.
             redo = next((e for e in index if e["fragment_id"] == fragment.id and e.get("redo")), None)
@@ -367,7 +367,7 @@ class Worker:
             did = True
         without_note = [e for e in index if not e.get("anki_note_id") and not e.get("orphan")]
         for entry in without_note:
-            self.status(project, "anki", "создаю карточки", seconds_per_frame=spf)
+            self.status(project, "anki", "Создаю карточки", seconds_per_frame=spf)
             if not self._make_note(project, deck, entry):
                 break
             write_json(index_path, index)
@@ -379,7 +379,7 @@ class Worker:
             # может, закончен этап 4: синие флаги Rover, один раз на видео.
             rover_flags.mark_if_finished(project, log=lambda m: print(m, flush=True))
         self.status(project, "waiting_anki" if waiting else "idle",
-                    "жду Anki, чтобы создать карточки" if waiting else "", seconds_per_frame=spf)
+                    "Жду Anki, чтобы создать карточки" if waiting else "", seconds_per_frame=spf)
         return did, waiting
 
     def run(self) -> None:

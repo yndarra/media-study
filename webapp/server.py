@@ -198,6 +198,8 @@ def project_stats(project_id: str):
         summary["translated"] = summary["cards_total"] - summary["to_translate"] - summary["translated_waiting"]
     except (anki.AnkiUnavailable, RuntimeError):
         summary["to_translate"] = None  # Anki закрыт — неизвестно
+    summary["id"] = project_id
+    _card_states(summary, _anki_flag_counts(), {a["id"] for a in _translation_activity() if a.get("id")})
     return {"summary": summary, "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir),
             "deck_sync": _deck_sync_state()}
 
@@ -454,24 +456,6 @@ def update_settings(body: dict):
     return {**saved, "openrouter_key": _openrouter_key(), "deck_sync": _deck_sync_state()}
 
 
-# Для оценки оставшегося времени этапа 1: когда и с какого процента начался шаг.
-_phase1_timing: dict[str, tuple[str, float, float]] = {}
-
-
-def _phase1_eta(project_id: str, step: str, percent: float | None) -> int | None:
-    if percent is None:
-        return None
-    now = time.time()
-    started = _phase1_timing.get(project_id)
-    if not started or started[0] != step or percent < started[2]:
-        _phase1_timing[project_id] = (step, now, percent)
-        return None
-    _, t0, p0 = started
-    if percent - p0 < 0.5 or now - t0 < 5:
-        return None
-    return round((100 - percent) * (now - t0) / (percent - p0))
-
-
 @app.get("/api/activity")
 def activity():
     """Что сейчас идёт: скачивание/обработка видео и очереди Anki — с процентом и временем."""
@@ -480,7 +464,7 @@ def activity():
         if item["state"] == "processing":
             items.append({
                 "kind": "phase1", "id": item["id"], "title": item["title"], "label": item["status"],
-                "percent": item.get("percent"), "eta_seconds": _phase1_eta(item["id"], item["status"], item.get("percent")),
+                "percent": item.get("percent"), "eta_seconds": None,
             })
         elif item["state"] == "ready":
             q = _stage3_status(project(item["id"]))
@@ -489,8 +473,8 @@ def activity():
                 total = done + q["notes_left"]
                 items.append({
                     "kind": "anki", "id": item["id"], "title": item["title"],
-                    "label": "ждёт Anki (откройте Anki)" if q["state"] == "waiting_anki" else "выгрузка в Anki",
-                    "percent": round(100 * done / total, 1) if total else None, "eta_seconds": q["eta_seconds"],
+                    "label": "Ждёт Anki (откройте Anki)" if q["state"] == "waiting_anki" else "Передача в Anki",
+                    "percent": round(100 * done / total, 1) if total else None, "eta_seconds": None,
                 })
     items += _translation_activity()
     return items
@@ -686,40 +670,49 @@ def anki_overview():
     for item in library.list_projects(DATA_DIR):
         if item["state"] != "ready":
             continue
-        item["stage3"] = _stage3_status(project(item["id"]))
-        per = {int(k): v for k, v in flags.get(item["id"], {}).items()}
-        item["anki_flags"] = per
-        item["flag_interval"] = sum(per.get(f, 0) for f in INTERVAL_FLAGS)
-        item["flag_translation"] = sum(per.get(f, 0) for f in TRANSLATION_FLAGS)
         item["translated"] = _anki_flags_cache.get("translated", {}).get(item["id"], 0)
         item["disk_total"] = _disk_total(item["id"])
-        # Видео готово целиком: всё отредактировано и передано в Anki, ничего
-        # не вернулось на правку и все карточки переведены.
-        item["complete"] = bool(
-            item["active_total"] and item["exported"] == item["active_total"] and item["reviewed"] >= item["fragments_total"]
-            and not item["flagged"] and not item["flag_interval"]
-            # Переведены все фрагменты с текстом (пустые карточки "без_текста" перевода не ждут).
-            and item["translated"] >= item["cards_total"] > 0
-        )
-        # Всё, что можно, отредактировано (не тронутых и вернувшихся нет), но
-        # ещё не всё передано в Anki — синяя карточка с кнопкой "Передать в Anki".
-        item["ready_to_send"] = bool(
-            item["active_total"] and not item["awaiting"] and item["exported"] < item["active_total"]
-        )
-        # Идёт передача в Anki (клипы кодируются / карточки создаются) — карточка
-        # синяя, пока очередь не кончится.
-        q = item["stage3"] or {}
-        item["sending"] = bool(q.get("pending") or q.get("notes_left"))
-        # Всё передано в Anki, править нечего, осталось только перевести —
-        # розоватая карточка с кнопкой "Перевести".
-        item["ready_to_translate"] = bool(
-            item["active_total"] and not item["complete"] and not item["awaiting"]
-            and item["exported"] == item["active_total"] and not item["flagged"] and not item["flag_interval"]
-            and item["translated"] < item["cards_total"]
-        )
-        item["translating"] = item["id"] in translating
+        _card_states(item, flags, translating)
         result.append(item)
     return result
+
+
+def _card_states(item: dict, flags: dict, translating: set) -> None:
+    """
+    Этап видео для оформления карточки (список видео) и окна подробностей:
+    complete / ready_to_send / sending / ready_to_translate / translating.
+    item — library.summary с уже посчитанным "translated".
+    """
+    item["stage3"] = _stage3_status(project(item["id"]))
+    per = {int(k): v for k, v in flags.get(item["id"], {}).items()}
+    item["anki_flags"] = per
+    item["flag_interval"] = sum(per.get(f, 0) for f in INTERVAL_FLAGS)
+    item["flag_translation"] = sum(per.get(f, 0) for f in TRANSLATION_FLAGS)
+    # Видео готово целиком: всё отредактировано и передано в Anki, ничего
+    # не вернулось на правку и все карточки переведены.
+    item["complete"] = bool(
+        item["active_total"] and item["exported"] == item["active_total"] and item["reviewed"] >= item["fragments_total"]
+        and not item["flagged"] and not item["flag_interval"]
+        # Переведены все фрагменты с текстом (пустые карточки "без_текста" перевода не ждут).
+        and item["translated"] >= item["cards_total"] > 0
+    )
+    # Всё, что можно, отредактировано (не тронутых и вернувшихся нет), но
+    # ещё не всё передано в Anki — синяя карточка с кнопкой "Передать в Anki".
+    item["ready_to_send"] = bool(
+        item["active_total"] and not item["awaiting"] and item["exported"] < item["active_total"]
+    )
+    # Идёт передача в Anki (клипы кодируются / карточки создаются) — карточка
+    # синяя, пока очередь не кончится.
+    q = item["stage3"] or {}
+    item["sending"] = bool(q.get("pending") or q.get("notes_left"))
+    # Всё передано в Anki, править нечего, осталось только перевести —
+    # розоватая карточка с кнопкой "Перевести".
+    item["ready_to_translate"] = bool(
+        item["active_total"] and not item["complete"] and not item["awaiting"]
+        and item["exported"] == item["active_total"] and not item["flagged"] and not item["flag_interval"]
+        and item["translated"] < item["cards_total"]
+    )
+    item["translating"] = item["id"] in translating
 
 
 @app.post("/api/anki/check")
@@ -851,7 +844,7 @@ def agent_stop(body: AgentStopRequest):
     st = agent.load_json(DATA_DIR / agent.STATUS_FILE, {})
     if st.get("state") == "running" and _pid_alive(st.get("pid")) and (not body.project or st.get("project") == body.project):
         subprocess.run(["taskkill", "/PID", str(st["pid"]), "/F"], capture_output=True)
-        agent.save_json(DATA_DIR / agent.STATUS_FILE, {**st, "state": "idle", "message": "остановлено", "updated": time.time()})
+        agent.save_json(DATA_DIR / agent.STATUS_FILE, {**st, "state": "idle", "message": "Остановлено", "updated": time.time()})
         stopped.append("process")
     jobs = agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, [])
     keep = []

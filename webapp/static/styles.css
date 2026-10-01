@@ -705,7 +705,6 @@ table.stats tr:last-child td { border-bottom: none; }
 .page-note { font-size: 12px; }
 
 /* Видео готово целиком (отредактировано, передано, ничего не вернулось, всё переведено). */
-a.card.complete { background: #0f1a12; border-color: #24452c; }
 .translated-all { color: #7ee787; }
 .translated-all .tick { font-weight: 700; }
 
@@ -853,7 +852,7 @@ label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=c
 
 /* Видео готово (всё переведено, править нечего): лёгкий розовый градиент
    из левого верхнего угла и мягкое свечение – только слева и сверху. */
-a.card.complete {
+a.card.complete, .modal.complete {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.13), transparent 55%),
     linear-gradient(160deg, #19121a, #141418 70%);
@@ -892,7 +891,7 @@ a.card.complete:hover { border-color: rgba(244, 114, 182, 0.34); }
 #status-row #time-readout { flex: 1; text-align: center; white-space: nowrap; }
 
 /* Осталось только перевести: тот же розовый градиент, но слабее, и кнопка. */
-a.card.to-translate {
+a.card.to-translate, .modal.to-translate {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.07), transparent 55%),
     linear-gradient(160deg, #161216, #141418 70%);
@@ -900,7 +899,7 @@ a.card.to-translate {
 }
 a.card.to-translate:hover { border-color: rgba(244, 114, 182, 0.28); }
 /* Всё отредактировано, но не всё передано в Anki: то же оформление, синее. */
-a.card.to-send {
+a.card.to-send, .modal.to-send {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.11), transparent 55%),
     linear-gradient(160deg, #11141b, #141418 70%);
@@ -935,3 +934,9 @@ a.card.to-send:hover { border-color: rgba(96, 165, 250, 0.34); }
 
 /* Итог проверки флагов – слева от кнопки. */
 #flags-status { margin-right: 6px; white-space: nowrap; }
+
+/* "Статистика" – чуть дальше от полос. */
+.modal .modal-bars + h2, .modal .modal-bars + div + h2 { margin-top: 22px; }
+
+/* Обработка (этап 1) – синяя полоса. */
+.progress.processing .progress-fill { background: #2f5f9e; }

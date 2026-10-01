@@ -269,7 +269,7 @@ const App = {
     $("padding-badge").classList.toggle("hidden", !f.context_custom);
     const seconds = (frames) => Math.round((frames / fps()) * 10) / 10;
     $("padding-badge").textContent =
-      `запас ${seconds(f.original_algo_start_frame - f.context_start_frame)} с · ` +
+      `Запас ${seconds(f.original_algo_start_frame - f.context_start_frame)} с · ` +
       `${seconds(f.context_end_frame - f.original_algo_end_frame)} с`;
     $("deleted-badge").classList.toggle("hidden", !deleted);
     $("review-badge").classList.toggle("hidden", !f.needs_review);
@@ -279,7 +279,7 @@ const App = {
     const done = locked && !State.stage3.pending_ids.includes(f.id);
     $("stage3-badge").classList.toggle("hidden", !locked);
     $("stage3-badge").classList.toggle("done", done);
-    $("stage3-badge").textContent = done ? "в Anki ✓" : "в очереди в Anki";
+    $("stage3-badge").textContent = done ? "В Anki ✓" : "В очереди в Anki";
     document.body.classList.toggle("frag-deleted", deleted && !locked);
     document.body.classList.toggle("frag-locked", locked);
     if (locked) $("reset-btn").disabled = true;
@@ -354,7 +354,7 @@ const App = {
     const s = State.stage3;
     const eta = $("stage3-eta");
     let label = "";
-    if (s.state === "waiting_anki") label = "ждёт Anki";
+    if (s.state === "waiting_anki") label = "Ждёт Anki";
     else if (s.eta_seconds > 0) label = s.eta_seconds < 60 ? "≈ <1 мин" : `≈ ${Math.ceil(s.eta_seconds / 60)} мин`;
     eta.textContent = label;
     eta.title = s.message || "";

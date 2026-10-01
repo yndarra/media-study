@@ -77,7 +77,7 @@ const FragList = {
           `<span class="frag-num">${i + 1}</span><span class="frag-text">${flag}${escapeHtml(first)}</span></div>`,
       );
     });
-    this.el.innerHTML = rows.join("") || '<div class="frag-empty">нет таких фрагментов</div>';
+    this.el.innerHTML = rows.join("") || '<div class="frag-empty">Нет таких фрагментов</div>';
     document.getElementById("fraglist-count").textContent = `${shown} из ${fragments.length}`;
     // Текущий фрагмент держим в поле зрения, но только когда он сменился —
     // иначе список дёргался бы при любой правке.

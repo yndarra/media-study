@@ -202,15 +202,19 @@ def phase1_status(project_dir: Path) -> dict:
     project_dir = Path(project_dir)
     status = read_json(project_dir / "phase1_status.json", None)
     if status:
-        return {"label": status.get("label", "обрабатывается"), "percent": status.get("percent")}
+        # Подпись шага — по его коду (файлы, записанные раньше, могли быть со строчной буквы).
+        from common.progress import STEPS
+
+        label = STEPS.get(status.get("step"), status.get("label") or "Обрабатывается")
+        return {"label": label[:1].upper() + label[1:], "percent": status.get("percent")}
     if (project_dir / "source.tmp.mp4").exists():
         size = (project_dir / "source.tmp.mp4").stat().st_size / 2**30
-        return {"label": f"делаю копию для редактора (записано {size:.1f} ГБ)", "percent": None}
+        return {"label": f"Делаю копию для редактора (записано {size:.1f} ГБ)", "percent": None}
     if (project_dir / "source.mp4").exists() and not (project_dir / "raw" / "whisper_transcript.json").exists():
-        return {"label": "распознаю речь", "percent": None}
+        return {"label": "Распознаю речь", "percent": None}
     if (project_dir / "raw" / "whisper_transcript.json").exists():
-        return {"label": "режу на фразы", "percent": None}
-    return {"label": "скачиваю видео", "percent": None}
+        return {"label": "Режу на фразы", "percent": None}
+    return {"label": "Скачиваю видео", "percent": None}
 
 
 def summary(project_dir: Path) -> dict:
@@ -233,7 +237,7 @@ def summary(project_dir: Path) -> dict:
         return {
             **base,
             "state": "added" if added else "processing",
-            "status": progress["label"] if not added else "добавлено, ждёт обработки",
+            "status": progress["label"] if not added else "Добавлено, ждёт обработки",
             "percent": progress["percent"] if not added else None,
             "sources": settings.get("sources", []),
             "agent": agent_mode(settings.get("agent")),

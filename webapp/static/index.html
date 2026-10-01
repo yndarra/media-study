@@ -11,7 +11,7 @@
   <!-- Левое меню: разделы приложения и ссылка на видео, которое сейчас правится. -->
   <nav id="menu" class="sidebar">
     <div class="panel-head">
-      <div class="brand">media-study</div>
+      <div class="brand">Media Study</div>
       <button class="panel-close" data-toggle="left" title="Скрыть меню">‹</button>
     </div>
     <!-- Разделы идут снизу вверх по ходу работы: добавить -> обработать -> видео. -->
@@ -20,13 +20,11 @@
     <a href="#/add" data-menu="add">Добавить</a>
     <a href="#/settings" data-menu="settings">Настройки</a>
     <div id="menu-editing" class="menu-editing hidden">
-      <div class="muted small">Сейчас правится</div>
       <a id="menu-editing-link" href="#"></a>
     </div>
     <!-- Что сейчас идёт в фоне: скачивание, обработка, выгрузка в Anki. -->
     <div class="activity hidden">
-      <div class="activity-title">Сейчас идёт</div>
-      <div id="activity-list" class="muted small">ничего</div>
+      <div id="activity-list" class="muted small"></div>
     </div>
   </nav>
 
@@ -64,14 +62,14 @@
       </div>
       <div class="group center">
         <span id="fragment-status"></span>
-        <span id="deleted-badge" class="badge deleted hidden">удалено</span>
-        <span id="text-edited-badge" class="badge edited hidden">текст изменён</span>
-        <span id="bounds-edited-badge" class="badge edited hidden">отрезок изменён</span>
-        <span id="merged-badge" class="badge origin hidden">объединён</span>
-        <span id="split-badge" class="badge origin hidden">часть разделённого</span>
+        <span id="deleted-badge" class="badge deleted hidden">Удалено</span>
+        <span id="text-edited-badge" class="badge edited hidden">Текст изменён</span>
+        <span id="bounds-edited-badge" class="badge edited hidden">Отрезок изменён</span>
+        <span id="merged-badge" class="badge origin hidden">Объединён</span>
+        <span id="split-badge" class="badge origin hidden">Часть разделённого</span>
         <span id="padding-badge" class="badge info hidden"></span>
         <span id="stage3-badge" class="badge stage3 hidden"></span>
-        <button id="review-badge" class="badge review hidden" title="Текст проверен — снять пометку">проверить текст</button>
+        <button id="review-badge" class="badge review hidden" title="Текст проверен — снять пометку">Проверить текст</button>
       </div>
       <div class="group right">
         <span id="toast" class="toast hidden"></span>
@@ -150,7 +148,7 @@
     <div id="nav-row" class="nav-grid">
       <div class="group left">
         <button id="nav-back-10" class="step-btn" title="На 10 фрагментов назад">« 10</button>
-        <button id="nav-back-1" class="step-btn" title="Предыдущий фрагмент">‹ назад</button>
+        <button id="nav-back-1" class="step-btn" title="Предыдущий фрагмент">‹ Назад</button>
       </div>
       <div class="group stage3">
         <span id="stage3-eta" class="readout hidden"></span>
@@ -161,7 +159,7 @@
       </div>
       <div></div>
       <div class="group right">
-        <button id="nav-fwd-1" class="step-btn" title="Следующий фрагмент">вперёд ›</button>
+        <button id="nav-fwd-1" class="step-btn" title="Следующий фрагмент">Вперёд ›</button>
         <button id="nav-fwd-10" class="step-btn" title="На 10 фрагментов вперёд">10 »</button>
         <!-- На последнем фрагменте вместо "вперёд" и "10 »": всё видео — отредактировано. -->
         <button id="finish-btn" class="step-btn finish hidden" title="Отметить всё видео отредактированным">Финиш</button>
@@ -176,9 +174,9 @@
     <div class="fraglist-head">
       <button class="panel-close" data-toggle="right" title="Скрыть список фрагментов">›</button>
       <select id="fraglist-filter">
-        <option value="all">все фрагменты</option>
-        <option value="todo">требуют доработки</option>
-        <option value="flagged">помечены в Anki</option>
+        <option value="all">Все фрагменты</option>
+        <option value="todo">Требуют доработки</option>
+        <option value="flagged">Помечены в Anki</option>
       </select>
       <span id="fraglist-count" class="muted small"></span>
     </div>
