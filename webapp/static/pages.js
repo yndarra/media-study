@@ -250,11 +250,12 @@ const Zebra = {
     sendBusy: { stripe: 52, speed: 40, color: "#1f6b3b" },
     translate: { stripe: 323, speed: 32.5, color: "#a3407a" },
     translateBusy: { stripe: 15, speed: 73.125, color: "#a3407a" },
-    // "Править" (есть что править) и "Обработать" – быстрая синяя; только
-    // вернувшиеся из Anki – фиолетовая.
-    edit: { stripe: 15, speed: 73.125, color: "#2f5f9e" },
-    editReturned: { stripe: 15, speed: 73.125, color: "#8957e5" },
-    process: { stripe: 15, speed: 73.125, color: "#2f5f9e" },
+    // "Править" (есть что править) и "Обработать" – синяя; только вернувшиеся
+    // из Anki – фиолетовая.
+    // "Править" и "Обработать": вдвое уже "Перевести" и в 1.5 раза быстрее.
+    edit: { stripe: 161.5, speed: 48.75, color: "#2f5f9e" },
+    editReturned: { stripe: 161.5, speed: 48.75, color: "#8957e5" },
+    process: { stripe: 161.5, speed: 48.75, color: "#2f5f9e" },
   },
   SLANT: 0.406, // как у "/": по горизонтали на 1 по вертикали
   EASE_SECONDS: 1.1, // за сколько примерно доходит до новой ширины/скорости

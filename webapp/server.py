@@ -606,7 +606,7 @@ def _translation_activity() -> list[dict]:
     for job in agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, []):
         total = job.get("total") or len(job.get("groups", [])) or 0
         items.append({"kind": "translate", "id": job["project"], "title": library.title_of(DATA_DIR / job["project"]),
-                      "label": "Перевод пакетом, ждёт OpenRouter",
+                      "label": "Перевод пакетом",
                       "percent": round(100 * (job.get("done") or 0) / total, 1) if total else None, "eta_seconds": None})
     return items
 

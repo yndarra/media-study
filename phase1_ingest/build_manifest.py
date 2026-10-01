@@ -134,11 +134,19 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
     info = json.loads(info_path.read_text(encoding="utf-8")) if info_path.exists() else {}
 
     proxy_path = project_dir / "source.mp4"
-    report(project_dir, "proxy", 0, force=True)
+    # Готовые шаги не переделываются — в статусе сразу следующий настоящий шаг
+    # (а не "копия для редактора", пока считаются кадры готовой копии).
+    if not proxy_path.exists():
+        report(project_dir, "proxy", 0, force=True)
+    elif not (raw_dir / "whisper_transcript.json").exists():
+        report(project_dir, "transcribe", 0, force=True)
+    else:
+        report(project_dir, "segment", None, force=True)
     encoded = reencode_mod.ingest_source_video(master, proxy_path)
     fps, total_frames = encoded["fps"], encoded["total_frames"]
 
-    report(project_dir, "transcribe", 0, force=True)
+    if not (raw_dir / "whisper_transcript.json").exists():
+        report(project_dir, "transcribe", 0, force=True)
     whisper_transcript = transcribe_mod.transcribe_and_save(proxy_path, raw_dir / "whisper_transcript.json")
     report(project_dir, "segment", None, force=True)
     if transcript_path is None and not (project_dir / "transcript.txt").exists():

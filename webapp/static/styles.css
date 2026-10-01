@@ -1484,4 +1484,9 @@ a.card.proc-green { background: radial-gradient(120% 160% at 0% 0%, rgba(63, 185
 a.card.proc-yellow { background: radial-gradient(120% 160% at 0% 0%, rgba(227, 179, 65, 0.11), transparent 55%), linear-gradient(160deg, #1a1810, #111115 70%); border-color: rgba(227, 179, 65, 0.11); }
 /* Кнопка шага обработки – синяя зебра (Zebra, data-zebra="process"). */
 .process-go.zebra-host { min-width: 120px; }
-#process-list .cards { align-items: start; } /* карточка своей высоты: отступы снизу одинаковые */
+
+/* Кнопка-глазок у ключа – как кнопка списка (тёмная, приглушённый значок). */
+#set-key-eye { background: #18181d; border: 1px solid var(--border); color: var(--dim); }
+#set-key-eye:hover { color: var(--text); background: #18181d; }
+/* Название в "Обработке" – тем же шрифтом, что в "Видео" (там – до 2 строк). */
+#process-list .card-title { font-size: 13px; }
