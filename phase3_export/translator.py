@@ -383,10 +383,11 @@ def store_translations(project_dir: Path, items: list[dict]) -> None:
 
 def project_cards(project_dir: Path) -> list[dict]:
     """
-    Все фрагменты видео с текстом, которым нужен перевод, по порядку: переданные
-    в Anki — без оборота; ещё не переданные — без перевода в хранилище (или
-    текст с тех пор изменили). id — номер фрагмента в редакторе (как в тексте
-    видео для модели).
+    Фрагменты видео с текстом, которым нужен перевод, по порядку: уже
+    переданные в Anki (карточка создана) и без оборота. Ещё не переданные не
+    переводятся — перевод идёт только по тому, что уже в Anki, и кончается,
+    когда кончаются переданные. id — номер фрагмента в редакторе (как в
+    тексте видео для модели).
     """
     from common.manifest_schema import Manifest, STATUS_ACTIVE
     from .worker import read_json
@@ -413,10 +414,20 @@ def project_cards(project_dir: Path) -> list[dict]:
             if front_text(extract_comments(back)[0]).strip():
                 continue  # уже переведена в Anki
             card.update(note_id=note["noteId"], front_old=note["fields"][anki.FRONT_FIELD]["value"])
-        elif stored_translation(project_dir, f.id, f.text):
-            continue  # уже переведена заранее
+        else:
+            continue  # ещё не в Anki — переводится после передачи
         cards.append(card)
     return cards
+
+
+def in_anki_text_count(project_dir: Path) -> int:
+    """Сколько живых фрагментов с текстом уже в Anki (карточка создана)."""
+    from common.manifest_schema import Manifest, STATUS_ACTIVE
+    from .worker import read_json
+
+    manifest = Manifest.load(project_dir / "manifest.json")
+    with_note = {e["fragment_id"] for e in read_json(project_dir / "export" / "index.json", []) if e.get("anki_note_id")}
+    return sum(1 for f in manifest.fragments if f.status == STATUS_ACTIVE and f.text.strip() and f.id in with_note)
 
 
 def apply_direct(project_dir: Path, proposals: list[dict], cards: list[dict]) -> int:

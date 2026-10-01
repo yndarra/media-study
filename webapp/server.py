@@ -151,14 +151,41 @@ def heartbeat(body: HeartbeatRequest):
     live = _live_clients()
     newest = max(live.values(), key=lambda c: c["opened_at"])["opened_at"]
     stage3 = None
+    translated = None
     if body.project and (DATA_DIR / body.project / "manifest.json").exists():
         stage3 = _stage3_status(project(body.project))
+        translated = _translated_ids(body.project)
     return {
         "instance": SERVER_INSTANCE,
         "ready": time.monotonic() - SERVER_STARTED >= READY_AFTER_SECONDS,
         "newest": body.opened_at >= newest,
         "stage3": stage3,
+        "translated_ids": translated,
     }
+
+
+# Фрагменты видео, чьи карточки в Anki уже переведены (оборот заполнен) — для
+# розового фона строк в списке фрагментов редактора. Anki спрашивается не чаще
+# раза в TRANSLATED_TTL секунд (вкладка отмечается каждую секунду).
+TRANSLATED_TTL = 8.0
+_translated_cache: dict[str, tuple[float, list[str]]] = {}
+
+
+def _translated_ids(project_id: str) -> list[str]:
+    from phase3_export import anki
+
+    now = time.monotonic()
+    cached = _translated_cache.get(project_id)
+    if cached and now - cached[0] < TRANSLATED_TTL:
+        return cached[1]
+    try:
+        note_ids = anki.invoke("findNotes", query=f'"tag:{anki.TAG}::{project_id}::*" -{anki.BACK_FIELD}:')
+        notes = anki.invoke("notesInfo", notes=note_ids) if note_ids else []
+        ids = [fid for _, fid in (anki.parse_tags(n.get("tags", [])) for n in notes) if fid]
+    except (anki.AnkiUnavailable, RuntimeError):
+        ids = cached[1] if cached else []  # Anki закрыт — последнее известное
+    _translated_cache[project_id] = (now, ids)
+    return ids
 
 
 @app.get("/api/clients")
@@ -195,7 +222,7 @@ def project_stats(project_id: str):
         summary["to_translate"] = len(translator.project_cards(p.dir))
         # Окно видео – точное число прямо из Anki, без кэша: перевод пишется пачками
         # и должен быть виден сразу (в списке видео – кэш на минуту).
-        summary["translated"] = summary["cards_total"] - summary["to_translate"] - summary["translated_waiting"]
+        summary["translated"] = translator.in_anki_text_count(p.dir) - summary["to_translate"]
     except (anki.AnkiUnavailable, RuntimeError):
         summary["to_translate"] = None  # Anki закрыт — неизвестно
     summary["id"] = project_id
@@ -509,7 +536,7 @@ def _translation_activity() -> list[dict]:
         total, done = st.get("total") or 0, st.get("done") or 0
         items.append({"kind": "translate", "id": st.get("project"), "title": title,
                       # Сколько пачек уже готово: с 0 / N.
-                      "label": f"Перевод {done}/{total}" if total else "Перевод",
+                      "label": f"Перевод: {done}/{total}" if total else "Перевод",
                       "percent": round(100 * done / total, 1) if total else None, "eta_seconds": None})
     for job in agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, []):
         items.append({"kind": "translate", "id": job["project"], "title": library.title_of(DATA_DIR / job["project"]),
@@ -700,19 +727,19 @@ def _card_states(item: dict, flags: dict, translating: set) -> None:
         # Переведены все фрагменты с текстом (пустые карточки "без_текста" перевода не ждут).
         and item["translated"] >= item["cards_total"] > 0
     )
-    # Всё, что можно, отредактировано (не тронутых и вернувшихся нет), но
-    # ещё не всё передано в Anki — синяя карточка с кнопкой "Передать в Anki".
-    item["ready_to_send"] = bool(
-        item["active_total"] and not item["awaiting"] and item["exported"] < item["active_total"]
-    )
-    # Идёт передача в Anki (клипы кодируются / карточки создаются) — карточка
-    # синяя, пока очередь не кончится.
+    # Идёт передача в Anki (клипы кодируются / карточки создаются).
     q = item["stage3"] or {}
     item["sending"] = bool(q.get("pending") or q.get("notes_left"))
+    # Всё, что можно, отредактировано (не тронутых и вернувшихся нет), но ещё
+    # не всё в Anki (в том числе пока передаётся) — синяя карточка. Цвет
+    # меняется, только когда передача закончилась.
+    item["ready_to_send"] = bool(
+        item["active_total"] and not item["awaiting"] and (item["exported"] < item["active_total"] or item["sending"])
+    )
     # Всё передано в Anki, править нечего, осталось только перевести —
     # розоватая карточка с кнопкой "Перевести".
     item["ready_to_translate"] = bool(
-        item["active_total"] and not item["complete"] and not item["awaiting"]
+        item["active_total"] and not item["complete"] and not item["awaiting"] and not item["sending"]
         and item["exported"] == item["active_total"] and not item["flagged"] and not item["flag_interval"]
         and item["translated"] < item["cards_total"]
     )

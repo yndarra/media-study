@@ -238,13 +238,20 @@ table.stats td:first-child { color: var(--dim); white-space: nowrap; }
 .frag-row.current { background: rgba(255, 255, 255, 0.08); color: var(--text); }
 .frag-num { min-width: 30px; text-align: right; opacity: 0.7; }
 .frag-text { overflow: hidden; text-overflow: ellipsis; }
-/* Текст строки — состояние правки; номер — прошёл ли фрагмент этап 3
-   (зелёный, даже если он удалён и в колоду не попал). */
-.frag-row.edited .frag-text { color: #ffd75e; }
-.frag-row.deleted .frag-text { color: #ff7b72; }
-.frag-row.flagged .frag-text { color: #ffa657; }
-.frag-row.anki .frag-num { color: #7ee787; opacity: 1; font-weight: 600; }
-.frag-row.anki.pending .frag-num { color: #a9cfae; font-weight: 400; font-style: italic; }
+/* Номер и текст строки — цвет правки (как полоса "Отредактировано"). */
+.frag-row.accepted .frag-num, .frag-row.accepted .frag-text { color: #79b8ff; opacity: 1; }
+.frag-row.changed .frag-num, .frag-row.changed .frag-text { color: #ffd75e; opacity: 1; }
+.frag-row.deleted .frag-num, .frag-row.deleted .frag-text { color: #ff7b72; opacity: 1; }
+/* Фон всей строки — этап Anki (как строка в git diff); появляется плавно. */
+.frag-row { transition: background-color 0.6s ease; }
+.frag-row.bg-anki { background: rgba(46, 160, 67, 0.16); }
+.frag-row.bg-translated { background: rgba(236, 72, 153, 0.16); }
+.frag-row.bg-pending { background: rgba(210, 160, 30, 0.16); }
+.frag-row.bg-returned { background: rgba(137, 87, 229, 0.2); }
+.frag-row.current.bg-anki { background: rgba(46, 160, 67, 0.3); }
+.frag-row.current.bg-translated { background: rgba(236, 72, 153, 0.3); }
+.frag-row.current.bg-pending { background: rgba(210, 160, 30, 0.3); }
+.frag-row.current.bg-returned { background: rgba(137, 87, 229, 0.34); }
 .frag-empty { padding: 12px; color: var(--dim); font-size: 13px; }
 
 /* Удалённый фрагмент — красноватый фон всего интерфейса. */
@@ -406,10 +413,13 @@ button:disabled {
 
 .nav-grid .group.stage3 { justify-self: center; }
 
-/* Фрагмент передан в Anki: только просмотр, желтоватый фон. */
-body.frag-locked {
-  background: #2a2614;
-}
+/* Фон редактора по этапу фрагмента (как фон строки в списке справа):
+   зеленоватый — в Anki, розоватый — переведён, желтоватый — передаётся,
+   фиолетоватый — вернулся из Anki. */
+body.frag-bg-anki { background: #122117; }
+body.frag-bg-translated { background: #24131c; }
+body.frag-bg-pending { background: #2a2614; }
+body.frag-bg-returned { background: #1c1528; }
 
 .badge.stage3 { background: #5c4a08; color: #ffe27a; }
 .badge.stage3.done { background: #1f4a2a; color: #b6f0c2; }
@@ -994,3 +1004,7 @@ textarea.grow { line-height: 20px; padding-top: 5px; padding-bottom: 5px; min-he
 
 /* "Загрузка…" в окне – на месте: отступы абзаца входят в высоту содержимого. */
 .modal-body { display: flow-root; }
+
+/* Пояснения к флажкам: тот же размер шрифта и та же линия, что у подписи,
+   отступ – как пробел. */
+label.check .muted { font-size: inherit; margin-left: calc(0.28em - 8px); }

@@ -104,7 +104,10 @@ const Router = {
     document.getElementById("fraglist").classList.toggle("hidden", view !== "editor");
     document.body.classList.toggle("no-fraglist", view !== "editor");
     // Фон "удалено"/"в Anki" относится к фрагменту в редакторе, не к другим страницам.
-    if (view !== "editor") document.body.classList.remove("frag-deleted", "frag-locked");
+    if (view !== "editor") {
+      document.body.classList.remove("frag-deleted", "frag-locked", "frag-bg-anki", "frag-bg-pending",
+        "frag-bg-translated", "frag-bg-returned");
+    }
     // Ссылка "сейчас правится" в меню – чтобы вернуться в редактор одним кликом.
     const editing = document.getElementById("menu-editing");
     editing.classList.toggle("hidden", !State.project);
@@ -844,7 +847,9 @@ const Pages = {
     const pct = (n) => (s.cards ? `${Math.round((n / s.cards) * 100)}%` : "0%");
     const shift = s.bound_shift_frames;
     // Фрагментов без перевода (переданные в Anki и ещё нет); null — Anki закрыт, неизвестно.
-    const untranslated = v.to_translate === null ? 1 : v.to_translate || 0;
+    // Переводить нечего (нет непереведённых карточек в Anki) или над видео идёт
+    // процесс (передача в Anki) – кнопка серая.
+    const untranslated = v.sending ? 0 : v.to_translate === null ? 1 : v.to_translate || 0;
     body.innerHTML = `
       <div class="modal-head">
         <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
@@ -935,7 +940,7 @@ const Pages = {
       // Ход перевода – коротко и зелёным (места в строке кнопок немного).
       const progress = st.state === "running" && st.project === id && st.total;
       note.classList.toggle("running", !!progress);
-      if (progress) setNote(`Перевод ${st.done || 0}/${st.total}`);
+      if (progress) setNote(`Перевод: ${st.done || 0}/${st.total}`);
       else if (waitingBatch) setNote("Ждём ответ пакета");
       if (running || wasRunning) refreshBars();
       wasRunning = running;

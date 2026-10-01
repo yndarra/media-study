@@ -14,6 +14,7 @@ const State = {
   project: null, // код открытого в редакторе видео
   view: null, // открытая страница: videos | video | anki | download | editor
   speed: loadSpeed(), // скорость воспроизведения — общая для всех видео (0.5–2)
+  translatedIds: new Set(), // фрагменты открытого видео, переведённые в Anki (розовый фон в списке)
   // Автозапуск: переход к фрагменту, клик/протяжка по дорожке и левая граница
   // отрезка сразу запускают воспроизведение (кнопка справа от режима остановки).
   autoPlay: loadAutoPlay(),
@@ -160,6 +161,12 @@ const App = {
   // Переход к другому фрагменту по кнопкам/клавишам/списку: открыть и сразу
   // воспроизвести отрезок с начала (при открытии видео — без автозапуска:
   // браузер не даёт играть звук без действия пользователя).
+  // Вперёд/назад на step фрагментов — среди видимых в фильтре списка справа.
+  goStep(step) {
+    const index = FragList.stepIndex(State.fragmentIndex, step);
+    if (index !== null) this.go(index);
+  },
+
   async go(index) {
     if (!State.manifest) return;
     await this.open(index);
@@ -280,8 +287,16 @@ const App = {
     $("stage3-badge").classList.toggle("hidden", !locked);
     $("stage3-badge").classList.toggle("done", done);
     $("stage3-badge").textContent = done ? "В Anki ✓" : "В очереди в Anki";
-    document.body.classList.toggle("frag-deleted", deleted && !locked);
-    document.body.classList.toggle("frag-locked", locked);
+    // Фон редактора — этап фрагмента (как фон строки в списке справа): красноватый —
+    // удалён, желтоватый — передаётся в Anki, зеленоватый — в Anki, розоватый —
+    // в Anki и переведён, фиолетоватый — вернулся из Anki. Только в редакторе.
+    const inEditor = State.view === "editor";
+    const stage = FragList.stageClass(f);
+    document.body.classList.toggle("frag-deleted", inEditor && deleted && !locked);
+    document.body.classList.toggle("frag-locked", inEditor && locked);
+    for (const cls of ["bg-anki", "bg-pending", "bg-translated", "bg-returned"]) {
+      document.body.classList.toggle(`frag-${cls}`, inEditor && stage === cls);
+    }
     if (locked) $("reset-btn").disabled = true;
   },
 
@@ -361,8 +376,12 @@ const App = {
     // Границы и текст можно править и у удалённого фрагмента.
     $("set-start").disabled = cur >= f.algo_end_frame;
     $("set-end").disabled = cur + 1 <= f.algo_start_frame;
-    $("merge-prev").disabled = deleted || !this._hasLiveNeighbor(-1);
-    $("merge-next").disabled = deleted || !this._hasLiveNeighbor(1);
+    // Объединять можно только с соседним живым фрагментом, который ещё не в
+    // Anki (в фильтре "вернулись из Anki" соседи обычно в Anki — недоступно).
+    const prevLive = this._liveNeighbor(-1);
+    const nextLive = this._liveNeighbor(1);
+    $("merge-prev").disabled = deleted || !prevLive || isLocked(prevLive);
+    $("merge-next").disabled = deleted || !nextLive || isLocked(nextLive);
     // Делить можно только строго внутри отрезка, не на его крайних кадрах.
     $("split-btn").disabled = deleted || !(cur > f.algo_start_frame && cur < f.algo_end_frame - 1);
     // Повторное нажатие «удалить» снимает пометку удаления.
@@ -468,10 +487,11 @@ const App = {
     const index = State.fragmentIndex;
     const last = State.manifest.fragments.length - 1;
     $("position-indicator").textContent = `${index + 1} / ${last + 1}`;
-    $("nav-back-1").disabled = index <= 0;
-    $("nav-back-10").disabled = index - 10 < 0;
-    $("nav-fwd-1").disabled = index >= last;
-    $("nav-fwd-10").disabled = index + 10 > last;
+    // С фильтром списка — по фрагментам фильтра.
+    $("nav-back-1").disabled = FragList.stepIndex(index, -1) === null;
+    $("nav-back-10").disabled = FragList.stepIndex(index, -10) === null;
+    $("nav-fwd-1").disabled = FragList.stepIndex(index, 1) === null;
+    $("nav-fwd-10").disabled = FragList.stepIndex(index, 10) === null;
     // Последний фрагмент: вместо кнопок вперёд — "Финиш".
     const atEnd = index >= last;
     $("nav-fwd-1").classList.toggle("hidden", atEnd);
@@ -857,10 +877,10 @@ $("speed-up").addEventListener("click", () => changeSpeed(0.1));
 $("speed-value").addEventListener("click", () => Player.setSpeed(1));
 App.renderSpeed();
 
-$("nav-back-10").addEventListener("click", () => App.go(State.fragmentIndex - 10));
-$("nav-back-1").addEventListener("click", () => App.go(State.fragmentIndex - 1));
-$("nav-fwd-1").addEventListener("click", () => App.go(State.fragmentIndex + 1));
-$("nav-fwd-10").addEventListener("click", () => App.go(State.fragmentIndex + 10));
+$("nav-back-10").addEventListener("click", () => App.goStep(-10));
+$("nav-back-1").addEventListener("click", () => App.goStep(-1));
+$("nav-fwd-1").addEventListener("click", () => App.goStep(1));
+$("nav-fwd-10").addEventListener("click", () => App.goStep(10));
 $("finish-btn").addEventListener("click", () => App.finish());
 
 // Браузер сам ничего в фразе не меняет: каждое действие перехватывается и
@@ -923,8 +943,8 @@ $("cur-text").addEventListener("blur", () => App.onTextBlur());
 // Горячие клавиши. Клавиши определяются по физическому положению (e.code),
 // поэтому работают и в русской раскладке (A = Ф, D = В, Q = Й, W = Ц, E = У).
 const HOTKEYS = {
-  KeyA: () => App.go(State.fragmentIndex - 1), // предыдущий фрагмент
-  KeyD: () => App.go(State.fragmentIndex + 1), // следующий фрагмент
+  KeyA: () => App.goStep(-1), // предыдущий фрагмент (в рамках фильтра списка)
+  KeyD: () => App.goStep(1), // следующий фрагмент (в рамках фильтра списка)
   "Shift+KeyA": () => App.step(-1), // на кадр назад (или выделенную границу)
   "Shift+KeyD": () => App.step(1), // на кадр вперёд
   ArrowLeft: () => App.step(-1),
@@ -1063,6 +1083,15 @@ const Heartbeat = {
       return; // сервер перезапускается — ждём
     }
     if (info.stage3) App.onStage3(info.stage3);
+    if (info.translated_ids) {
+      const next = new Set(info.translated_ids);
+      const same = next.size === State.translatedIds.size && [...next].every((id) => State.translatedIds.has(id));
+      if (!same) {
+        State.translatedIds = next;
+        FragList.schedule();
+        if (State.view === "editor" && currentFragment()) App.renderStatus(currentFragment());
+      }
+    }
     if (this.instance === null) {
       this.instance = info.instance;
       return;
