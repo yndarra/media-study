@@ -1444,3 +1444,7 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 /* Название группы → карточки: чуть больше (14 px), но меньше, чем от
    последней карточки до следующей группы (22 px). */
 .view h2.group-title { margin-bottom: 14px; }
+
+/* Зебра кнопок шага – на canvas (pages.js, Zebra), прежняя CSS-анимация не нужна. */
+.card-action::before { display: none; }
+.card-action > canvas.zebra { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }

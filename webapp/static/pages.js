@@ -224,34 +224,106 @@ function cardState(v) {
 }
 
 // Кнопка следующего шага на карточке: зелёная "Передать в Anki" или розовая
-// "Перевести". Пока шаг идёт (или его только что нажали) – кнопки нет.
-// Пока шаг идёт – кнопка остаётся, текст другой, полосы зебры крупнее; шаг
-// закончился – кнопка уходит, возвращается строка "Место на диске".
-// Фаза бегущих полос – от часов, а не от момента создания кнопки: список
-// перерисовывается каждые 3 с, и без этого анимация каждый раз начиналась
-// заново (рывок). Длительности – как в styles.css (.card-action::before).
-const ZEBRA_MS = { send: 1600, sendBusy: 2600, translate: 14215, translateBusy: 410 };
-function zebraPhase(kind) {
-  const ms = ZEBRA_MS[kind];
-  return `style="--zdelay:-${Date.now() % ms}ms"`;
-}
+// "Перевести". Пока шаг идёт – кнопка остаётся, текст другой, полосы зебры
+// другие; шаг закончился – кнопка уходит, возвращается строка "Место на диске".
+//
+// Зебра рисуется на canvas (Zebra): ширина полос и скорость плавно
+// подтягиваются к целевым при смене вида ("Перевести" ↔ "Выполняется
+// перевод…": полосы плавно сужаются и ускоряются, обратно – расширяются и
+// замедляются). Состояние – по видео, поэтому перерисовка списка (каждые 3 с)
+// не сбрасывает ни фазу, ни ширину.
+const Zebra = {
+  // stripe – ширина цветной полосы (= промежутка), px; speed – px/с.
+  PARAMS: {
+    send: { stripe: 26, speed: 32.5, color: "#1f6b3b" },
+    sendBusy: { stripe: 52, speed: 40, color: "#1f6b3b" },
+    translate: { stripe: 323, speed: 32.5, color: "#a3407a" },
+    translateBusy: { stripe: 15, speed: 73.125, color: "#a3407a" },
+  },
+  SLANT: 0.406, // как у "/": по горизонтали на 1 по вертикали
+  EASE_SECONDS: 1.1, // за сколько примерно доходит до новой ширины/скорости
+  state: new Map(), // видео + вид кнопки -> {stripe, speed, cycles, last}
+  running: false,
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    requestAnimationFrame((t) => this.frame(t));
+  },
+
+  frame(now) {
+    const buttons = document.querySelectorAll(".card-action");
+    if (!buttons.length) {
+      this.running = false;
+      return;
+    }
+    for (const button of buttons) {
+      const type = button.classList.contains("translate") ? "translate" : "send";
+      const target = this.PARAMS[type + (button.classList.contains("busy") ? "Busy" : "")];
+      const key = `${button.dataset.id}:${type}`;
+      let st = this.state.get(key);
+      if (!st) {
+        st = { stripe: target.stripe, speed: target.speed, cycles: 0, last: now };
+        this.state.set(key, st);
+      }
+      const dt = Math.min(0.1, Math.max(0, (now - st.last) / 1000));
+      st.last = now;
+      // Ширина – плавно в логарифме (от 323 до 15 – в 20 раз), скорость – линейно.
+      const k = 1 - Math.exp(-dt / (this.EASE_SECONDS / 3));
+      st.stripe = Math.exp(Math.log(st.stripe) + (Math.log(target.stripe) - Math.log(st.stripe)) * k);
+      st.speed += (target.speed - st.speed) * k;
+      // Фаза – в долях шага: при смене ширины полосы растягиваются, а не прыгают.
+      st.cycles = (st.cycles + (st.speed * dt) / (2 * st.stripe)) % 1;
+      this.draw(button, st, target.color);
+    }
+    requestAnimationFrame((t) => this.frame(t));
+  },
+
+  draw(button, st, color) {
+    const canvas = button.querySelector("canvas.zebra");
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = button.clientWidth;
+    const h = button.clientHeight;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = color;
+    const period = 2 * st.stripe;
+    const slant = this.SLANT * h;
+    const offset = st.cycles * period;
+    for (let x = offset - period - slant; x < w + period; x += period) {
+      ctx.beginPath();
+      ctx.moveTo(x + slant, 0);
+      ctx.lineTo(x + slant + st.stripe, 0);
+      ctx.lineTo(x + st.stripe, h);
+      ctx.lineTo(x, h);
+      ctx.closePath();
+      ctx.fill();
+    }
+  },
+};
 
 function cardAction(v) {
   const pressed = Pages.pressedActions.get(v.id);
   const just = pressed && Date.now() - pressed.at < 8000 ? pressed.action : null; // нажали, сервер ещё не успел
   const id = escapeHtml(v.id);
   if (v.sending || just === "send") {
-    return `<button class="card-action send busy" data-action="none" data-id="${id}" disabled ${zebraPhase("sendBusy")}><span>Передаётся в Anki…</span></button>`;
+    return `<button class="card-action send busy" data-action="none" data-id="${id}" disabled><canvas class="zebra"></canvas><span>Передаётся в Anki…</span></button>`;
   }
   if (v.translating || just === "translate") {
     // Нажатие – остановить перевод.
-    return `<button class="card-action translate busy" data-action="stop" data-id="${id}" title="Остановить перевод" ${zebraPhase("translateBusy")}><span>Выполняется перевод…</span></button>`;
+    return `<button class="card-action translate busy" data-action="stop" data-id="${id}" title="Остановить перевод"><canvas class="zebra"></canvas><span>Выполняется перевод…</span></button>`;
   }
   if (v.ready_to_send) {
-    return `<button class="card-action send" data-action="send" data-id="${id}" ${zebraPhase("send")}><span>Передать в Anki</span></button>`;
+    return `<button class="card-action send" data-action="send" data-id="${id}"><canvas class="zebra"></canvas><span>Передать в Anki</span></button>`;
   }
   if (v.ready_to_translate) {
-    return `<button class="card-action translate" data-action="translate" data-id="${id}" ${zebraPhase("translate")}><span>Перевести</span></button>`;
+    return `<button class="card-action translate" data-action="translate" data-id="${id}"><canvas class="zebra"></canvas><span>Перевести</span></button>`;
   }
   return "";
 }
@@ -843,6 +915,7 @@ const Pages = {
       }
       this.lastActions = now;
       flashCard(box);
+      Zebra.start();
     };
     // Кнопки на карточке ("Передать в Anki", "Перевести"): действие сразу, окно
     // не открывается; кнопка плавно сворачивается, карточка уменьшается.
