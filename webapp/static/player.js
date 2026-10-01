@@ -192,6 +192,13 @@ const Player = {
     this._halt();
     this.seekTo(frame, true);
     State.lastStop = { frame };
+    // Остановка на конце отрезка (режим остановки включён) — как будто нажали
+    // треугольник под концом отрезка: выделен конец, ±1/±10 и стрелки двигают его.
+    const f = currentFragment();
+    if (State.stopAtSegmentEnd && f && frame === f.algo_end_frame - 1) {
+      State.selected = "end";
+      App.renderAll();
+    }
     App.renderPlayback();
     // Снимок убираем, когда видео уже встало на кадр остановки (плюс пара
     // кадров отрисовки, чтобы не мигнул предыдущий).
