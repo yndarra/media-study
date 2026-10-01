@@ -172,6 +172,9 @@ const Zoom = {
   },
 };
 
+// Поля правимой фразы слева и справа (px).
+const TEXT_BOX_PAD = 50;
+
 // Шаг кнопок запаса ±3 с (совпадает с PADDING_STEP_SECONDS на сервере).
 const PADDING_STEP_SECONDS = 3;
 
@@ -568,6 +571,21 @@ const App = {
     cur.contentEditable = isLocked(f) ? "false" : "plaintext-only";
     $("prev-text").textContent = this._neighborText(-1);
     $("next-text").textContent = this._neighborText(1);
+    this.fitTextBox();
+  },
+
+  // Поле правимой фразы: ширина – по самой длинной строке из трёх фраз
+  // (предыдущей, этой и следующей) плюс поля по TEXT_BOX_PAD с каждой стороны;
+  // не шире места. Своя фраза длиннее – поле растёт само (fit-content).
+  fitTextBox() {
+    const textWidth = (el) => {
+      if (!el.textContent.trim()) return 0;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().width;
+    };
+    const widest = Math.max(textWidth($("prev-text")), textWidth($("next-text")));
+    $("cur-text").style.minWidth = `${Math.ceil(widest) + 2 * TEXT_BOX_PAD}px`;
   },
 
   renderNav() {
@@ -1044,6 +1062,7 @@ $("merge-next").addEventListener("click", () => App.merge("next"));
 $("split-btn").addEventListener("click", () => App.split());
 $("delete-soft").addEventListener("click", () => App.deleteSoft());
 $("unvoiced-btn").addEventListener("click", () => App.toggleUnvoiced());
+window.addEventListener("resize", () => State.view === "editor" && App.fitTextBox());
 $("video-wrap").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   Zoom.toggle(e);
