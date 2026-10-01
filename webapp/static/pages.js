@@ -158,7 +158,7 @@ function videoNotes(v) {
   const queue = q.state === "waiting_anki" ? "ждёт Anki" : q.notes_left ? `в очереди Anki ${q.notes_left}, ≈ ${Math.max(1, Math.ceil(q.eta_seconds / 60))} мин` : "";
   const all = v.notes_in_anki > 0 && v.translated >= v.notes_in_anki;
   const parts = [
-    v.exported ? `<span class="${all ? "translated-all" : ""}">${all ? '<span class="tick">✓</span> ' : ""}Из них переведено: ${v.translated || 0}</span>` : "",
+    `<span class="${all ? "translated-all" : ""}">${all ? '<span class="tick">✓</span> ' : ""}Переведено: ${v.translated || 0}</span>`,
     v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
     v.flag_translation ? `<span class="translation-text">Перевод: ${v.flag_translation}</span>` : "",
     queue ? escapeHtml(queue) : "",
@@ -528,7 +528,7 @@ const Pages = {
         ${row("Строк в карточке", lines)}
         ${row("Правка текста", `${s.text_edited} из ${s.cards}`)}
         ${row("Правка границ", `${s.bounds_edited} из ${s.cards}` + (s.bound_shift_frames ? `; сдвиг ${spread(s.bound_shift_frames, " кадр.")}` : ""))}
-        ${row("Колода Anki", v.anki_deck ? escapeHtml(v.anki_deck) : "нет")}
+        ${row("Колода Anki", v.anki_deck ? escapeHtml(v.anki_deck) : "Нет")}
       </table>
       <h2>Место на диске</h2>
       <div class="disk-grid">

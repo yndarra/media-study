@@ -821,6 +821,8 @@ const HOTKEYS = {
   "Shift+KeyW": () => App.select("playhead"), // выделить текущий кадр
   KeyE: () => App.moveHead("end"), // текущий кадр — на конец отрезка
   "Shift+KeyE": () => App.select("end"), // выделить конец отрезка
+  // Пометить на удаление / снять пометку (как кнопка корзины); переданные в Anki — нельзя.
+  KeyS: () => currentFragment() && !isLocked(currentFragment()) && App.deleteSoft(),
 };
 
 // Одиночный Ctrl (нажат и отпущен без других клавиш и кликов) внутри текста —
