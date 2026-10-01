@@ -55,8 +55,11 @@ def group_of(project_dir: Path) -> str:
 
 
 def agent_mode(value) -> str:
-    """Режим помощи агента: "", "deep" или "search" (старое True — "search")."""
-    if value is True:
+    """
+    Режим помощи агента: "", "deep" или "search" (старое True — "search").
+    Не задан вовсе (None) — по умолчанию "search"; "" — пользователь выключил.
+    """
+    if value is True or value is None:
         return "search"
     return value if value in ("deep", "search") else ""
 

@@ -825,3 +825,14 @@ label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=c
 .modal-actions label.check { margin: 0; white-space: nowrap; }
 .modal-actions label.check input[type=checkbox] { transform: none; }
 .batch-check .muted { font-size: 12px; }
+
+/* Текст в кнопках — оптически по центру: у Segoe UI строка "сидит" ниже
+   середины рамки (замерено: ~1.5 px), поэтому чуть приподнимаем. */
+.step-btn, a.step-btn, .big-btn { padding-bottom: 3px; }
+.big-btn { padding-top: 6px; padding-bottom: 9px; }
+/* Флажок "Пакетом": центр — по середине заглавных букв подписи (замерено). */
+.modal-actions label.check input[type=checkbox] { transform: translateY(-1px); }
+/* Статус перевода в строке кнопок: коротко, в одну строку, ход перевода — зелёным. */
+#info-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#info-note.running { color: #3fb950; }
+.sources-box label.check { margin-top: 10px; }

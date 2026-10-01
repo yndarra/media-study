@@ -653,8 +653,9 @@ const Pages = {
         if (link) link.textContent = title;
       }
       const sync = saved.deck_sync || {};
-      body.querySelector("#info-note").textContent = !v.anki_deck ? ""
-        : sync.pending ? "колода Anki переименуется, когда Anki откроется" : "колода Anki переименована";
+      const savedNote = body.querySelector("#info-note");
+      savedNote.textContent = !v.anki_deck ? "" : sync.pending ? "колода – при запуске Anki" : "колода переименована";
+      savedNote.title = !v.anki_deck ? "" : sync.pending ? "Колода Anki переименуется, когда Anki откроется" : "Колода Anki переименована";
     };
     saveButton.addEventListener("click", save);
     // Перевод видео: "Перевести" <-> "Остановить" (пока идёт перевод этого
@@ -663,6 +664,11 @@ const Pages = {
     const translateButton = body.querySelector("#info-translate");
     const batchBox = body.querySelector("#info-batch");
     const note = body.querySelector("#info-note");
+    // Короткая надпись в строке кнопок; полный текст – во всплывающей подсказке.
+    const setNote = (text, hint = "") => {
+      note.textContent = text;
+      note.title = hint || text;
+    };
     const label = translateButton.textContent;
     let running = false;
     let waitingBatch = false;
@@ -680,22 +686,28 @@ const Pages = {
       batchBox.checked = waitingBatch || (running ? false : batchBox.checked);
       translateButton.textContent = running ? "Остановить" : label;
       translateButton.disabled = !running && untranslated <= 0;
-      if (st.state === "running" && st.project === id && st.total) note.textContent = `Перевод: пачка ${Math.min((st.done || 0) + 1, st.total)} из ${st.total}`;
+      // Ход перевода – коротко и зелёным (места в строке кнопок немного).
+      const progress = st.state === "running" && st.project === id && st.total;
+      note.classList.toggle("running", !!progress);
+      if (progress) setNote(`пачка ${Math.min((st.done || 0) + 1, st.total)} из ${st.total}`);
+      else if (waitingBatch) setNote("ждём ответ пакета");
       if (running) setTimeout(refreshTranslate, 3000);
     };
     translateButton.addEventListener("click", async () => {
       try {
         if (running) {
           await Api.agentStop(id);
-          note.textContent = "Перевод остановлен – уже переведённое сохранено";
+          note.classList.remove("running");
+          setNote("остановлено", "Перевод остановлен – уже переведённое сохранено");
         } else {
           await Api.agentRun({ project: id, batch: batchBox.checked });
-          note.textContent = batchBox.checked
-            ? "Заявка отправлена – переводы запишутся, когда OpenRouter их вернёт"
-            : "Перевод запущен – переданные в Anki получат перевод сразу, остальные – когда их передадут";
+          note.classList.add("running");
+          if (batchBox.checked) setNote("заявка отправлена", "Переводы запишутся, когда OpenRouter их вернёт");
+          else setNote("запускаю…", "Переданные в Anki получат перевод сразу, остальные – когда их передадут");
         }
       } catch (err) {
-        note.textContent = err.message;
+        note.classList.remove("running");
+        setNote("ошибка", err.message);
       }
       setTimeout(refreshTranslate, 800);
     });
@@ -703,7 +715,8 @@ const Pages = {
       if (waitingBatch && !batchBox.checked) {
         await Api.agentStop(id);
         await Api.agentRun({ project: id, batch: false });
-        note.textContent = "Пакетная заявка отменена – перевожу сразу";
+        note.classList.add("running");
+        setNote("перевожу сразу", "Пакетная заявка отменена – перевожу сразу");
         setTimeout(refreshTranslate, 800);
       }
     });
@@ -761,13 +774,13 @@ const Pages = {
           <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
           <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
         </div>
-        <div class="muted">${formatDuration(v.duration)}${v.audio_only ? " · аудио" : ""}</div>
+        ${v.audio_only ? '<div class="muted">аудио</div>' : ""}
         ${v.state === "processing" ? processingBar(v) : ""}
-        <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></label>
         <label class="check"><input type="checkbox" class="agent-search" ${v.agent === "search" ? "checked" : ""}> Поиск достоверных источников с помощью агента <span class="muted small">(ссылки не нужны)</span></label>
         <div class="sources-box">
           <label class="muted small">Текст для сверки (ссылки, по одной в строке)</label>
           <textarea class="sources grow" rows="1" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
+          <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></label>
         </div>
       </div>
       ${disk ? `<h2>Место на диске</h2><table class="stats">
@@ -782,7 +795,8 @@ const Pages = {
     const deep = body.querySelector(".agent-deep");
     const search = body.querySelector(".agent-search");
     const sourcesBox = body.querySelector(".sources-box");
-    // Режимы взаимоисключающие; в режиме "агент сам ищет" ссылки не нужны — поле прячется.
+    // Режимы взаимоисключающие; в режиме "агент сам ищет" ссылки и глубокий
+    // поиск не нужны — прячутся вместе (глубокий поиск лежит в sources-box).
     const syncModes = (changed) => {
       if (changed === deep && deep.checked) search.checked = false;
       if (changed === search && search.checked) deep.checked = false;

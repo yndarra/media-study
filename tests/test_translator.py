@@ -34,5 +34,16 @@ class TestTranslator(unittest.TestCase):
         self.assertEqual([len(c) for c in translator.chunks(list(range(85)))], [40, 40, 5])
 
 
+class TestParseAnswer(unittest.TestCase):
+    def test_empty_reply_is_retryable_error(self):
+        # Пустой ответ модели — ValueError (пачка повторится), а не падение агента.
+        for content in (None, ""):
+            with self.assertRaises(ValueError):
+                translator.parse_answer(content)
+
+    def test_json_inside_text(self):
+        self.assertEqual(translator.parse_answer('вот: {"cards": []} конец'), {"cards": []})
+
+
 if __name__ == "__main__":
     unittest.main()

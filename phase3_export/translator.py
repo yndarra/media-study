@@ -234,7 +234,11 @@ def _post(data_dir: Path, path: str, body: dict | None = None, method: str = "PO
             raise
 
 
-def parse_answer(content: str) -> dict:
+def parse_answer(content: str | None) -> dict:
+    # Пустой ответ (бывает у провайдера, например сразу после смены ключа) —
+    # такая же ошибка разбора, как битый JSON: пачка повторится.
+    if not content:
+        raise ValueError("пустой ответ модели")
     match = re.search(r"\{.*\}", content, re.S)
     return json.loads(match.group(0) if match else content)
 
@@ -286,7 +290,7 @@ def translate_realtime(data_dir: Path, project_dir: Path, cards: list[dict], mod
             try:
                 answer = parse_answer(reply["choices"][0]["message"]["content"])
                 break
-            except (ValueError, KeyError, IndexError):
+            except (ValueError, KeyError, IndexError, TypeError):
                 if attempt == MAX_ATTEMPTS - 1:
                     raise
                 print(f"пачка {group[0]['id']}–{group[-1]['id']}: ответ не разобрался, повторяю", flush=True)
