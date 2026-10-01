@@ -1364,3 +1364,9 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 .card > .muted.small, .card > .card-action, .card > .card-status { margin-top: 12px; }
 .card > .muted.small { height: 20px; line-height: 20px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .card > .card-action { height: 20px; }
+/* Пересчёт: кнопка шага – на том же расстоянии от полос, что и полосы друг от
+   друга (8 px). Без кнопки: последняя полоса → 12 px → строка "Место на диске"
+   (16 px) → 12 px до края; с кнопкой: 8 px → кнопка (20 px) → 12 px до края –
+   высота карточки одна и та же (40 px под полосами). */
+.card > .card-action { margin-top: 8px; }
+.card > .muted.small { height: 16px; line-height: 16px; margin-top: 12px; }
