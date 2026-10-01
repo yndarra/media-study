@@ -1321,3 +1321,29 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 @keyframes zebra-slide { from { transform: translateX(0); } to { transform: translateX(var(--period)); } }
 .card-action.grow-in { animation: grow-in 0.3s ease-out; }
 .step-btn, a.step-btn { white-space: nowrap; }
+
+/* ---- Кнопка-зебра: узор-картинка с целым шагом (SVG), слой сдвигается ровно
+   на один шаг узора – цикл бесшовный (раньше шаг градиента округлялся, и на
+   стыке цикла был рывок). Полосы и промежутки – 26 px, во время процесса – 52 px. ---- */
+.card-action { --period: 52px; }
+.card-action.busy { --period: 104px; }
+.card-action::before {
+  left: calc(-1 * var(--period)); right: 0; width: auto;
+  background: none; background-repeat: repeat-x; background-size: var(--period) 100%;
+  animation: zebra-slide 1.6s linear infinite;
+}
+.card-action.busy::before { animation-duration: 2.6s; }
+.card-action.send:not(.busy)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='20' viewBox='0 0 52 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 34,0 26,20 0,20' fill='%231f6b3b'/%3E%3Cpolygon points='-44,0 -18,0 -26,20 -52,20' fill='%231f6b3b'/%3E%3C/svg%3E"); }
+.card-action.send.busy::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='104' height='20' viewBox='0 0 104 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 60,0 52,20 0,20' fill='%231f6b3b'/%3E%3Cpolygon points='-96,0 -44,0 -52,20 -104,20' fill='%231f6b3b'/%3E%3C/svg%3E"); }
+.card-action.translate:not(.busy)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='20' viewBox='0 0 52 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 34,0 26,20 0,20' fill='%23a3407a'/%3E%3Cpolygon points='-44,0 -18,0 -26,20 -52,20' fill='%23a3407a'/%3E%3C/svg%3E"); }
+.card-action.translate.busy::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='104' height='20' viewBox='0 0 104 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 60,0 52,20 0,20' fill='%23a3407a'/%3E%3Cpolygon points='-96,0 -44,0 -52,20 -104,20' fill='%23a3407a'/%3E%3C/svg%3E"); }
+
+/* ---- Карточки видео и обработки: от верха до названия = от названия до
+   следующего блока (полосы / статуса). ---- */
+.card-title { margin-bottom: 0; }
+.card-title + .progress, .card-title + .card-status, .card-title + .muted { margin-top: 12px; }
+
+/* ---- Окно "Обработки": флажки ближе друг к другу ---- */
+.process-form label.check { margin-top: 4px; margin-bottom: 4px; }
+.process-form > label.check:first-of-type { margin-top: 14px; }
+.sources-box label.check { margin-top: 8px; margin-bottom: 0; }
