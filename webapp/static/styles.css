@@ -772,3 +772,7 @@ textarea.grow {
   background: #1f1f25; color: var(--text); border: 1px solid #45454e; border-radius: 5px;
 }
 .file-pick:hover { background: #28282f; }
+
+/* Таблицы в окнах (статистика, место на диске): значения прижаты к правому краю. */
+.modal table.stats td:last-child { text-align: right; padding-right: 0; }
+.modal table.stats td:first-child { padding-right: 24px; }
