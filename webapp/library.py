@@ -54,6 +54,42 @@ def group_of(project_dir: Path) -> str:
     return project_settings(project_dir).get("group") or info.get("channel") or info.get("uploader") or "Без автора"
 
 
+def title_of(project_dir: Path) -> str:
+    """Название видео: заданное вручную, иначе с YouTube / имя файла."""
+    info = video_info(project_dir)
+    return project_settings(project_dir).get("title") or info.get("title") or Path(project_dir).name
+
+
+def is_edited(fragment) -> bool:
+    """Фрагмент изменён пользователем: границы, текст, запас, объединение/разделение."""
+    return fragment.edited or fragment.context_custom or bool(fragment.merged_from or fragment.split_from)
+
+
+def disk_usage(project_dir: Path) -> dict:
+    """
+    Сколько места занимает видео по этапам (байты):
+    master — скачанный оригинал (из него режутся клипы для Anki, поэтому он
+    остаётся); editor — копия для редактора (этап 2); editor_audio — звук и
+    волна для редактора; clips — клипы этапа 3; total — всё вместе.
+    """
+    project_dir = Path(project_dir)
+
+    def size(paths) -> int:
+        return sum(p.stat().st_size for p in paths if p.is_file())
+
+    from phase1_ingest.acquire import master_path
+
+    master = master_path(project_dir)
+    usage = {
+        "master": size([master]) if master else 0,
+        "editor": size([project_dir / "source.mp4"]),
+        "editor_audio": size([project_dir / "audio.pcm", project_dir / "waveform.bin"]),
+        "clips": size((project_dir / "export").glob("*")) if (project_dir / "export").is_dir() else 0,
+    }
+    usage["total"] = size(project_dir.rglob("*"))
+    return usage
+
+
 def is_touched(fragment) -> bool:
     """Фрагмент хоть как-то изменён (для скрытого прогресса)."""
     return (
@@ -130,7 +166,7 @@ def summary(project_dir: Path) -> dict:
     info = video_info(project_dir)
     base = {
         "id": project_dir.name,
-        "title": info.get("title") or project_dir.name,
+        "title": title_of(project_dir),
         "group": group_of(project_dir),
         "duration": info.get("duration"),
     }
@@ -154,18 +190,36 @@ def summary(project_dir: Path) -> dict:
     manifest = Manifest.load(manifest_path)
     fragments = manifest.fragments
     index = export_index(project_dir)
-    cards = [f for f in fragments if f.status == STATUS_ACTIVE and f.text.strip()]
+    active = [f for f in fragments if f.status == STATUS_ACTIVE]
+    cards = [f for f in active if f.text.strip()]
+    # Скрытая метка: всё до последнего изменённого фрагмента просмотрено
+    # пользователем ("отредактировано").
+    reviewed = last_touched_index(manifest) + 1
+    returned = [f for f in active if f.anki_flagged and not f.exported]  # вернулись из Anki на правку
+    head = fragments[:reviewed]
+    edit_bar = {
+        "unchanged": sum(f.status == STATUS_ACTIVE and not is_edited(f) and not (f.anki_flagged and not f.exported) for f in head),
+        "changed": sum(f.status == STATUS_ACTIVE and is_edited(f) and not (f.anki_flagged and not f.exported) for f in head),
+        "deleted": sum(f.status != STATUS_ACTIVE for f in head),
+        "returned": len(returned),
+    }
     return {
         **base,
         "state": "ready",
         "fragments_total": len(fragments),
-        "exported": sum(f.exported for f in fragments),
+        "active_total": len(active),
+        "exported": sum(f.exported for f in active),
         "editable": sum(not f.exported for f in fragments),
-        "last_touched": last_touched_index(manifest) + 1,
+        "last_touched": reviewed,
+        "reviewed": reviewed,
+        "edit_bar": edit_bar,
+        # Ждут правки: ещё не просмотренные + вернувшиеся из Anki.
+        "awaiting": sum(f.status == STATUS_ACTIVE for f in fragments[reviewed:]) + sum(
+            1 for f in returned if fragments.index(f) < reviewed),
         "cards_total": len(cards),
         "clips_done": len(index),
         "notes_in_anki": sum(bool(e.get("anki_note_id")) for e in index),
-        "flagged": sum(f.anki_flagged and not f.exported for f in fragments),
+        "flagged": len(returned),
         "anki_deck": manifest.settings.get("anki_deck"),
     }
 

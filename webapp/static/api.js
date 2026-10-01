@@ -22,11 +22,21 @@ const Api = {
   },
 
   renameGroup(id, group) {
+    return this.saveProjectInfo(id, { group });
+  },
+
+  // Название и/или автор видео (поля, которых нет, не меняются).
+  saveProjectInfo(id, info) {
     return this.json(`/api/p/${encodeURIComponent(id)}/settings`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ group }),
+      body: JSON.stringify(info),
     });
+  },
+
+  // Сколько места занимает видео по этапам (и для ещё не обработанного).
+  projectDisk(id) {
+    return this.json(`/api/p/${encodeURIComponent(id)}/disk`);
   },
 
   download(url) {

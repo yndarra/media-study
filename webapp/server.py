@@ -184,21 +184,34 @@ def project_summary(project_id: str):
 @app.get("/api/p/{project_id}/stats")
 def project_stats(project_id: str):
     p = project(project_id)
-    return {"summary": library.summary(p.dir), "stats": library.stats(p.dir)}
+    return {"summary": library.summary(p.dir), "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir)}
+
+
+@app.get("/api/p/{project_id}/disk")
+def project_disk(project_id: str):
+    """Место на диске по этапам — и для видео, которое ещё не обработано."""
+    project_dir = DATA_DIR / project_id
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail="видео не найдено")
+    return library.disk_usage(project_dir)
 
 
 class ProjectSettingsRequest(BaseModel):
-    group: str
+    group: str | None = None
+    title: str | None = None
 
 
 @app.patch("/api/p/{project_id}/settings")
 def update_project_settings(project_id: str, body: ProjectSettingsRequest):
-    """Переименовать автора (группу) видео. Колода Anki, если уже создана, не переносится."""
+    """Переименовать автора (группу) и/или название видео. Колода Anki, если уже создана, не переносится."""
     project_dir = DATA_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="видео не найдено")
     settings = library.project_settings(project_dir)
-    settings["group"] = body.group.strip()
+    if body.group is not None and body.group.strip():
+        settings["group"] = body.group.strip()
+    if body.title is not None and body.title.strip():
+        settings["title"] = body.title.strip()
     library.save_project_settings(project_dir, settings)
     return library.summary(project_dir)
 
@@ -431,14 +444,49 @@ def queue_stage3(project_id: str, body: QueueRequest):
     return {"manifest": _public(manifest), "queued": queued, "stage3": _stage3_status(p, fresh=True)}
 
 
+# Флаги карточек в Anki по видео: {код видео: {номер флага: сколько}}. Anki
+# опрашивается не чаще раза в ANKI_FLAGS_TTL секунд (библиотека обновляется
+# каждые 5 с); если Anki закрыт — последнее известное.
+ANKI_FLAGS_TTL = 60
+_anki_flags_cache: dict = {"at": 0.0, "counts": {}}
+# Флаги карточек: 1 красный — править и обрезку/текст, и перевод; 2 оранжевый
+# ("жёлтый") — обрезку/текст; 3 зелёный — перевод.
+INTERVAL_FLAGS = (1, 2)
+TRANSLATION_FLAGS = (1, 3)
+
+
+def _anki_flag_counts() -> dict:
+    import time as _time
+
+    from phase3_export import anki
+
+    if _time.time() - _anki_flags_cache["at"] < ANKI_FLAGS_TTL:
+        return _anki_flags_cache["counts"]
+    counts: dict = {}
+    try:
+        for item in anki.flagged_notes():
+            per = counts.setdefault(item["project"], {})
+            per[item["flag"]] = per.get(item["flag"], 0) + 1
+    except (anki.AnkiUnavailable, RuntimeError):
+        _anki_flags_cache["at"] = _time.time()
+        return _anki_flags_cache["counts"]
+    _anki_flags_cache.update(at=_time.time(), counts=counts)
+    return counts
+
+
 @app.get("/api/anki/overview")
 def anki_overview():
-    """Раздел Anki: по каждому готовому видео — сколько карточек и что в очереди."""
+    """Раздел "Видео": по каждому готовому видео — прогресс правки, Anki и очередь."""
     result = []
+    flags = _anki_flag_counts()
     for item in library.list_projects(DATA_DIR):
         if item["state"] != "ready":
             continue
         item["stage3"] = _stage3_status(project(item["id"]))
+        per = {int(k): v for k, v in flags.get(item["id"], {}).items()}
+        item["anki_flags"] = per
+        item["flag_interval"] = sum(per.get(f, 0) for f in INTERVAL_FLAGS)
+        item["flag_translation"] = sum(per.get(f, 0) for f in TRANSLATION_FLAGS)
         result.append(item)
     return result
 
