@@ -90,10 +90,18 @@ const Router = {
     Panels.init();
     Activity.start();
     window.addEventListener("hashchange", () => this.route());
+    // Нажали на раздел, который уже открыт, – он показывается заново, с той же
+    // анимацией появления, что при переходе из другого раздела (несохранённые
+    // настройки не трогаем).
+    document.querySelectorAll("#menu a[data-menu]").forEach((link) => link.addEventListener("click", () => {
+      if (location.hash !== link.getAttribute("href")) return;
+      if (State.view === "settings" && Pages.settingsGuard && Pages.settingsGuard.isDirty()) return;
+      this.route(true);
+    }));
     this.route();
   },
 
-  async route() {
+  async route(full = false) {
     const parts = (location.hash.replace(/^#\/?/, "") || "videos").split("/");
     const [page, id] = [parts[0], decodeURIComponent(parts[1] || "")];
     // Уходим из настроек, а там несохранённое – спросить; "остаться" – вернуть адрес.
@@ -110,7 +118,7 @@ const Router = {
     }
     // Открыть / закрыть окно поверх уже показанного списка – список не
     // перерисовывается заново (иначе страница на миг пустеет) и продолжает обновляться.
-    const listShown = (view, box) => State.view === view && document.querySelector(`#${box} a.card`);
+    const listShown = (view, box) => !full && State.view === view && document.querySelector(`#${box} a.card`);
     if ((page === "video" || page === "videos") && listShown("videos", "videos-list")) {
       if (page === "video" && id) Pages.videoModal(id);
       else {
@@ -1517,11 +1525,11 @@ const Pages = {
         </section>
         <section class="set-card wide-card">
           <h2>Агенты (OpenRouter)</h2>
-          ${field("set-key", "Ключ", `<div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div>`,
+          ${field("set-key", "Ключ", `<div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть"><svg viewBox="0 0 20 20"><path d="M1.8 10s3-5.5 8.2-5.5S18.2 10 18.2 10s-3 5.5-8.2 5.5S1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6"/></svg></button></div>`,
             "Для перевода и поиска источников")}
           <div class="field-row">
             ${modelField("set-model", "Модель перевода",
-              "Своя (идентификатор на OpenRouter) или из списка; цена – $ за миллион токенов (вход / выход)")}
+              "Своя (идентификатор на OpenRouter) или из списка; цена – $ за млн токенов (вход / выход)")}
             ${modelField("set-search-model", "Модель поиска",
               "Ищет источники текста для сверки (с веб-поиском); запросов мало – лучше сильная модель")}
           </div>

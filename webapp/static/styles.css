@@ -1407,3 +1407,16 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
    нижнее поле тоже на 1 px меньше – высоты карточек по-прежнему равны. */
 .card > .muted.small { margin-bottom: 1px; }
 .card:has(> .card-action) { padding-bottom: 11px; }
+
+/* Поле ключа: кнопка-глазок вплотную, как кнопка списка (4 px); значок – по центру. */
+.secret-row { gap: 4px; }
+#set-key-eye svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; display: block; }
+
+/* Подстройка карточек: над "Местом на диске" +1 px (снизу без изменений);
+   у карточки с кнопкой – +1 px снизу (высоты равны); под названием +1 px. */
+.card > .muted.small { margin-top: 11px; }
+.card:has(> .card-action) { padding-bottom: 12px; }
+.card-title + .progress, .card-title + .card-status, .card-title + .muted { margin-top: 11.86px; }
+
+/* Подписи в полосах – на 1 px ниже. */
+.progress-label { top: 2px; }
