@@ -44,6 +44,20 @@ def save_project_settings(project_dir: Path, settings: dict) -> None:
     tmp_path.replace(path)
 
 
+def add_cost(project_dir: Path, kind: str, amount: float) -> None:
+    """
+    Учесть расход OpenRouter по видео (project.json, "costs"): kind — "search"
+    (поиск источников), "translate" (перевод), "retranslate" (повторный перевод
+    по флагу). Показывается в окне видео ("Потрачено").
+    """
+    if not amount:
+        return
+    settings = project_settings(project_dir)
+    costs = settings.setdefault("costs", {})
+    costs[kind] = round(costs.get(kind, 0.0) + float(amount), 6)
+    save_project_settings(project_dir, settings)
+
+
 def video_info(project_dir: Path) -> dict:
     return read_json(Path(project_dir) / "video_info.json", {})
 
@@ -365,6 +379,8 @@ def stats(project_dir: Path) -> dict:
 
     return {
         "video_seconds": round(total, 1),
+        # Потрачено на OpenRouter по этому видео ($): поиск, перевод, повторный перевод.
+        "costs": project_settings(project_dir).get("costs", {}),
         "fragments_total": len(fragments),
         "cards": len(cards),
         "kept_seconds": round(kept, 1),

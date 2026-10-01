@@ -1448,3 +1448,25 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 /* Зебра кнопок шага – на canvas (pages.js, Zebra), прежняя CSS-анимация не нужна. */
 .card-action::before { display: none; }
 .card-action > canvas.zebra { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---- Окно видео: строка кнопок ---- */
+.modal-actions { border-top: none; padding-top: 0; }
+/* Сворачиваемое (при процессе): плавно сужается и гаснет. */
+.modal-actions .fold { transition: max-width 0.35s ease, opacity 0.25s ease, margin 0.35s ease, padding 0.35s ease, border-width 0.35s ease; max-width: 260px; }
+.modal-actions .fold.gone { max-width: 0; opacity: 0; margin: 0 -4px 0 0; padding-left: 0; padding-right: 0; border-width: 0; overflow: hidden; pointer-events: none; }
+.modal-actions .batch-check .muted.fold { display: inline-block; white-space: nowrap; overflow: hidden; vertical-align: bottom; }
+#info-note { transition: opacity 0.3s ease; }
+/* Доступные шаги – цветом шага. */
+.step-btn.send-ready { background: #1f5a33; border-color: #2c7a47; color: #fff; }
+.step-btn.send-ready:hover:not(:disabled) { background: #256b3d; }
+.step-btn.translate-ready { background: #9d3f72; border-color: #b6528a; color: #fff; }
+.step-btn.translate-ready:hover:not(:disabled) { background: #b0487f; }
+/* "Править" с зеброй (есть что править). */
+.zebra-host { position: relative; overflow: hidden; }
+.zebra-host > canvas.zebra { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+.zebra-host[data-zebra] > canvas.zebra { display: block; }
+.zebra-host[data-zebra] { background: #1b1b21 !important; border-color: transparent !important; }
+.zebra-host > span { position: relative; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+.modal-actions .fold.gone { min-width: 0; }
+.modal-actions .fold { min-width: 0; }
+.modal-actions .step-btn.fold:not(.gone) { min-width: 46px; }

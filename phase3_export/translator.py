@@ -328,6 +328,9 @@ def collect_batch(data_dir: Path, job: dict) -> tuple[str, list[dict], float]:
     """Проверить заявку: (статус, предложения если готово, стоимость)."""
     reply = _post(data_dir, f"/batches/{job['id']}", method="GET")
     state = reply.get("status", "")
+    # Сколько пачек заявки уже готово — для полосы в "Сейчас идёт".
+    counts = reply.get("request_counts") or {}
+    job["done"], job["total"] = counts.get("completed", 0), counts.get("total", len(job.get("groups", [])))
     if state != "completed":
         return state, [], 0.0
     project_dir = Path(data_dir) / job["project"]

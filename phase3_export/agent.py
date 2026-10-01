@@ -205,10 +205,21 @@ def run(data_dir: Path, project: str | None = None, batch: bool = False, only_fl
                 continue
             # Каждая пачка записывается сразу: целое видео — в Anki/хранилище,
             # по флагам — в предложения.
+            from webapp.library import add_cost
+
+            def spent_on(part, kind):
+                # Расход пачки — по видео её карточек (у предложения – своя доля).
+                for project_id in {p["project"] for p in part}:
+                    add_cost(data_dir / project_id, kind, sum(p.get("cost", 0) for p in part if p["project"] == project_id))
+
             if direct:
-                on_batch = lambda part, pd=project_dir, cs=cards: translator.apply_direct(pd, part, cs)
+                def on_batch(part, pd=project_dir, cs=cards):
+                    translator.apply_direct(pd, part, cs)
+                    spent_on(part, "translate")
             else:
-                on_batch = lambda part: save_json(proposals_path, load_json(proposals_path, []) + part)
+                def on_batch(part):
+                    save_json(proposals_path, load_json(proposals_path, []) + part)
+                    spent_on(part, "retranslate")
             new, cost = translator.translate_realtime(data_dir, project_dir, cards, model,
                                                       lambda **kw: status(project=project_dir.name, **kw),
                                                       on_batch=on_batch)
@@ -231,11 +242,14 @@ def poll_batches(data_dir: Path) -> int:
     left, added = [], 0
     for job in jobs:
         try:
-            state, new, _ = translator.collect_batch(data_dir, job)
+            state, new, cost = translator.collect_batch(data_dir, job)
         except Exception:
             left.append(job)
             continue
         if state == "completed":
+            from webapp.library import add_cost
+
+            add_cost(data_dir / job["project"], "translate" if job.get("direct") else "retranslate", cost)
             if job.get("direct"):
                 translator.apply_direct(data_dir / job["project"], new, job["cards"])
             else:

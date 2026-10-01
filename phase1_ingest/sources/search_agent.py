@@ -341,7 +341,7 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
     transcript.txt для видео по его настройкам (ссылки, режим агента).
     Возвращает, записан ли текст.
     """
-    from webapp.library import agent_mode, project_settings, save_project_settings
+    from webapp.library import add_cost, agent_mode, project_settings, save_project_settings
 
     project_dir = Path(project_dir)
     data_dir = project_dir.parent
@@ -357,6 +357,7 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
             report(project_dir, "agent_search", None, force=True)
             answer = ask_agent(data_dir, project_dir, mode, links, whisper_transcript)
             report(project_dir, "search", None, force=True)
+            add_cost(project_dir, "search", answer.get("cost", 0))
             note = answer.get("note", "")
             log(f"Агент: {note} (${answer.get('cost', 0):.4f})")
             known = {c["url"] for c in candidates}
@@ -398,6 +399,7 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
                 report(project_dir, "agent_search", None, force=True)
                 gap_answer = ask_agent(data_dir, project_dir, mode, [checked[0]["url"]], whisper_transcript, missing=quotes)
                 report(project_dir, "search", None, force=True)
+                add_cost(project_dir, "search", gap_answer.get("cost", 0))
                 log(f"  Агент: {gap_answer.get('note', '')} (${gap_answer.get('cost', 0):.4f})")
                 extra = []
                 for source in gap_answer.get("sources", [])[:MAX_SOURCES]:
