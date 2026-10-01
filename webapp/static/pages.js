@@ -515,10 +515,34 @@ const Pages = {
       const first = !box.querySelector("a.card");
       renderSmooth(box, groupByAuthor(items, byPendingWork).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
-          `<a class="card${v.complete ? " complete" : ""}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
-          videoBars(v) + videoNotes(v) + "</a>").join("") + "</div>",
+          `<a class="card${v.complete ? " complete" : v.ready_to_translate ? " to-translate" : v.ready_to_send ? " to-send" : ""}" ` +
+          `href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
+          videoBars(v) + videoNotes(v) +
+          // Осталось только перевести – большая розовая кнопка прямо на карточке.
+          (v.ready_to_translate ? `<button class="card-translate" data-id="${escapeHtml(v.id)}" ${v.translating ? "disabled" : ""}>` +
+            `${v.translating ? "Переводится…" : "Перевести"}</button>` : "") +
+          "</a>").join("") + "</div>",
       ).join(""), first);
     };
+    // Кнопка "Перевести" на карточке: запуск перевода видео, окно не открывается.
+    // Обработчик на самой странице – вешается один раз (страница перерисовывается).
+    if (!el.dataset.translateBound) {
+      el.dataset.translateBound = "1";
+      el.addEventListener("click", async (e) => {
+        const button = e.target.closest(".card-translate");
+        if (!button) return;
+        e.preventDefault();
+        e.stopPropagation();
+        button.disabled = true;
+        button.textContent = "Переводится…";
+        try {
+          await Api.agentRun({ project: button.dataset.id, batch: false });
+        } catch (err) {
+          button.textContent = "Ошибка";
+          button.title = err.message;
+        }
+      });
+    }
     this.videosRender = render;
     await render();
     this.refreshEvery(5000, render);
@@ -751,7 +775,7 @@ const Pages = {
       </div>
       <div class="modal-actions">
         <a class="step-btn primary" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
-        <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести${v.to_translate ? ` (${v.to_translate})` : ""}</button>
+        <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
         <label class="check small batch-check" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом <span class="muted">(вдвое дешевле, ответ до 24 ч)</span></label>
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn">Сохранить</button>
@@ -1139,7 +1163,8 @@ const Activity = {
     box.innerHTML = items.map((a) => {
       const eta = a.eta_seconds ? ` · ≈ ${a.eta_seconds < 60 ? "<1" : Math.ceil(a.eta_seconds / 60)} мин` : "";
       const has = a.percent !== null && a.percent !== undefined;
-      const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ok" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
+      const cls = a.kind === "translate" ? "translated" : "ok"; // перевод – розовым, как полоса "Переведено"
+      const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ${cls}" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
       return `<div class="activity-item" data-key="${escapeHtml(`${a.kind}:${a.id}`)}"><div class="activity-name">${escapeHtml(a.title)}</div>` +
         `<div>${escapeHtml(a.label)}${has ? ` (${Math.floor(a.percent)}%)` : ""}${eta}</div>${bar}</div>`;
     }).join("");

@@ -50,7 +50,7 @@ body.right-closed #fraglist { display: none; }
   margin: var(--side-gap);
   height: calc(100vh - 2 * var(--side-gap));
   box-sizing: border-box;
-  background: rgba(14, 14, 18, 0.9);
+  background: rgba(19, 19, 24, 0.92); /* чуть светлее фона страницы */
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -857,9 +857,9 @@ a.card.complete {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.13), transparent 55%),
     linear-gradient(160deg, #19121a, #141418 70%);
-  border-color: rgba(244, 114, 182, 0.28);
+  border-color: rgba(244, 114, 182, 0.17);
 }
-a.card.complete:hover { border-color: rgba(244, 114, 182, 0.5); }
+a.card.complete:hover { border-color: rgba(244, 114, 182, 0.34); }
 
 /* Таблицы в окнах: у всех строк одна высота строки, кнопка-стрелка её не
    раздвигает – раскрытые строки и одиночная выглядят одинаково. */
@@ -890,3 +890,27 @@ a.card.complete:hover { border-color: rgba(244, 114, 182, 0.5); }
    кадра стоит посередине между кнопками слева и статусами по центру. */
 #status-row .group.left { justify-self: stretch; }
 #status-row #time-readout { flex: 1; text-align: center; white-space: nowrap; }
+
+/* Осталось только перевести: тот же розовый градиент, но слабее, и кнопка. */
+a.card.to-translate {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.07), transparent 55%),
+    linear-gradient(160deg, #161216, #141418 70%);
+  border-color: rgba(244, 114, 182, 0.12);
+}
+a.card.to-translate:hover { border-color: rgba(244, 114, 182, 0.28); }
+/* Всё отредактировано, но не всё передано в Anki: то же оформление, синее. */
+a.card.to-send {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.11), transparent 55%),
+    linear-gradient(160deg, #11141b, #141418 70%);
+  border-color: rgba(96, 165, 250, 0.17);
+}
+a.card.to-send:hover { border-color: rgba(96, 165, 250, 0.34); }
+/* Большая розовая кнопка "Перевести" внизу карточки. */
+.card-translate {
+  display: block; width: 100%; height: 34px; margin-top: 10px; padding-bottom: 3px;
+  background: #9d3f72; border: 1px solid #b6528a; color: #fff; font-size: 14px; border-radius: 6px;
+}
+.card-translate:hover:not(:disabled) { background: #b0487f; }
+.card-translate:disabled { opacity: 0.55; }

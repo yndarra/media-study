@@ -520,11 +520,12 @@ def _translation_activity() -> list[dict]:
         title = library.title_of(DATA_DIR / st["project"]) if st.get("project") else "карточки с флагом"
         total, done = st.get("total") or 0, st.get("done") or 0
         items.append({"kind": "translate", "id": st.get("project"), "title": title,
-                      "label": f"перевод: пачка {min(done + 1, total)} из {total}" if total else "перевод",
+                      # Сколько пачек уже готово: с 0 / N.
+                      "label": f"Перевод {done}/{total}" if total else "Перевод",
                       "percent": round(100 * done / total, 1) if total else None, "eta_seconds": None})
     for job in agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, []):
         items.append({"kind": "translate", "id": job["project"], "title": library.title_of(DATA_DIR / job["project"]),
-                      "label": f"перевод пакетом ({len(job['cards'])}), ждёт OpenRouter", "percent": None, "eta_seconds": None})
+                      "label": f"Перевод пакетом ({len(job['cards'])}), ждёт OpenRouter", "percent": None, "eta_seconds": None})
     return items
 
 
@@ -667,6 +668,8 @@ def anki_overview():
     """Раздел "Видео": по каждому готовому видео — прогресс правки, Anki и очередь."""
     result = []
     flags = _anki_flag_counts()
+    # Видео, которые сейчас переводятся (идёт агент или ждёт пакетная заявка).
+    translating = {a["id"] for a in _translation_activity() if a.get("id")}
     for item in library.list_projects(DATA_DIR):
         if item["state"] != "ready":
             continue
@@ -685,6 +688,19 @@ def anki_overview():
             # Переведены все фрагменты с текстом (пустые карточки "без_текста" перевода не ждут).
             and item["translated"] >= item["cards_total"] > 0
         )
+        # Всё, что можно, отредактировано (не тронутых и вернувшихся нет), но
+        # ещё не всё передано в Anki — синяя карточка.
+        item["ready_to_send"] = bool(
+            item["active_total"] and not item["awaiting"] and item["exported"] < item["active_total"]
+        )
+        # Всё передано в Anki, править нечего, осталось только перевести —
+        # розоватая карточка с кнопкой "Перевести".
+        item["ready_to_translate"] = bool(
+            item["active_total"] and not item["complete"] and not item["awaiting"]
+            and item["exported"] == item["active_total"] and not item["flagged"] and not item["flag_interval"]
+            and item["translated"] < item["cards_total"]
+        )
+        item["translating"] = item["id"] in translating
         result.append(item)
     return result
 
