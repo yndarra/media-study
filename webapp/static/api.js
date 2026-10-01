@@ -39,11 +39,12 @@ const Api = {
     return this.json("/api/agent");
   },
 
-  agentRun(limit = null) {
+  // options: {limit, project (перевести видео), batch (пакетом)}; без project — карточки с флагом.
+  agentRun(options = {}) {
     return this.json("/api/agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ limit }),
+      body: JSON.stringify(options),
     });
   },
 

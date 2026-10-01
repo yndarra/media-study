@@ -671,19 +671,34 @@ class ReturnRequest(BaseModel):
 # -- агент перевода (флаг "перевод" в Anki) -----------------------------------------
 
 
+_batch_poll = {"at": 0.0}
+BATCH_POLL_SECONDS = 60
+
+
 @app.get("/api/agent")
 def agent_state():
-    """Ход агента и его предложения (ещё не одобренные)."""
+    """Ход агента, заявки Batch API (готовые — подтягиваются) и предложения (ещё не одобренные)."""
     from phase3_export import agent
 
+    if time.time() - _batch_poll["at"] > BATCH_POLL_SECONDS:
+        _batch_poll["at"] = time.time()
+        try:
+            agent.poll_batches(DATA_DIR)
+        except Exception:
+            pass  # нет сети/ключа — попробуем позже
+    jobs = agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, [])
     return {
         "status": agent.load_json(DATA_DIR / agent.STATUS_FILE, {"state": "idle"}),
+        "batches": [{"id": j["id"], "project": j["project"], "cards": len(j["cards"]), "state": j.get("state", "отправлено"),
+                     "submitted": j["submitted"]} for j in jobs],
         "proposals": agent.prune_stale(DATA_DIR),
     }
 
 
 class AgentRunRequest(BaseModel):
     limit: int | None = None
+    project: str | None = None  # перевести непереведённые карточки этого видео (иначе — по флагам)
+    batch: bool = False  # одной заявкой Batch API: вдвое дешевле, ответ позже
 
 
 @app.post("/api/agent/run")
@@ -699,6 +714,10 @@ def agent_run(body: AgentRunRequest):
     args = [sys.executable, "-m", "phase3_export.agent", "--data-dir", str(DATA_DIR)]
     if body.limit:
         args += ["--limit", str(body.limit)]
+    if body.project:
+        args += ["--project", body.project]
+    if body.batch:
+        args += ["--batch"]
     subprocess.Popen(
         args, cwd=str(REPO_DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True,

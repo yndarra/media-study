@@ -797,3 +797,8 @@ a.step-btn { display: inline-flex; align-items: center; box-sizing: border-box; 
    текст подписи не выделяется двойным кликом. */
 label.check, label:has(> input[type=checkbox]) { user-select: none; -webkit-user-select: none; }
 label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=checkbox] { transform: translateY(1px); }
+
+/* Окно "Перевод": предложения по пачкам. */
+.agent-batch { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin: 12px 0; }
+.agent-batch-head { display: flex; align-items: center; gap: 8px; }
+.agent-batch-head .spacer { flex: 1; }

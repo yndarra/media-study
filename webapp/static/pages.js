@@ -154,6 +154,17 @@ function videoBars(v) {
   ], v.notes_in_anki, `Переведено ${v.translated || 0} / ${v.notes_in_anki || 0}`);
 }
 
+// Предложения агента по пачкам (в порядке поступления).
+function groupBatches(proposals) {
+  const groups = new Map();
+  for (const p of proposals) {
+    const key = p.batch || "";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  return [...groups.entries()];
+}
+
 // Строка под полосами (только если есть что сказать): вернулись из Anki,
 // ждут перевода, очередь Anki.
 function videoNotes(v) {
@@ -387,20 +398,29 @@ const Pages = {
       const proposals = state.proposals;
       body.innerHTML = `
         <h2>Перевод</h2>
-        <p class="muted small">Агент готовит перевод на обороте карточек с <span class="flag-dot f3"></span> зелёным и <span class="flag-dot f1"></span> красным флагом по правилам оформления, учитывает ваши комментарии со звёздочкой (*поясни за слово …) и убирает их. В Anki ничего не меняется, пока вы не одобрите. Одобренное: лицо – без комментариев, оборот – новый, метка «агент_перевод»; зелёный флаг снимается, красный становится оранжевым (обрезку ещё править).</p>
+        <p class="muted small">Агент переводит пачками по сцене (видит весь текст видео и словарь терминов): карточки с <span class="flag-dot f3"></span> зелёным и <span class="flag-dot f1"></span> красным флагом – здесь, целое видео – кнопкой «Перевести» в подробностях видео. Перевод по правилам оформления, учитывает ваши комментарии со звёздочкой (*поясни за слово …) и убирает их. В Anki ничего не меняется, пока вы не одобрите. Одобренное: лицо – без комментариев, оборот – новый, метка «агент_перевод»; зелёный флаг снимается, красный становится оранжевым (обрезку ещё править).</p>
         <div class="muted small">Карточек с флагом «перевод» в Anki: ${flagged}${statusLine ? ` · ${statusLine}` : ""}${st.model ? ` · модель ${escapeHtml(st.model)}` : ""}</div>
         <div class="actions"><button id="agent-run" class="step-btn" ${running || !flagged ? "disabled" : ""}>Подготовить переводы</button></div>
-        <div class="agent-list">${proposals.length ? proposals.map((p) => `
-          <div class="agent-item" data-note="${p.note_id}">
-            <label class="agent-head"><input type="checkbox" checked>
-              <span class="flag-dot f${p.flag}"></span> ${escapeHtml(p.project)} · ${escapeHtml(p.fragment_id)}
-              <span class="muted small">· ${escapeHtml(p.model || "")}${p.cost ? ` · $${p.cost}` : ""}</span></label>
-            <div class="agent-en">${escapeHtml(p.text || "")}</div>
-            ${(p.comments || []).length ? `<div class="agent-comments">Ваши комментарии: ${p.comments.map((c) => `«${escapeHtml(c)}»`).join(", ")}</div>` : ""}
-            <div class="agent-diff">
-              <div><div class="muted small">было</div><div class="agent-back old">${p.back_old || '<span class="muted">пусто</span>'}</div></div>
-              <div><div class="muted small">станет</div><div class="agent-back new">${p.back_new}</div></div>
-            </div>
+        ${(state.batches || []).length ? `<div class="muted small">Пакетные заявки: ${state.batches.map((j) =>
+          `${escapeHtml(j.project)} – ${j.cards} карточек (${escapeHtml(j.state)})`).join("; ")}</div>` : ""}
+        <div class="agent-list">${proposals.length ? groupBatches(proposals).map(([batch, list]) => `
+          <div class="agent-batch" data-batch="${escapeHtml(batch)}">
+            <div class="agent-batch-head"><b>${escapeHtml(batch || "без пачки")}</b> <span class="muted small">· ${list.length} карточек</span>
+              <span class="spacer"></span>
+              <button class="step-btn batch-reject">Отклонить пачку</button>
+              <button class="step-btn primary batch-approve">Одобрить пачку</button></div>
+            ${list.map((p) => `
+            <div class="agent-item" data-note="${p.note_id}">
+              <label class="agent-head check"><input type="checkbox" checked>
+                ${p.flag ? `<span class="flag-dot f${p.flag}"></span> ` : ""}#${escapeHtml(p.card_number || p.fragment_id)}
+                <span class="muted small">· ${escapeHtml(p.model || "")}</span></label>
+              <div class="agent-en">${escapeHtml(p.text || "")}</div>
+              ${(p.comments || []).length ? `<div class="agent-comments">Ваши комментарии: ${p.comments.map((c) => `«${escapeHtml(c)}»`).join(", ")}</div>` : ""}
+              <div class="agent-diff">
+                <div><div class="muted small">было</div><div class="agent-back old">${p.back_old || '<span class="muted">пусто</span>'}</div></div>
+                <div><div class="muted small">станет</div><div class="agent-back new">${p.back_new}</div></div>
+              </div>
+            </div>`).join("")}
           </div>`).join("") : '<p class="muted">Предложений нет.</p>'}</div>
         ${proposals.length ? `<div class="modal-actions">
           <button class="step-btn" id="agent-reject">Отклонить отмеченные</button>
@@ -409,7 +429,7 @@ const Pages = {
         </div>` : ""}`;
       body.querySelector("#agent-run").addEventListener("click", async () => {
         try {
-          await Api.agentRun();
+          await Api.agentRun({});
         } catch (err) {
           alert(err.message);
         }
@@ -431,6 +451,20 @@ const Pages = {
         body.querySelector("#agent-approve").addEventListener("click", () => act(true));
         body.querySelector("#agent-reject").addEventListener("click", () => act(false));
       }
+      // Одобрить / отклонить пачку целиком (все её карточки, независимо от отметок).
+      body.querySelectorAll(".agent-batch").forEach((group) => {
+        const ids = () => [...group.querySelectorAll(".agent-item")].map((el) => Number(el.dataset.note));
+        const run = async (approve) => {
+          try {
+            approve ? await Api.agentApply(ids(), []) : await Api.agentApply([], ids());
+            draw();
+          } catch (err) {
+            body.querySelector(".note").textContent = err.message;
+          }
+        };
+        group.querySelector(".batch-approve").addEventListener("click", () => run(true));
+        group.querySelector(".batch-reject").addEventListener("click", () => run(false));
+      });
       // Пока агент работает – обновляем окно, чтобы видеть ход.
       if (running) setTimeout(() => document.getElementById("modal-overlay") && body.isConnected && draw(), 3000);
     };
@@ -559,6 +593,7 @@ const Pages = {
       <div class="modal-actions">
         <a class="step-btn primary" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
         <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
+        <label class="check small" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом</label>
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn">Сохранить</button>
       </div>`;
@@ -576,6 +611,18 @@ const Pages = {
         : sync.pending ? "колода Anki переименуется, когда Anki откроется" : "колода Anki переименована";
     };
     saveButton.addEventListener("click", save);
+    body.querySelector("#info-translate").addEventListener("click", async (e) => {
+      const batch = body.querySelector("#info-batch").checked;
+      try {
+        await Api.agentRun({ project: id, batch });
+        e.target.disabled = true;
+        body.querySelector("#info-note").textContent = batch
+          ? "Заявка отправлена – переводы появятся в окне «Перевод», когда OpenRouter их вернёт"
+          : "Перевод запущен – предложения появятся в окне «Перевод»";
+      } catch (err) {
+        body.querySelector("#info-note").textContent = err.message;
+      }
+    });
   },
 
   // -- обработка (этап 1) --------------------------------------------------------------
