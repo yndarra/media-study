@@ -109,9 +109,11 @@ const Picker = {
       const item = e.target.closest(".picker-item");
       if (item) choose(item.dataset.value);
     });
-    document.addEventListener("mousedown", (e) => {
+    // Нажатие где угодно вне списка закрывает его. pointerdown в фазе перехвата –
+    // приходит всегда (дорожка и другие элементы гасят обычный mousedown).
+    document.addEventListener("pointerdown", (e) => {
       if (!root.contains(e.target)) close();
-    });
+    }, true);
     root.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && !list.classList.contains("hidden")) {
         e.stopPropagation();

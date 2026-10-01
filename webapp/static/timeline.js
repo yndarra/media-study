@@ -172,10 +172,10 @@ const Timeline = {
   },
 
   _drawGhost(x) {
-    const [tt] = this.TRACK;
-    const [bt] = this.BOUND_ROW;
+    // Только в пределах дорожки (не заходит в ряд треугольников границ).
+    const [tt, tb] = this.TRACK;
     this.ctx.fillStyle = "rgba(150, 150, 170, 0.55)"; // как волна вне отрезка
-    this.ctx.fillRect(x - 0.75, tt, 1.5, bt - tt);
+    this.ctx.fillRect(x - 0.75, tt, 1.5, tb - tt);
   },
 
   _drawBound(x, selected) {
