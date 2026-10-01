@@ -1403,3 +1403,7 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 .card > .muted.small { margin-top: 10px; margin-bottom: 2px; }
 .card { padding-top: 12px; }
 .card-title + .progress, .card-title + .card-status, .card-title + .muted { margin-top: 10.86px; }
+/* Снизу под "Местом на диске" – на 1 px меньше (13 px); у карточки с кнопкой
+   нижнее поле тоже на 1 px меньше – высоты карточек по-прежнему равны. */
+.card > .muted.small { margin-bottom: 1px; }
+.card:has(> .card-action) { padding-bottom: 11px; }
