@@ -14,7 +14,18 @@ const State = {
   project: null, // код открытого в редакторе видео
   view: null, // открытая страница: videos | video | anki | download | editor
   speed: loadSpeed(), // скорость воспроизведения — общая для всех видео (0.5–2)
+  // Автозапуск: переход к фрагменту, клик/протяжка по дорожке и левая граница
+  // отрезка сразу запускают воспроизведение (кнопка справа от режима остановки).
+  autoPlay: loadAutoPlay(),
 };
+
+function loadAutoPlay() {
+  try {
+    return localStorage.getItem("auto-play") !== "off";
+  } catch (_) {
+    return true;
+  }
+}
 
 // Скорость воспроизведения хранится в браузере и общая для всех видео.
 function loadSpeed() {
@@ -84,6 +95,11 @@ const ICONS = {
   // Остановка на конце отрезка включена / выключена (играть до конца видео).
   segment: '<svg viewBox="0 0 20 20"><path d="M2 10h16"/><rect x="6" y="6" width="8" height="8" rx="1" fill="currentColor"/></svg>',
   fragment: '<svg viewBox="0 0 20 20"><rect x="2" y="6" width="16" height="8" rx="1" fill="currentColor"/></svg>',
+  // Автозапуск включён / выключен: треугольник Play с буквой A (выкл. — перечёркнут).
+  autoOn: '<svg viewBox="0 0 20 20"><path d="M3.5 4.5l8 5.5-8 5.5z" fill="currentColor"/>' +
+    '<path d="M12.5 16.5l2.5-7 2.5 7M13.4 14h3.2" stroke-width="1.4"/></svg>',
+  autoOff: '<svg viewBox="0 0 20 20" opacity="0.55"><path d="M3.5 4.5l8 5.5-8 5.5z" fill="currentColor"/>' +
+    '<path d="M12.5 16.5l2.5-7 2.5 7M13.4 14h3.2" stroke-width="1.4"/><path d="M2.5 17.5l15-15" stroke="#ff6b6b" stroke-width="1.6"/></svg>',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -147,7 +163,7 @@ const App = {
   async go(index) {
     if (!State.manifest) return;
     await this.open(index);
-    Player.replay();
+    if (State.autoPlay) Player.replay();
   },
 
   // После операции на сервере: если остаёмся на том же фрагменте — текущий
@@ -287,7 +303,7 @@ const App = {
 
   renderReadout() {
     const frame = State.currentFrame;
-    $("time-readout").textContent = `${formatClock(frame / fps())} · кадр ${frame}`;
+    $("time-readout").textContent = `${formatClock(frame / fps())} · ${frame}`;
   },
 
   _hasLiveNeighbor(direction) {
@@ -684,6 +700,22 @@ const App = {
     await this.showFragment(result.manifest, f.id);
   },
 
+  updateAutoButton() {
+    const on = State.autoPlay;
+    $("auto-toggle").innerHTML = on ? ICONS.autoOn : ICONS.autoOff;
+    $("auto-toggle").title = on
+      ? "Автозапуск: ВКЛ – переход к фрагменту, клик по дорожке и левая граница отрезка сразу запускают воспроизведение (нажмите, чтобы выключить)"
+      : "Автозапуск: ВЫКЛ – воспроизведение только по Play / Пробелу / W (нажмите, чтобы включить)";
+  },
+
+  toggleAuto() {
+    State.autoPlay = !State.autoPlay;
+    try {
+      localStorage.setItem("auto-play", State.autoPlay ? "on" : "off");
+    } catch (_) {}
+    this.updateAutoButton();
+  },
+
   toggleMode() {
     State.stopAtSegmentEnd = !State.stopAtSegmentEnd;
     this.updateModeButton();
@@ -719,6 +751,8 @@ $("undo-btn").addEventListener("click", () => App.undo());
 $("stage3-btn").addEventListener("click", () => App.queueStage3());
 $("redo-btn").addEventListener("click", () => App.redo());
 $("mode-toggle").addEventListener("click", () => App.toggleMode());
+$("auto-toggle").addEventListener("click", () => App.toggleAuto());
+App.updateAutoButton();
 $("reset-btn").addEventListener("click", () => App.reset());
 $("pad-left-minus").addEventListener("click", () => App.changePadding("left", -1));
 $("pad-left-plus").addEventListener("click", () => App.changePadding("left", 1));

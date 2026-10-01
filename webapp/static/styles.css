@@ -885,3 +885,8 @@ a.card.complete:hover { border-color: rgba(244, 114, 182, 0.5); }
   position: absolute; inset: 0; justify-content: flex-end; pointer-events: none;
 }
 .progress.segmented .seg-right .seg { pointer-events: auto; }
+
+/* Ряд под видео: левая зона занимает всю свою колонку, а время с номером
+   кадра стоит посередине между кнопками слева и статусами по центру. */
+#status-row .group.left { justify-self: stretch; }
+#status-row #time-readout { flex: 1; text-align: center; white-space: nowrap; }

@@ -230,6 +230,9 @@ const Timeline = {
         this.dragging = target;
         this.canvas.setPointerCapture(e.pointerId);
         App.jumpToBound(target);
+        // Нажали / сдвинули левую границу – отпустили, и отрезок играет с
+        // нового начала (правая граница – без воспроизведения).
+        this.playOnUp = target === "start";
         return;
       }
       // Клик ниже дорожки мимо треугольников ничего не делает.
@@ -317,7 +320,8 @@ const Timeline = {
     if (target === "start" || target === "end") App.saveBounds(currentFragment());
     if (this.playOnUp) {
       this.playOnUp = false;
-      if (!Player.playing) Player.togglePlay();
+      // Автозапуск выключен кнопкой – кадр просто остаётся выбранным.
+      if (State.autoPlay && !Player.playing) Player.togglePlay();
     }
   },
 };
