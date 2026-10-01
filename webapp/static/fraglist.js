@@ -25,12 +25,16 @@ const FragList = {
 
   init() {
     this.el = document.getElementById("fraglist-items");
-    const select = document.getElementById("fraglist-filter");
-    select.addEventListener("change", () => {
-      this.filter = select.value;
-      this.lastCurrent = -1;
-      this.render();
-      App.renderNav();
+    this.picker = Picker.create(document.getElementById("fraglist-filter-host"), {
+      id: "fraglist-filter",
+      value: "all",
+      options: this.filterOptions(),
+      onChange: (value) => {
+        this.filter = value;
+        this.lastCurrent = -1;
+        this.render();
+        App.renderNav();
+      },
     });
     this.el.addEventListener("click", (e) => {
       const row = e.target.closest("[data-index]");
@@ -103,9 +107,20 @@ const FragList = {
     return queue.anyTranslated && i < queue.firstUntranslated ? "bg-translated" : "bg-anki";
   },
 
-  visible(f) {
-    if (this.filter === "todo") return !f.exported;
-    if (this.filter === "flagged") return f.anki_flagged && !f.exported;
+  // Пункты фильтра с числом фрагментов в каждом.
+  filterOptions() {
+    const fragments = (State.manifest && State.manifest.fragments) || [];
+    const count = (filter) => fragments.filter((f) => this.visible(f, filter)).length;
+    return [
+      { value: "all", label: "Все фрагменты", count: count("all") },
+      { value: "todo", label: "Требуют доработки", count: count("todo") },
+      { value: "flagged", label: "Вернулись из Anki", count: count("flagged") },
+    ];
+  },
+
+  visible(f, filter = this.filter) {
+    if (filter === "todo") return !f.exported;
+    if (filter === "flagged") return f.anki_flagged && !f.exported;
     return true;
   },
 
@@ -165,7 +180,13 @@ const FragList = {
         }));
       }
     }
-    document.getElementById("fraglist-count").textContent = String(shownRows.length);
+    // Числа в фильтре – обновить, если поменялись.
+    const options = this.filterOptions();
+    const counts = options.map((o) => o.count).join(",");
+    if (this.picker && counts !== this.lastCounts) {
+      this.lastCounts = counts;
+      this.picker.setOptions(options);
+    }
     // Текущий фрагмент держим в поле зрения, но только когда он сменился —
     // иначе список дёргался бы при любой правке.
     if (this.lastCurrent !== State.fragmentIndex) {

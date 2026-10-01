@@ -1312,11 +1312,8 @@ const Pages = {
     const field = (id, label, control, hint) =>
       `<div class="field"><label class="field-label" for="${id}">${label}</label>${control}` +
       (hint ? `<div class="field-hint">${hint}</div>` : "") + "</div>";
-    const quality = [[0, "Лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
-      .map(([h, name]) => `<option value="${h}" ${Number(s.download_max_height) === h ? "selected" : ""}>${name}</option>`).join("");
-    const modelField = (id, pickId, listId, label, value, hint) => field(id, label,
-      `<div class="secret-row picker"><input id="${id}" class="wide" value="${escapeHtml(value || "")}" placeholder="anthropic/claude-sonnet-5.5">` +
-      `<button id="${pickId}" class="icon-btn" title="Выбрать из списка">▾</button><div id="${listId}" class="model-list hidden"></div></div>`, hint);
+    // Выпадающие списки (picker.js) ставятся в эти места после разметки.
+    const modelField = (id, label, hint) => field(id, label, `<div class="picker-host" data-for="${id}"></div>`, hint);
     // Настройки – карточками по темам; кнопки – внизу справа.
     el.innerHTML = `<h1>Настройки</h1>
       <p class="muted small page-note">Общие для всех видео. Изменения применяются после «Сохранить».</p>
@@ -1335,7 +1332,7 @@ const Pages = {
         </section>
         <section class="set-card">
           <h2>Добавление видео</h2>
-          ${field("set-quality", "Качество скачивания", `<select id="set-quality">${quality}</select>`,
+          ${field("set-quality", "Качество скачивания", '<div class="picker-host" data-for="set-quality"></div>',
             "Для видео, добавленных по ссылке; клипы для Anki режутся из скачанного")}
           <div class="field"><label class="check"><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> Сразу обрабатывать</label></div>
         </section>
@@ -1344,14 +1341,33 @@ const Pages = {
           ${field("set-key", "Ключ", `<div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div>`,
             "Для перевода и поиска источников")}
           <div class="field-row">
-            ${modelField("set-model", "set-model-pick", "model-list", "Модель перевода", s.openrouter_model,
+            ${modelField("set-model", "Модель перевода",
               "Своя (идентификатор на OpenRouter) или из списка; цена – $ за миллион токенов (вход / выход)")}
-            ${modelField("set-search-model", "set-search-pick", "search-model-list", "Модель поиска", s.search_model,
+            ${modelField("set-search-model", "Модель поиска",
               "Ищет источники текста для сверки (с веб-поиском); запросов мало – лучше сильная модель")}
           </div>
         </section>
       </div>
-      <div class="settings-actions"><button id="settings-cancel" class="step-btn">Отменить</button><button id="settings-save" class="step-btn primary">Сохранить</button></div>`;
+      <div class="settings-actions"><span id="settings-note" class="muted small"></span><button id="settings-cancel" class="step-btn">Отменить</button><button id="settings-save" class="step-btn primary">Сохранить</button></div>`;
+    const host = (id) => el.querySelector(`.picker-host[data-for="${id}"]`);
+    Picker.create(host("set-quality"), {
+      id: "set-quality",
+      value: String(Number(s.download_max_height) || 0),
+      options: [[0, "Лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
+        .map(([h, label]) => ({ value: String(h), label })),
+    });
+    // Модели OpenRouter: по компании, внутри – по цене (дешевле – выше); список
+    // общий для обоих полей, грузится при первом открытии.
+    let modelsPromise = null;
+    const loadModels = () => (modelsPromise ||= Api.openrouterModels().then((models) => models.map((m) => ({
+      value: m.id, label: m.id, group: m.provider, hint: `$${m.prompt} / $${m.completion}`,
+    }))));
+    for (const id of ["set-model", "set-search-model"]) {
+      Picker.create(host(id), {
+        id, editable: true, load: loadModels, placeholder: "anthropic/claude-sonnet-5.5",
+        value: (id === "set-model" ? s.openrouter_model : s.search_model) || "",
+      });
+    }
     // Заголовок, описание, карточки по очереди, кнопки.
     viewEnter(el, [el.querySelector("h1"), el.querySelector(".page-note"), ...el.querySelectorAll(".set-card"), el.querySelector(".settings-actions")]);
     const showDeckSync = (state) => {
@@ -1375,36 +1391,13 @@ const Pages = {
       const input = document.getElementById("set-key");
       input.type = input.type === "password" ? "text" : "password";
     });
-    // Выбор модели из списка OpenRouter (кнопка ▾ справа от поля).
-    const modelPicker = (buttonId, listId, inputId) => {
-      const list = document.getElementById(listId);
-      document.getElementById(buttonId).addEventListener("click", async () => {
-        if (!list.classList.contains("hidden")) {
-          list.classList.add("hidden");
-          return;
-        }
-        list.classList.remove("hidden");
-        list.innerHTML = '<div class="muted small">Загрузка…</div>';
-        try {
-          const models = await Api.openrouterModels();
-          list.innerHTML = models.map((m) =>
-            `<div class="model-item" data-id="${escapeHtml(m.id)}"><span>${escapeHtml(m.id)}</span><span class="muted small">$${m.prompt} / $${m.completion}</span></div>`).join("");
-          list.querySelectorAll(".model-item").forEach((item) => item.addEventListener("click", () => {
-            const input = document.getElementById(inputId);
-            input.value = item.dataset.id;
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            list.classList.add("hidden");
-          }));
-        } catch (err) {
-          list.innerHTML = `<div class="muted small">Не удалось загрузить список: ${escapeHtml(err.message)}</div>`;
-        }
-      });
-    };
-    modelPicker("set-model-pick", "model-list", "set-model");
-    modelPicker("set-search-pick", "search-model-list", "set-search-model");
     cancelButton.addEventListener("click", () => watcher.restore());
     const saveSettings = async () => {
-      const saved = await Api.saveSettings({
+      const note = document.getElementById("settings-note");
+      note.textContent = "";
+      let saved;
+      try {
+        saved = await Api.saveSettings({
         anki_deck_root: document.getElementById("set-deck").value.trim(),
         context_padding_seconds: Number(document.getElementById("set-padding").value),
         download_max_height: Number(document.getElementById("set-quality").value),
@@ -1412,11 +1405,22 @@ const Pages = {
         openrouter_key: document.getElementById("set-key").value.trim(),
         openrouter_model: document.getElementById("set-model").value.trim(),
         search_model: document.getElementById("set-search-model").value.trim(),
-      });
+        });
+      } catch (err) {
+        let message = err.message;
+        try {
+          message = JSON.parse(message).detail;
+        } catch (_) {}
+        note.textContent = cap(message);
+        note.classList.add("error");
+        throw err;
+      }
+      note.classList.remove("error");
       watcher.snapshot();
       watchDeckSync(saved.deck_sync);
     };
-    saveButton.addEventListener("click", saveSettings);
+    // Ошибка (например, модели нет на OpenRouter) уже показана слева от кнопок.
+    saveButton.addEventListener("click", () => saveSettings().catch(() => {}));
     // Для вопроса при уходе со страницы (Router.route).
     this.settingsGuard = { isDirty: () => watcher.isDirty(), save: saveSettings, restore: () => watcher.restore() };
   },

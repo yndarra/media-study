@@ -179,12 +179,8 @@
   <aside id="fraglist" class="sidebar hidden">
     <div class="fraglist-head">
       <button class="panel-close" data-toggle="right" title="Скрыть список фрагментов"><svg viewBox="0 0 20 20"><path d="M8 5l5 5-5 5"/></svg></button>
-      <select id="fraglist-filter">
-        <option value="all">Все фрагменты</option>
-        <option value="todo">Требуют доработки</option>
-        <option value="flagged">Вернулись из Anki</option>
-      </select>
-      <span id="fraglist-count" class="muted small"></span>
+      <!-- Фильтр (свой выпадающий список, picker.js); слева от подписи – сколько фрагментов. -->
+      <div id="fraglist-filter-host"></div>
     </div>
     <div id="fraglist-items"></div>
   </aside>
@@ -196,6 +192,7 @@
   <script src="/player.js"></script>
   <script src="/textedit.js"></script>
   <script src="/fraglist.js"></script>
+  <script src="/picker.js"></script>
   <script src="/pages.js"></script>
   <script src="/app.js"></script>
 </body>

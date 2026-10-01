@@ -1171,3 +1171,57 @@ body.right-closed #fraglist:not(.hidden), body.right-closing #fraglist:not(.hidd
 /* Шапка списка фрагментов: кнопка сворачивания такая же, как у меню. */
 .fraglist-head .panel-close { flex: none; }
 #fraglist-count { white-space: nowrap; margin-left: auto; }
+
+/* ---- Выпадающий список (picker.js) ---- */
+.picker { position: relative; display: flex; gap: 4px; align-items: stretch; width: 100%; }
+.picker-field {
+  flex: 1; min-width: 0; box-sizing: border-box; height: 32px; padding: 0 10px;
+  display: flex; align-items: center; background: #18181d; color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; font: 14px var(--font);
+}
+input.picker-field { display: block; line-height: 30px; }
+.picker-display { cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; }
+.picker-display:focus-visible, input.picker-field:focus { outline: 1px solid #2f5f9e; outline-offset: -1px; }
+.picker-btn {
+  flex: none; width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: #18181d; border: 1px solid var(--border); border-radius: 6px; color: var(--dim);
+}
+.picker-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; transition: transform 0.2s ease; }
+.picker.open .picker-btn svg { transform: rotate(180deg); }
+.picker-btn:hover { color: var(--text); }
+.picker-list {
+  position: absolute; top: 36px; left: 0; right: 0; z-index: 30; max-height: 320px; overflow: auto;
+  background: #121216; border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); scrollbar-width: thin;
+}
+.picker-item { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.picker-item:hover { background: #1f1f25; }
+.picker-item.active { background: rgba(47, 95, 158, 0.35); }
+.picker-hint { color: var(--dim); font-size: 12px; white-space: nowrap; }
+.picker-group { padding: 8px 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); }
+.picker-empty { padding: 8px; color: var(--dim); font-size: 13px; }
+.picker-count { display: inline-block; min-width: 2.6em; color: var(--dim); font-variant-numeric: tabular-nums; }
+#settings-note.error { color: #ff7b72; }
+.settings-actions { align-items: center; }
+.settings-actions #settings-note { margin-right: auto; }
+
+/* Шапка списка фрагментов: фильтр – до правого края. */
+#fraglist-filter-host { flex: 1; min-width: 0; }
+.fraglist-head .picker-field { height: 30px; font-size: 13px; }
+.fraglist-head .picker-btn { width: 30px; height: 30px; }
+.fraglist-head .picker-list { top: 34px; }
+
+/* ---- Кнопки сворачивания панелей – просто стрелка, без фона и обводки ---- */
+.panel-close { background: none !important; border: none !important; color: var(--dim); }
+.panel-close:hover { color: var(--text); }
+
+/* ---- Значок в списке фрагментов: от края до значка = от значка до номера ---- */
+.frag-row { padding-left: 6px; gap: 6px; }
+.frag-icon { margin-right: 0; }
+.frag-num { text-align: left; min-width: 28px; }
+
+/* ---- Поля настроек: текст ровно по середине по вертикали ---- */
+#view-settings input:not([type=checkbox]):not([type=hidden]) { padding: 0 10px; line-height: 30px; height: 32px; }
+/* Текст в полях – на полпикселя выше (как в кнопках; замерено). */
+#view-settings input:not([type=checkbox]):not([type=hidden]), input.picker-field { line-height: 29px; padding-bottom: 1px; }
+.picker-display { padding-bottom: 1px; }

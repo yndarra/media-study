@@ -436,6 +436,8 @@ def _deck_sync_state() -> dict:
 _models_cache: dict = {"at": 0.0, "models": []}
 # Кого показывать в списке моделей перевода (остальные можно вписать вручную).
 MODEL_PROVIDERS = ("anthropic/", "openai/", "google/", "deepseek/", "x-ai/", "qwen/", "mistralai/")
+PROVIDER_NAMES = {"anthropic/": "Anthropic", "openai/": "OpenAI", "google/": "Google", "deepseek/": "DeepSeek",
+                  "x-ai/": "xAI", "qwen/": "Qwen", "mistralai/": "Mistral"}
 
 
 @app.get("/api/openrouter/models")
@@ -460,11 +462,13 @@ def openrouter_models():
         prompt, completion = float(pricing.get("prompt") or 0) * 1e6, float(pricing.get("completion") or 0) * 1e6
         if prompt <= 0:
             continue
+        provider = next(p for p in MODEL_PROVIDERS if mid.startswith(p))
         models.append({"id": mid, "name": m.get("name", mid), "prompt": round(prompt, 3), "completion": round(completion, 3),
-                       "created": m.get("created", 0)})
-    # Новые модели — первыми, внутри поставщика.
-    models.sort(key=lambda x: (MODEL_PROVIDERS.index(next(p for p in MODEL_PROVIDERS if x["id"].startswith(p))), -x["created"]))
-    _models_cache.update(at=time.time(), models=models)
+                       "created": m.get("created", 0), "provider": PROVIDER_NAMES.get(provider, provider.rstrip("/"))})
+    # По компании (в порядке MODEL_PROVIDERS), внутри — по цене (вход + выход), дешевле выше.
+    models.sort(key=lambda x: (MODEL_PROVIDERS.index(next(p for p in MODEL_PROVIDERS if x["id"].startswith(p))),
+                               x["prompt"] + x["completion"], x["id"]))
+    _models_cache.update(at=time.time(), models=models, all_ids={m.get("id", "") for m in data})
     return models
 
 
@@ -481,6 +485,18 @@ def update_settings(body: dict):
     запас до/после отрезка применяется ко всем видео — к фрагментам, которые
     ещё не просмотрены (после скрытой метки); просмотренные не меняются.
     """
+    # Модели должны быть на OpenRouter (вписанную вручную с опечаткой не сохраняем).
+    wanted = [(name, (body.get(field) or "").strip()) for field, name in
+              (("openrouter_model", "перевода"), ("search_model", "поиска"))]
+    if any(value for _, value in wanted):
+        try:
+            openrouter_models()
+            known = _models_cache.get("all_ids") or set()
+        except HTTPException:
+            known = set()  # OpenRouter не отвечает — не мешаем сохранить
+        for name, value in wanted:
+            if value and known and value not in known:
+                raise HTTPException(status_code=400, detail=f"модели {name} «{value}» нет на OpenRouter")
     key = (body.pop("openrouter_key", None) or "").strip()
     if key and key != _openrouter_key():
         path = DATA_DIR / OPENROUTER_KEY_FILE
