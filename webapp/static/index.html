@@ -170,9 +170,14 @@
       <div class="nav-half">
       <div class="nav-mid" id="nav-mid-right">
         <!-- Не озвучено (Rover молчит): в Anki – без видео, только текст с подписью Rover:. -->
-        <button id="unvoiced-btn" class="step-btn unvoiced-btn" title="Реплика не озвучена: в Anki – без видео">
-          <svg viewBox="0 0 20 20"><path d="M3.5 8v4h3l4 3.5v-11l-4 3.5z"/><path d="M13.5 7.5l4 5M17.5 7.5l-4 5"/></svg>Не озвучено
-        </button>
+        <!-- Говорящий в начале фразы: ‹ – из предыдущих фрагментов (ещё раз – раньше),
+             R – Rover (ещё раз – как было), › – из следующих. -->
+        <div class="speaker-btns">
+          <button id="speaker-prev" class="step-btn speaker-btn" title="Говорящий из предыдущих фрагментов (ещё раз – более ранний)">‹</button>
+          <button id="speaker-rover" class="step-btn speaker-btn" title="Говорящий – Rover (ещё раз – как было)">R</button>
+          <button id="speaker-next" class="step-btn speaker-btn" title="Говорящий из следующих фрагментов (ещё раз – более поздний)">›</button>
+        </div>
+        <button id="unvoiced-btn" class="step-btn unvoiced-btn" title="Реплика не озвучена: в Anki – без видео">Не озвучено</button>
       </div>
       <div class="group right">
         <button id="nav-fwd-1" class="step-btn" title="Следующий фрагмент">Вперёд ›</button>

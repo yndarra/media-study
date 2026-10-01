@@ -1381,3 +1381,20 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 
 /* Фаза полос задаётся от часов (pages.js, zebraPhase) – перерисовка не сбрасывает её. */
 .card-action::before { animation-delay: var(--zdelay, 0ms); }
+
+/* Скрытые удалённые символы (кнопки говорящего) – не видны. */
+#cur-text .gone { font-size: 0; }
+
+/* Кнопки говорящего ‹ R › – маленькие, вплотную. */
+.speaker-btns { display: inline-flex; gap: 2px; }
+.speaker-btn { min-width: 26px; padding: 0 6px; font-weight: 600; }
+.unvoiced-btn svg { display: none; }
+
+/* Приближение видео правой кнопкой. */
+#video-wrap { overflow: hidden; }
+.zoom-frame {
+  position: absolute; z-index: 5; pointer-events: none; box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.9); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  animation: modal-in 0.15s ease-out;
+}
+.zoom-frame.fade { opacity: 0; transition: opacity 0.35s ease-in 0.1s, transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1); }

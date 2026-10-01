@@ -113,6 +113,65 @@ const ICONS = {
 
 const $ = (id) => document.getElementById(id);
 
+// Приближение видео правой кнопкой (только для текущего фрагмента, не
+// сохраняется): вокруг точки появляется рамка в 1.7 раза меньше кадра (у края –
+// прижимается к нему), затем рамка вместе с содержимым растягивается на весь
+// плеер. Правая кнопка ещё раз – обратно. Остальное в редакторе работает как
+// обычно.
+const Zoom = {
+  SCALE: 1.7,
+  fragmentId: null,
+
+  targets() {
+    return [$("video"), $("freeze")];
+  },
+
+  toggle(e) {
+    if (this.fragmentId && currentFragment() && this.fragmentId === currentFragment().id) return this.reset();
+    const wrap = $("video-wrap");
+    const rect = wrap.getBoundingClientRect();
+    // Сама картинка внутри плеера (без чёрных полей по бокам/сверху).
+    const video = $("video");
+    const ratio = video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : rect.width / rect.height;
+    const cw = Math.min(rect.width, rect.height * ratio);
+    const ch = cw / ratio;
+    const cx = (rect.width - cw) / 2;
+    const cy = (rect.height - ch) / 2;
+    const w = cw / this.SCALE;
+    const h = ch / this.SCALE;
+    const x = clamp(e.clientX - rect.left - w / 2, cx, cx + cw - w);
+    const y = clamp(e.clientY - rect.top - h / 2, cy, cy + ch - h);
+    this.fragmentId = currentFragment() ? currentFragment().id : null;
+    // Рамка-"скриншот"...
+    const frame = document.createElement("div");
+    frame.className = "zoom-frame";
+    Object.assign(frame.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+    wrap.appendChild(frame);
+    // Рамка (x, y) после увеличения встаёт ровно на место картинки (cx, cy).
+    const transform = `translate(${cx - x * this.SCALE}px, ${cy - y * this.SCALE}px) scale(${this.SCALE})`;
+    // ...затем она и содержимое растягиваются на весь плеер.
+    setTimeout(() => {
+      for (const el of [...this.targets(), frame]) {
+        el.style.transformOrigin = "0 0";
+        el.style.transition = "transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1)";
+        el.style.transform = transform;
+      }
+      // Рамка гаснет, пока растягивается.
+      frame.style.transition += ", opacity 0.3s ease-in 0.1s";
+      frame.style.opacity = "0";
+      setTimeout(() => frame.remove(), 450);
+    }, 180);
+  },
+
+  reset(instant = false) {
+    this.fragmentId = null;
+    for (const el of this.targets()) {
+      el.style.transition = instant ? "none" : "transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1)";
+      el.style.transform = "";
+    }
+  },
+};
+
 // Шаг кнопок запаса ±3 с (совпадает с PADDING_STEP_SECONDS на сервере).
 const PADDING_STEP_SECONDS = 3;
 
@@ -160,7 +219,10 @@ const App = {
     State.selected = "playhead";
     // Звук окна фрагмента — заранее, чтобы Play зазвучал без задержки.
     AudioEngine.load(f).catch(() => {});
-    // При любом открытии текущий кадр стоит на начале отрезка.
+    // При любом открытии текущий кадр стоит на начале отрезка; приближение –
+    // только для того фрагмента, где его включили.
+    if (Zoom.fragmentId && Zoom.fragmentId !== f.id) Zoom.reset(true);
+    if (this.speakerState && this.speakerState.id !== f.id) this.speakerState = null;
     Player.jumpTo(f.algo_start_frame);
     this.renderAll(true);
     this.refreshHistory();
@@ -300,7 +362,8 @@ const App = {
     // Цвет правки (удалён – красный, изменён – жёлтый, не озвучен – бирюзовый,
     // принят без правок – синий) важнее фона этапа Anki (зелёный/розовый);
     // вернувшийся из Anki – фиолетовый.
-    const editKind = stage === "bg-returned" ? "" : FragList.editClass(f, State.fragmentIndex, FragList._reviewed());
+    let editKind = stage === "bg-returned" ? "" : FragList.editClass(f, State.fragmentIndex, FragList._reviewed());
+    if (editKind && editKind !== "deleted" && isUnvoiced(f)) editKind = "unvoiced"; // бирюзовый важнее жёлтого и синего
     for (const kind of ["accepted", "changed", "unvoiced"]) {
       document.body.classList.toggle(`frag-edit-${kind}`, inEditor && !deleted && editKind === kind);
     }
@@ -406,6 +469,7 @@ const App = {
     const unvoiced = isUnvoiced(f);
     $("unvoiced-btn").classList.toggle("on", unvoiced);
     $("unvoiced-btn").disabled = isLocked(f);
+    for (const id of ["speaker-prev", "speaker-rover", "speaker-next"]) $(id).disabled = isLocked(f);
     $("unvoiced-btn").title = unvoiced
       ? "Отмечено: реплика не озвучена – в Anki без видео, только текст (нажмите, чтобы снять)"
       : "Отметить: реплика не озвучена – в Anki без видео, только текст";
@@ -782,6 +846,60 @@ const App = {
     this.renderStatus(f);
   },
 
+  // Кнопки говорящего (‹ R ›). Для текущего фрагмента помним исходный текст
+  // (до первого нажатия) и "смещение": 0 – как было, −k – k-й говорящий из
+  // предыдущих фрагментов (по порядку назад, без повторов), +k – из следующих;
+  // R – Rover поверх (ещё раз – снять). Нажатия складываются: 3 раза ‹ и 3
+  // раза › – снова как было.
+  speakerState: null,
+
+  _speakersAround(direction) {
+    const fragments = State.manifest.fragments;
+    const own = this._speakerOf(currentFragment().text);
+    const names = [];
+    for (let i = State.fragmentIndex + direction; i >= 0 && i < fragments.length; i += direction) {
+      const lines = (fragments[i].text || "").split("\n");
+      for (const line of direction < 0 ? lines.reverse() : lines) {
+        const m = line.match(/^\s*([A-Z][\w .'’-]{0,50}):/);
+        if (m && m[1] !== own && !names.includes(m[1])) names.push(m[1]);
+      }
+      if (names.length >= 20) break;
+    }
+    return names;
+  },
+
+  _speakerOf(text) {
+    const m = (text || "").match(/^\s*([A-Z][\w .'’-]{0,50}):/);
+    return m ? m[1] : "";
+  },
+
+  async changeSpeaker(action) {
+    const f = currentFragment();
+    if (!f || isLocked(f)) return;
+    let st = this.speakerState;
+    if (!st || st.id !== f.id) {
+      st = this.speakerState = { id: f.id, tokens: TextEditor.tokens.map((t) => ({ ...t })), offset: 0, rover: false };
+    }
+    if (action === "rover") st.rover = !st.rover;
+    else {
+      st.offset += action === "prev" ? -1 : 1;
+      st.rover = false;
+    }
+    let name = null; // null – как было
+    if (st.rover) name = "Rover";
+    else if (st.offset < 0) name = this._speakersAround(-1)[-st.offset - 1] ?? null;
+    else if (st.offset > 0) name = this._speakersAround(1)[st.offset - 1] ?? null;
+    if (name === null && st.offset !== 0 && !st.rover) {
+      st.offset += action === "prev" ? 1 : -1; // дальше говорящих нет – остаёмся
+      return;
+    }
+    TextEditor.tokens = st.tokens.map((t) => ({ ...t }));
+    const caret = name === null ? 0 : TextEditor.setSpeaker(name);
+    const el = $("cur-text");
+    el.focus();
+    this.onTokensChanged(name === null ? TextEditor.tokens.length : caret);
+  },
+
   // Кнопка "Не озвучено": переключить отметку (отменяется Ctrl+Z).
   async toggleUnvoiced() {
     const f = currentFragment();
@@ -801,7 +919,8 @@ const App = {
     const f = currentFragment();
     const result = await this._call(f.status === "active" ? Api.softDelete(f.id) : Api.restore(f.id));
     if (!result) return;
-    await this.showFragment(result.manifest, f.id);
+    // Пока сервер отвечал, могли уже перейти дальше (S, сразу D) – остаёмся там.
+    await this.showFragment(result.manifest, currentFragment() ? currentFragment().id : f.id);
   },
 
   async deleteHard() {
@@ -915,6 +1034,15 @@ $("merge-next").addEventListener("click", () => App.merge("next"));
 $("split-btn").addEventListener("click", () => App.split());
 $("delete-soft").addEventListener("click", () => App.deleteSoft());
 $("unvoiced-btn").addEventListener("click", () => App.toggleUnvoiced());
+$("video-wrap").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  Zoom.toggle(e);
+});
+for (const [id, action] of [["speaker-prev", "prev"], ["speaker-rover", "rover"], ["speaker-next", "next"]]) {
+  // mousedown не уводит фокус из текста; сам клик – смена говорящего.
+  $(id).addEventListener("mousedown", (e) => e.preventDefault());
+  $(id).addEventListener("click", () => App.changeSpeaker(action));
+}
 $("delete-hard").addEventListener("click", () => App.deleteHard());
 
 // Скорость: шаг 0.1× от 0.5× до 2× (округление убирает накопление 0.30000000000000004).

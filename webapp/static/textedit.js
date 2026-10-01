@@ -22,6 +22,10 @@
 // посимвольным сравнением, поэтому после перезагрузки страницы красное и
 // зелёное снова видны. Своя история правок — Ctrl+Z / Ctrl+Shift+Z.
 //
+// Скрытые удалённые (hidden): исходные символы, убранные кнопками
+// говорящего (‹ R ›) — они не краснеют, а пропадают из вида; в разметке —
+// "x". На экране — пустой символ нулевой ширины (позиции каретки не сбиваются).
+//
 // Отдельно — голубой: исходные символы из участков, записанных НА СЛУХ
 // (f.heard_ranges — диапазоны в original_text; текст не из Notion и т.п.).
 // Это подсказка "проверь", а не правка: исправленное становится зелёным,
@@ -115,9 +119,9 @@ const TextEditor = {
         tokens.push({ ch: original[i], kind: ORIG, heard: !!heard[i] });
         i++;
         j++;
-      } else if (kind === "d") {
+      } else if (kind === "d" || kind === "x") {
         if (i >= original.length) return null;
-        tokens.push({ ch: original[i], kind: DEL, heard: !!heard[i] });
+        tokens.push({ ch: original[i], kind: DEL, heard: !!heard[i], hidden: kind === "x" });
         i++;
       } else if (kind === "i") {
         if (j >= text.length) return null;
@@ -132,7 +136,7 @@ const TextEditor = {
 
   // Разметка для сохранения (см. fromMarks).
   marks() {
-    return this.tokens.map((t) => (t.kind === ORIG ? "o" : t.kind === INS ? "i" : "d")).join("");
+    return this.tokens.map((t) => (t.kind === ORIG ? "o" : t.kind === INS ? "i" : t.hidden ? "x" : "d")).join("");
   },
 
   // Текст поменяли не набором (очистка пробелов при выходе из поля, составной
@@ -203,10 +207,38 @@ const TextEditor = {
     for (let k = from; k < to; k++) {
       const token = this.tokens[k];
       if (token.kind === INS) continue;
-      kept.push({ ch: token.ch, kind: DEL, heard: !!token.heard });
+      kept.push({ ch: token.ch, kind: DEL, heard: !!token.heard, hidden: !!token.hidden });
     }
     this.tokens.splice(from, to - from, ...kept);
     return kept.length;
+  },
+
+  // Говорящий в начале первой строки ("Имя: "): прежний убирается совсем
+  // (набранный — пропадает, исходный — скрытым удалённым), новый вставляется
+  // зелёным; name пустое — просто убрать. Возвращает позицию каретки сразу
+  // после вставленного.
+  setSpeaker(name) {
+    // Видимые символы первой строки и их токены.
+    const visible = [];
+    for (let k = 0; k < this.tokens.length; k++) {
+      const t = this.tokens[k];
+      if (t.kind === DEL) continue;
+      if (t.ch === "\n") break;
+      visible.push(k);
+    }
+    const line = visible.map((k) => this.tokens[k].ch).join("");
+    const match = line.match(/^([A-Z][\w .'’-]{0,50}):[ \t]*/);
+    const drop = new Set(match ? visible.slice(0, match[0].length) : []);
+    const result = [];
+    this.tokens.forEach((t, k) => {
+      if (!drop.has(k)) result.push(t);
+      else if (t.kind === ORIG) result.push({ ch: t.ch, kind: DEL, heard: !!t.heard, hidden: true });
+    });
+    // Новое имя – перед первым видимым символом строки (после скрытых/удалённых в начале).
+    let at = 0;
+    while (at < result.length && result[at].kind === DEL) at++;
+    this.tokens = result;
+    return name ? this.insert(at, `${name}: `) : at;
   },
 
   // Ввод строки в позицию at. Возвращает новую позицию каретки.
@@ -222,6 +254,7 @@ const TextEditor = {
 
   // Удалённый перенос строки показывается красным знаком "↵", иначе его не видно.
   _shown(token) {
+    if (token.kind === DEL && token.hidden) return "\u200B";
     return token.kind === DEL && token.ch === "\n" ? "↵" : token.ch;
   },
 
@@ -235,11 +268,18 @@ const TextEditor = {
       // Кусок — подряд идущие токены одного вида (у исходных — и одной
       // отметки "на слух").
       const heardChunk = tokens[i].kind === ORIG && !!tokens[i].heard;
-      while (j < tokens.length && tokens[j].kind === tokens[i].kind && (tokens[i].kind !== ORIG || !!tokens[j].heard === heardChunk)) {
+      const hiddenChunk = tokens[i].kind === DEL && !!tokens[i].hidden;
+      while (j < tokens.length && tokens[j].kind === tokens[i].kind && (tokens[i].kind !== ORIG || !!tokens[j].heard === heardChunk)
+        && (tokens[i].kind !== DEL || !!tokens[j].hidden === hiddenChunk)) {
         chunk += this._shown(tokens[j]);
         j++;
       }
-      if (tokens[i].kind === ORIG && heardChunk) {
+      if (hiddenChunk) {
+        const span = document.createElement("span");
+        span.className = "gone";
+        span.textContent = chunk;
+        el.appendChild(span);
+      } else if (tokens[i].kind === ORIG && heardChunk) {
         const span = document.createElement("span");
         span.className = "heard";
         span.textContent = chunk;
