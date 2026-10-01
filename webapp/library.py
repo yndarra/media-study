@@ -249,10 +249,20 @@ def summary(project_dir: Path) -> dict:
         from phase1_ingest.acquire import master_path
 
         added = master_path(project_dir) is not None and not phase1_running(project_dir)
+        # Что сделает "Обработать" (готовые шаги не переделываются).
+        if master_path(project_dir) is None:
+            next_step = "Докачать и обработать"
+        elif not (project_dir / "source.mp4").exists():
+            next_step = "Обработать"
+        elif not (project_dir / "raw" / "whisper_transcript.json").exists():
+            next_step = "Обработать речь"
+        else:
+            next_step = "Нарезать на фразы"
         failed = (progress.get("step") == "failed") and not phase1_running(project_dir)
         return {
             **base,
             "state": "failed" if failed else "added" if added else "processing",
+            "next_step": next_step,
             "status": progress["label"] if (failed or not added) else "Добавлено, ждёт обработки",
             "percent": progress["percent"] if not (added or failed) else None,
             "step": progress.get("step") if not added else None,

@@ -210,6 +210,17 @@ function progressBar(done, total, label, cls = "") {
     `<span class="progress-label">${escapeHtml(label)}</span></div>`;
 }
 
+// Подсветка карточки в "Обработке", пока видео обрабатывается: скачивание
+// (рыжая полоса) – красноватая, шаг с синей полосой – синяя, самое начало
+// (полосы ещё нет) – зеленоватая, остальные шаги – желтоватая.
+function procState(v) {
+  if (v.state !== "processing") return "";
+  if (v.step === "download") return " proc-red";
+  if (v.percent !== null && v.percent !== undefined) return " proc-blue";
+  if (["search", "agent_search", "segment", "assets"].includes(v.step)) return " proc-yellow";
+  return " proc-green";
+}
+
 // Оформление карточки видео по этапу (фон-градиент и обводка):
 //   фиолетовое – есть хоть один фрагмент, вернувшийся из Anki (с флагом), на
 //   любом этапе; розовое – переведено всё (100%); зелёное – всё в Anki, идёт
@@ -1355,12 +1366,13 @@ const Pages = {
       const first = !box.querySelector("a.card");
       renderSmooth(box, sortWithin(groupByAuthor(items, byProcessing), byPercent).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
-          `<a class="card" href="#/process/${encodeURIComponent(v.id)}">` +
+          // Как карточка в "Видео": название (до 2 строк), под ним – строка
+          // состояния (как "Место на диске") или полоса хода (как кнопка шага).
+          `<a class="card proc-card${procState(v)}" href="#/process/${encodeURIComponent(v.id)}">` +
           cardTitle(v) +
-          ((v.sources || []).length ? `<div class="muted small">Ссылок на текст: ${v.sources.length}</div>` : "") +
-          (v.state === "processing" ? processingBar(v)
-            : v.state === "failed" ? `<div class="card-status failed">${escapeHtml(v.status)}</div>`
-              : `<div class="card-status">Добавлено, ждёт обработки</div>`) +
+          (v.state === "processing" && v.percent !== null && v.percent !== undefined ? processingBar(v)
+            : `<div class="muted small${v.state === "failed" ? " failed" : ""}">${escapeHtml(cap(
+              v.state === "processing" ? v.status || "Обрабатывается" : v.state === "failed" ? v.status : "Добавлено, ждёт обработки"))}</div>`) +
           "</a>").join("") + "</div>",
       ).join(""), first);
       if (first) cardsEnter(box);
@@ -1409,7 +1421,8 @@ const Pages = {
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
       </table>` : ""}
       <div class="modal-actions">
-        ${v.state === "processing" ? '<button class="step-btn process-cancel">Отменить</button>' : '<button class="step-btn primary process-go">Обработать</button>'}
+        ${v.state === "processing" ? '<button class="step-btn process-cancel">Отменить</button>'
+          : `<button class="step-btn primary process-go zebra-host" data-zebra="process" id="process-go"><canvas class="zebra"></canvas><span>${escapeHtml(v.next_step || "Обработать")}</span></button>`}
         <span class="muted small note"></span>
         ${v.state === "processing" ? '<span class="process-status"></span>' : ""}
         <button class="step-btn info-save">Сохранить</button>
@@ -1485,15 +1498,22 @@ const Pages = {
       Modal.close();
     });
     const go = body.querySelector(".process-go");
-    if (go) go.addEventListener("click", async () => {
-      await save();
-      try {
-        await Api.process(id);
+    if (go) {
+      Zebra.start();
+      // Нажали – запуск, кнопка становится "Отменить", окно закрывается.
+      go.addEventListener("click", async () => {
+        await save();
+        try {
+          await Api.process(id);
+        } catch (err) {
+          body.querySelector(".note").textContent = err.message;
+          return;
+        }
+        go.outerHTML = '<button class="step-btn process-cancel">Отменить</button>';
+        Pages.flashId = id;
         Modal.close();
-      } catch (err) {
-        body.querySelector(".note").textContent = err.message;
-      }
-    });
+      });
+    }
   },
 
   // -- добавить -----------------------------------------------------------------------
