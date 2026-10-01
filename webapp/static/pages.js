@@ -182,15 +182,15 @@ function progressBar(done, total, label, cls = "") {
 }
 
 // Оформление карточки видео по этапу (фон-градиент и обводка):
-//   готово (всё переведено) – розовое; идёт перевод или осталось перевести –
-//   бледно-розовое; идёт передача в Anki или всё отредактировано, но не
-//   передано – синее; иначе (идёт правка) – обычное серое.
+//   фиолетовое – есть хоть один фрагмент, вернувшийся из Anki (с флагом), на
+//   любом этапе; розовое – переведено всё (100%); зелёное – всё в Anki, идёт
+//   или осталось перевод; синее – всё отредактировано, передаётся или ждёт
+//   передачи в Anki; иначе (идёт правка) – обычное серое.
 function cardState(v) {
+  if ((v.flagged || 0) + (v.flag_interval || 0) > 0) return " has-returned";
   if (v.complete) return " complete";
-  if (v.translating) return " to-translate";
-  if (v.sending) return " to-send";
-  if (v.ready_to_translate) return " to-translate";
-  if (v.ready_to_send) return " to-send";
+  if (v.translating || v.ready_to_translate) return " to-translate";
+  if (v.sending || v.ready_to_send) return " to-send";
   return "";
 }
 
@@ -411,11 +411,11 @@ function groupBatches(proposals) {
 
 // Строка под полосами (только если есть что сказать): вернулись из Anki,
 // ждут перевода, очередь Anki.
-function videoNotes(v) {
+function videoNotes(v, withDisk = true) {
   const q = v.stage3 || {};
   const queue = q.state === "waiting_anki" ? "Ждёт Anki" : q.notes_left ? `В очереди Anki ${q.notes_left}` : "";
   const parts = [
-    v.disk_total !== undefined ? `Место на диске: ${formatSize(v.disk_total)}` : "",
+    withDisk && v.disk_total !== undefined ? `Место на диске: ${formatSize(v.disk_total)}` : "",
     v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
     v.flag_translation ? `<span class="translation-text">Перевод: ${v.flag_translation}</span>` : "",
     queue ? escapeHtml(queue) : "",
@@ -767,10 +767,23 @@ const Pages = {
       renderSmooth(box, sortWithin(groupByAuthor(items, byPendingWork), byVideoWork).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card${cardState(v)}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
-          videoBars(v) + videoNotes(v) + cardAction(v) +
+          // Кнопка следующего шага – вместо строки "Место на диске".
+          videoBars(v) + (cardAction(v) ? cardAction(v) + videoNotes(v, false) : videoNotes(v)) +
           "</a>").join("") + "</div>",
       ).join(""), first);
       if (first) cardsEnter(box);
+      // Кнопка появилась – раскрывается; исчезла – плавно возвращается строка
+      // "Место на диске" (при первом показе раздела – без анимации).
+      const now = new Map(items.map((v) => [v.id, !!cardAction(v)]));
+      if (!first && this.lastActions) {
+        for (const [vid, has] of now) {
+          if (this.lastActions.get(vid) === has) continue;
+          const card = box.querySelector(`a.card[href="#/video/${CSS.escape(encodeURIComponent(vid))}"]`);
+          const el = card && (has ? card.querySelector(".card-action") : card.querySelector(".muted.small:last-child"));
+          if (el) el.classList.add(has ? "grow-in" : "fade-in");
+        }
+      }
+      this.lastActions = now;
     };
     // Кнопки на карточке ("Передать в Anki", "Перевести"): действие сразу, окно
     // не открывается; кнопка плавно сворачивается, карточка уменьшается.
@@ -1030,6 +1043,12 @@ const Pages = {
         <button id="info-save" class="step-btn">Сохранить</button>
       </div>`;
     autoGrow(body.querySelector("#title-input"));
+    // Над видео идёт процесс (передача в Anki, перевод, пакетная заявка) –
+    // название и автора не меняем.
+    if (v.sending || v.translating) {
+      body.querySelectorAll(".modal-head input, .modal-head textarea").forEach((field) => (field.disabled = true));
+      body.querySelector("#info-save").classList.add("hidden");
+    }
     animateBars(body.querySelector(".modal-bars"));
     const saveButton = body.querySelector("#info-save");
     watcher = formWatch(body.querySelector(".modal-head"), [saveButton]);
@@ -1114,7 +1133,8 @@ const Pages = {
       const st = state.status || {};
       waitingBatch = (state.batches || []).some((j) => j.project === id);
       running = waitingBatch || (st.state === "running" && st.project === id && Date.now() / 1000 - st.updated < 300);
-      batchBox.checked = waitingBatch || (running ? false : batchBox.checked);
+      // Пока идёт переключение (сразу ↔ пакетом) – флажок не трогаем.
+      if (Date.now() > switchingUntil) batchBox.checked = waitingBatch || (running ? false : batchBox.checked);
       translateButton.textContent = running ? "Остановить" : label;
       translateButton.disabled = !running && untranslated <= 0;
       // Ход перевода – коротко и зелёным (места в строке кнопок немного).
@@ -1153,14 +1173,19 @@ const Pages = {
       }
       setTimeout(refreshTranslate, 800);
     });
+    // Флажок "Пакетом" во время перевода переключает его: снять – пакетная
+    // заявка отменяется и перевод идёт сразу; поставить – идущий перевод
+    // останавливается (готовое сохранено), остальное уходит пакетной заявкой.
+    let switchingUntil = 0;
     batchBox.addEventListener("change", async () => {
-      if (waitingBatch && !batchBox.checked) {
-        await Api.agentStop(id);
-        await Api.agentRun({ project: id, batch: false });
-        note.classList.add("running");
-        setNote("Перевожу сразу", "Пакетная заявка отменена – перевожу сразу");
-        setTimeout(refreshTranslate, 800);
-      }
+      if (!running) return;
+      switchingUntil = Date.now() + 15000;
+      await Api.agentStop(id);
+      await Api.agentRun({ project: id, batch: batchBox.checked });
+      note.classList.add("running");
+      if (batchBox.checked) setNote("Заявка отправлена", "Перевод остановлен, остальное – пакетной заявкой");
+      else setNote("Перевожу сразу", "Пакетная заявка отменена – перевожу сразу");
+      setTimeout(refreshTranslate, 1500);
     });
     refreshTranslate();
   },

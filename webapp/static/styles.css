@@ -901,13 +901,14 @@ a.card.complete:hover { border-color: rgba(244, 114, 182, 0.24); }
 #status-row #time-readout { flex: 1; text-align: center; white-space: nowrap; }
 
 /* Осталось только перевести: тот же розовый градиент, но слабее, и кнопка. */
+/* Всё в Anki, идёт или осталось перевод – зелёное (цвет Anki). */
 a.card.to-translate, .modal.to-translate {
   background:
-    radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.07), transparent 55%),
-    linear-gradient(160deg, #161216, #111115 70%);
-  border-color: rgba(244, 114, 182, 0.08);
+    radial-gradient(120% 160% at 0% 0%, rgba(63, 185, 80, 0.09), transparent 55%),
+    linear-gradient(160deg, #111a14, #111115 70%);
+  border-color: rgba(63, 185, 80, 0.1);
 }
-a.card.to-translate:hover { border-color: rgba(244, 114, 182, 0.2); }
+a.card.to-translate:hover { border-color: rgba(63, 185, 80, 0.22); }
 /* Всё отредактировано, но не всё передано в Anki: то же оформление, синее. */
 a.card.to-send, .modal.to-send {
   background:
@@ -1252,3 +1253,35 @@ body.frag-unvoiced { background: #0f1f1f; }
 /* "Править" во время передачи в Anki – серая, не нажимается. */
 a.step-btn.disabled { opacity: 0.35; pointer-events: none; }
 #info-note.sending { color: #3fb950; }
+
+/* Есть вернувшиеся из Anki фрагменты – фиолетовое. */
+a.card.has-returned, .modal.has-returned {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(163, 113, 247, 0.12), transparent 55%),
+    linear-gradient(160deg, #16121d, #111115 70%);
+  border-color: rgba(163, 113, 247, 0.12);
+}
+a.card.has-returned:hover { border-color: rgba(163, 113, 247, 0.26); }
+
+/* Кнопки следующего шага на карточке – "зебра": полосы цвета и серого под
+   наклоном (как "/"), бегут вперёд с постоянной скоростью. */
+@keyframes zebra-run { from { background-position: 0 0; } to { background-position: 28px 0; } }
+.card-action {
+  background-size: 28px 100%;
+  animation: zebra-run 1.1s linear infinite;
+  border-color: transparent !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+}
+.card-action.send { background-image: repeating-linear-gradient(112deg, #1f6b3b 0 7px, #2b3a30 7px 14px); }
+.card-action.translate { background-image: repeating-linear-gradient(112deg, #a3407a 0 7px, #3a2a33 7px 14px); }
+.card-action.send:hover:not(:disabled), .card-action.translate:hover:not(:disabled) { filter: brightness(1.12); }
+/* Появление кнопки (раскрывается) и возврат строки "Место на диске" (проявляется). */
+@keyframes grow-in { from { height: 0; margin-top: 0; opacity: 0; } to { height: 20px; opacity: 1; } }
+.card-action.grow-in { animation: grow-in 0.3s ease-out, zebra-run 1.1s linear infinite; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in 0.4s ease-out; }
+
+/* Кнопки в строке окна видео – ближе друг к другу. */
+.modal-actions { gap: 8px; }
+.modal-actions label.check { margin-left: 4px; }
+.modal-head input:disabled, .modal-head textarea:disabled { opacity: 0.6; }
