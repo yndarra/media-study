@@ -23,6 +23,11 @@ _TOKEN_RE = re.compile(r"[^a-z0-9']+")
 # Если доля слов ASR фрагмента, совпавших с источником (в том числе
 # нечётко), ниже порога — фрагмент помечается на проверку.
 MIN_REVIEW_RATIO = 0.5
+# Совпадение распознанного с доставшимся куском источника ниже этого — значит,
+# этой реплики в источнике нет (например, в Notion пропущена строка), а к
+# фрагменту прилипли случайные соседние слова источника: текст берётся с
+# распознавания (голубой, "на слух"), источник остаётся в source_text.
+MIN_SOURCE_RATIO = 0.3
 
 
 def _norm(word: str) -> str:
@@ -322,8 +327,14 @@ def assign_source_words(entries: list[dict], asr_words: list[dict], source_words
         if not asr_ids:
             continue
         ratio = sum(asr_matched[i] for i in asr_ids) / len(asr_ids)
-        # Текст — всегда из источника, если фрагменту что-то из него досталось:
-        # имена и термины на слух не пишутся. Низкое совпадение — только пометка.
+        # Текст — из источника, если фрагменту что-то из него досталось: имена и
+        # термины на слух не пишутся. Совпадение низкое — только пометка; совсем
+        # низкое — реплики в источнике нет, текст на слух (см. MIN_SOURCE_RATIO).
+        if entry["source_text"] and ratio < MIN_SOURCE_RATIO and entry.get("text", "").strip():
+            entry["needs_review"] = True
+            entry["review_note"] = f"в источнике не найдено (совпадение {ratio:.0%}) — текст на слух"
+            entry["heard"] = True  # в редакторе — голубым
+            continue
         if entry["source_text"]:
             entry["text"] = entry["source_text"]
         else:

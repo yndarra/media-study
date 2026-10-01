@@ -56,6 +56,15 @@ class TestAssignSourceWords(unittest.TestCase):
         self.assertEqual(self.entries[0]["text"], "Hello there!")
         self.assertFalse(self.entries[0].get("needs_review", False))
 
+    def test_line_missing_from_source_stays_heard(self):
+        # Реплики нет в источнике, к фрагменту прилипло одно случайное слово
+        # соседней строки — текст остаётся распознанным (голубым), а не "ambush".
+        source = [{"word": w, "newline_before": False} for w in ["hello", "there", "ambush"]]
+        assign_source_words(self.entries, self.asr_words, source)
+        self.assertEqual(self.entries[2]["text"], "general kenobi how are")
+        self.assertTrue(self.entries[2]["needs_review"])
+        self.assertTrue(self.entries[2]["heard"])
+
     def test_poor_match_keeps_asr_text_and_flags_review(self):
         source = [{"word": w, "newline_before": False} for w in ["completely", "different", "words"]]
         assign_source_words(self.entries, self.asr_words, source)
