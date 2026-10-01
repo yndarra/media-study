@@ -494,7 +494,7 @@ def activity():
     for item in library.list_projects(DATA_DIR):
         if item["state"] == "processing":
             items.append({
-                "kind": "phase1", "id": item["id"], "title": item["title"], "label": item["status"],
+                "kind": "phase1", "id": item["id"], "title": item["title"], "label": item["status"], "step": item.get("step"),
                 "percent": item.get("percent"), "eta_seconds": None,
             })
         elif item["state"] == "ready":

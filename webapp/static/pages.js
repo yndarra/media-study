@@ -21,12 +21,11 @@ const Panels = {
       const button = e.target.closest("[data-toggle]");
       if (!button) return;
       const side = button.dataset.toggle;
-      const closed = document.body.classList.toggle(`${side}-closed`);
+      const closed = !document.body.classList.contains(`${side}-closed`);
       try {
         localStorage.setItem(`panel-${side}`, closed ? "closed" : "open");
       } catch (_) {}
-      // Ширина редактора поменялась – дорожку надо перерисовать под неё.
-      if (State.view === "editor") requestAnimationFrame(() => (Timeline._resize(), App.renderAll()));
+      PanelMotion.toggle(side, closed);
     });
   },
 };
@@ -184,11 +183,12 @@ function segmentBar(segments, total, name, done) {
     return `<div class="seg ${s.cls}${sl ? " sl" : ""}${sr ? " sr" : ""}" data-w="${w.toFixed(2)}" ` +
       `style="width:${segWidth(w, sl)}" title="${escapeHtml(s.title || "")}"></div>`;
   };
-  return `<div class="progress segmented" data-bar="${escapeHtml(name)}" title="${escapeHtml(`${name} ${done} / ${total}`)}">` +
+  return `<div class="progress segmented" data-bar="${done === null ? "progress" : escapeHtml(name)}" title="${escapeHtml(done === null ? name : `${name} ${done} / ${total}`)}">` +
     `<div class="seg-left">${left.map((s, k) => html(s, k, left, "left")).join("")}</div>` +
     `<div class="seg-right">${right.map((s, k) => html(s, k, right, "right")).join("")}</div>` +
     `<span class="progress-label"><span>${escapeHtml(name)}</span>` +
-    `<span class="progress-count" data-done="${done}" data-total="${total || 0}">${done} / ${total || 0}</span></span></div>`;
+    (done === null ? "" : `<span class="progress-count" data-done="${done}" data-total="${total || 0}">${done} / ${total || 0}</span>`) +
+    "</span></div>";
 }
 
 // Ширина отрезка: со скосом слева он заходит на 6 px под предыдущий.
@@ -535,12 +535,14 @@ document.addEventListener("keydown", (e) => {
 });
 
 // Ход этапа 1: шаг и процент (если шаг умеет его считать).
-// Полоса – синяя, без процентов в подписи (процент виден по заполнению).
+// Полоса хода обработки – как полосы в "Видео" (наклонный край, плавный рост),
+// без чисел: скачивание – рыжая, остальные шаги – синие.
 function processingBar(v) {
   if (v.percent === null || v.percent === undefined) {
     return `<div class="card-status">${escapeHtml(cap(v.status || "Обрабатывается"))}…</div>`;
   }
-  return progressBar(v.percent, 100, cap(v.status), "processing");
+  const cls = v.step === "download" ? "downloading" : "accepted";
+  return segmentBar([{ n: v.percent, cls, title: `${Math.floor(v.percent)}%` }], 100, cap(v.status), null);
 }
 
 // Форма слова по числу: plural(n, "фрагмент", "фрагмента", "фрагментов").
@@ -576,6 +578,58 @@ function byPendingWork(a, b) {
   const work = (list) => list.reduce((sum, v) => sum + (v.awaiting || 0), 0);
   return work(b[1]) - work(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
 }
+
+// Скрыть / показать боковую панель. Страница не "тянется" вслед за панелью
+// (раньше колонки сайта плавно меняли ширину, карточки по дороге
+// растягивались и в конце прыгали): панель уезжает за край, затем раскладка
+// меняется сразу, а содержимое страницы плавно переезжает на новые места
+// (FLIP: из старого положения в новое).
+const PanelMotion = {
+  DURATION: 320,
+
+  // Что переезжает плавно: карточки, заголовки, блоки страниц.
+  _items() {
+    return [...document.querySelectorAll(
+      "#main .view:not(.hidden) :is(.card, .set-card, .group-title, .page-head, .page-note, .settings-actions, #app), " +
+      "#main .view:not(.hidden) > h1")];
+  },
+
+  _flip(change) {
+    const items = this._items();
+    const before = new Map(items.map((el) => [el, el.getBoundingClientRect()]));
+    change();
+    for (const el of items) {
+      const a = before.get(el);
+      const b = el.getBoundingClientRect();
+      const dx = a.left - b.left;
+      const dy = a.top - b.top;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
+      el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+        { duration: this.DURATION, easing: "cubic-bezier(0.22, 0.61, 0.36, 1)" });
+    }
+    // Ширина редактора поменялась – дорожку перерисовать под неё.
+    if (State.view === "editor") requestAnimationFrame(() => (Timeline._resize(), App.renderAll()));
+  },
+
+  toggle(side, close) {
+    const body = document.body;
+    if (close) {
+      // Сначала панель уезжает (место под ней пока остаётся), потом – раскладка.
+      body.classList.add(`${side}-closing`);
+      setTimeout(() => this._flip(() => {
+        body.classList.add(`${side}-closed`);
+        body.classList.remove(`${side}-closing`);
+      }), this.DURATION);
+    } else {
+      // Сразу раскладка (место под панелью), содержимое переезжает; панель въезжает.
+      this._flip(() => {
+        body.classList.add(`${side}-closing`);
+        body.classList.remove(`${side}-closed`);
+      });
+      requestAnimationFrame(() => requestAnimationFrame(() => body.classList.remove(`${side}-closing`)));
+    }
+  },
+};
 
 const Pages = {
   timer: null,
@@ -711,7 +765,7 @@ const Pages = {
         ${proposals.length ? `<div class="modal-actions">
           <button class="step-btn" id="agent-reject">Отклонить отмеченные</button>
           <span class="muted small note"></span>
-          <button class="big-btn" id="agent-approve">Одобрить отмеченные</button>
+          <button class="step-btn primary" id="agent-approve">Одобрить отмеченные</button>
         </div>` : ""}`;
       body.querySelector("#agent-run").addEventListener("click", async () => {
         try {
@@ -1001,14 +1055,14 @@ const Pages = {
         return;
       }
       const first = !box.querySelector("a.card");
-      box.innerHTML = groupByAuthor(items).map(([group, list]) =>
+      renderSmooth(box, groupByAuthor(items).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card" href="#/process/${encodeURIComponent(v.id)}">` +
           cardTitle(v) +
           ((v.sources || []).length ? `<div class="muted small">Ссылок на текст: ${v.sources.length}</div>` : "") +
           (v.state === "processing" ? processingBar(v) : `<div class="card-status">Добавлено, ждёт обработки</div>`) +
           "</a>").join("") + "</div>",
-      ).join("");
+      ).join(""), first);
       if (first) cardsEnter(box);
     };
     this.processRender = render;
@@ -1054,11 +1108,18 @@ const Pages = {
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
       </table>` : ""}
       <div class="modal-actions">
-        ${v.state === "processing" ? "" : '<button class="big-btn process-go">Обработать</button>'}
+        ${v.state === "processing" ? "" : '<button class="step-btn primary process-go">Обработать</button>'}
         <span class="muted small note"></span>
         <button class="step-btn info-save">Сохранить</button>
       </div>`;
     body.querySelectorAll("textarea.grow").forEach(autoGrow);
+    // Над видео идёт работа (скачивание, обработка) – ничего не меняется.
+    if (v.state === "processing") {
+      body.querySelectorAll("input, textarea, select").forEach((field) => (field.disabled = true));
+      const saveBtn = body.querySelector(".info-save");
+      saveBtn.disabled = true;
+      saveBtn.classList.add("hidden");
+    }
     const deep = body.querySelector(".agent-deep");
     const search = body.querySelector(".agent-search");
     const sourcesBox = body.querySelector(".sources-box");
@@ -1303,7 +1364,7 @@ const Activity = {
     box.innerHTML = items.map((a) => {
       const has = a.percent !== null && a.percent !== undefined;
       // Перевод – розовым (как полоса "Переведено"), обработка – синим, Anki – зелёным.
-      const cls = a.kind === "translate" ? "translated" : a.kind === "phase1" ? "accepted" : "ok";
+      const cls = a.kind === "translate" ? "translated" : a.kind === "phase1" ? (a.step === "download" ? "downloading" : "accepted") : "ok";
       const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ${cls}" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
       return `<div class="activity-item" data-key="${escapeHtml(`${a.kind}:${a.id}`)}"><div class="activity-name">${escapeHtml(a.title)}</div>` +
         `<div>${escapeHtml(cap(a.label))}${has ? ` (${Math.floor(a.percent)}%)` : ""}</div>${bar}</div>`;

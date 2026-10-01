@@ -206,7 +206,7 @@ def phase1_status(project_dir: Path) -> dict:
         from common.progress import STEPS
 
         label = STEPS.get(status.get("step"), status.get("label") or "Обрабатывается")
-        return {"label": label[:1].upper() + label[1:], "percent": status.get("percent")}
+        return {"label": label[:1].upper() + label[1:], "percent": status.get("percent"), "step": status.get("step")}
     if (project_dir / "source.tmp.mp4").exists():
         size = (project_dir / "source.tmp.mp4").stat().st_size / 2**30
         return {"label": f"Делаю копию для редактора (записано {size:.1f} ГБ)", "percent": None}
@@ -239,6 +239,7 @@ def summary(project_dir: Path) -> dict:
             "state": "added" if added else "processing",
             "status": progress["label"] if not added else "Добавлено, ждёт обработки",
             "percent": progress["percent"] if not added else None,
+            "step": progress.get("step") if not added else None,
             "sources": settings.get("sources", []),
             "agent": agent_mode(settings.get("agent")),
             "no_gaps": bool(settings.get("no_gaps")),

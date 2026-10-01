@@ -1048,10 +1048,14 @@ label.check .muted { font-size: inherit; margin-left: calc(0.28em - 8px); }
    Колонка плавно сужается до нуля (страница расширяется), а сама панель
    уезжает за край и гаснет. Панель не исчезает (display: none), иначе нечего
    анимировать; ширина у неё своя, чтобы текст не переносился при сжатии. */
-#shell { transition: grid-template-columns 0.32s cubic-bezier(0.22, 0.61, 0.36, 1); overflow-x: clip; }
+#shell { overflow-x: clip; }
 .sidebar { width: var(--side-width); transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s ease; }
-body.left-closed #menu { display: block; transform: translateX(calc(-100% - 2 * var(--side-gap))); opacity: 0; pointer-events: none; }
-body.right-closed #fraglist:not(.hidden) { display: flex; transform: translateX(calc(100% + 2 * var(--side-gap))); opacity: 0; pointer-events: none; }
+body.left-closed #menu, body.left-closing #menu {
+  display: block; transform: translateX(calc(-100% - 2 * var(--side-gap))); opacity: 0; pointer-events: none;
+}
+body.right-closed #fraglist:not(.hidden), body.right-closing #fraglist:not(.hidden) {
+  display: flex; transform: translateX(calc(100% + 2 * var(--side-gap))); opacity: 0; pointer-events: none;
+}
 .panel-open { transition: opacity 0.25s ease; }
 
 /* Итог "Проверки флагов" – по середине кнопки по вертикали. */
@@ -1063,3 +1067,16 @@ body.right-closed #fraglist:not(.hidden) { display: flex; transform: translateX(
 .page-head { margin-bottom: 16px; }
 .page-head h1 { margin: 4px 0 0; }
 .page-head + .page-note { margin-top: 0; }
+
+/* Скачивание – рыжая полоса (в "Обработке" и в сайдбаре). */
+.seg.downloading { background: #b5651d; }
+
+/* Окно "Обработки": первый флажок – дальше от полей названия и автора. */
+.process-form > label.check:first-of-type, .process-form > .progress + label.check,
+.process-form > .card-status + label.check { margin-top: 16px; }
+/* Пока над видео идёт работа – поля и флажки только для просмотра. */
+.modal input:disabled, .modal textarea:disabled { opacity: 0.6; cursor: default; }
+.modal label.check:has(input:disabled) { cursor: default; opacity: 0.7; }
+
+/* Поле "Автор" – такой же белый текст, как "Название" (и в "Видео", и в "Обработке"). */
+.modal .modal-head input:not([type=checkbox]), .modal .modal-head textarea { color: var(--text); }
