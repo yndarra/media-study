@@ -215,14 +215,6 @@ const App = {
     else this.renderAll(true);
   },
 
-  // Горячие клавиши Q/E: текущий кадр — на начало / последний кадр отрезка.
-  moveHead(target) {
-    const f = currentFragment();
-    if (!f) return;
-    Player.jumpTo(target === "start" ? f.algo_start_frame : f.algo_end_frame - 1);
-    this.renderAll();
-  },
-
   // Shift+Q / Shift+E: выделить границу отрезка (её двигают ±1/±10 и
   // стрелки) и перенести на неё текущий кадр. Shift+W — выделить текущий кадр.
   select(target) {
@@ -360,6 +352,8 @@ const App = {
     await this.saveBounds(f);
     // Текущий кадр – на новую границу (последний кадр отрезка для конца).
     App.jumpToBound(side);
+    // Новое начало – как нажатие на левую границу: с автозапуском играет отсюда.
+    if (side === "start" && State.autoPlay && !Player.playing) Player.togglePlay();
   },
 
   _hasLiveNeighbor(direction) {
@@ -509,7 +503,7 @@ const App = {
     if (!result) return;
     State.manifest.settings = result.manifest.settings;
     this.renderNav();
-    this.flash("Всё видео отмечено отредактированным");
+    location.hash = "#/videos";
   },
 
   // Скорость воспроизведения: значение и доступность кнопок на краях диапазона.
@@ -952,10 +946,10 @@ const HOTKEYS = {
   Space: () => Player.togglePlay(), // пауза / воспроизведение
   KeyW: () => Player.replay(), // повтор с начала отрезка
   "Shift+Space": () => Player.replayFromMarker(), // повтор с жёлтой метки (нет метки — ничего)
-  KeyQ: () => App.moveHead("start"), // текущий кадр — на начало отрезка
+  KeyQ: () => App.snapBound("start"), // начало отрезка — к концу предыдущего (кнопка слева)
   "Shift+KeyQ": () => App.select("start"), // выделить начало отрезка
   "Shift+KeyW": () => App.select("playhead"), // выделить текущий кадр
-  KeyE: () => App.moveHead("end"), // текущий кадр — на конец отрезка
+  KeyE: () => App.snapBound("end"), // конец отрезка — к началу следующего (кнопка справа)
   "Shift+KeyE": () => App.select("end"), // выделить конец отрезка
   // Пометить на удаление / снять пометку (как кнопка корзины); переданные в Anki — нельзя.
   KeyS: () => currentFragment() && !isLocked(currentFragment()) && App.deleteSoft(),

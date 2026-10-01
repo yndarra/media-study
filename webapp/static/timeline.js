@@ -126,9 +126,8 @@ const Timeline = {
     const onMarker = hasMarker && s.timeMarkerFrame === s.currentFrame;
     if (hasMarker && !onMarker) {
       const mx = this.frameToX(f, s.timeMarkerFrame);
-      ctx.fillStyle = "#ffc857";
-      ctx.fillRect(mx - 0.75, this.HEAD_ROW[1], 1.5, tb - this.HEAD_ROW[1] + 1);
-      this._triangle(mx, this.HEAD_ROW[0], this.HEAD_ROW[1], "#ffc857", "down");
+      const mc = this._vline(mx, this.HEAD_ROW[1], tb - this.HEAD_ROW[1] + 1, "#ffc857");
+      this._triangle(mc, this.HEAD_ROW[0], this.HEAD_ROW[1], "#ffc857", "down");
     }
 
     // Куда "прилепили" бы границы кнопки у кнопок запаса: серые палки цвета
@@ -142,9 +141,8 @@ const Timeline = {
     this._drawBound(endMarkX, s.selected === "end");
 
     const px = this.frameToX(f, s.currentFrame);
-    ctx.fillStyle = "#ff5050";
-    ctx.fillRect(px - 0.75, this.HEAD_ROW[1], 1.5, tb - this.HEAD_ROW[1] + 1);
-    this._triangle(px, this.HEAD_ROW[0], this.HEAD_ROW[1], onMarker ? "#ffc857" : "#ff5050", "down", s.selected === "playhead");
+    const pc = this._vline(px, this.HEAD_ROW[1], tb - this.HEAD_ROW[1] + 1, "#ff5050");
+    this._triangle(pc, this.HEAD_ROW[0], this.HEAD_ROW[1], onMarker ? "#ffc857" : "#ff5050", "down", s.selected === "playhead");
   },
 
   _drawWaveform(f, sx, ex) {
@@ -174,18 +172,28 @@ const Timeline = {
   _drawGhost(x) {
     // Только в пределах дорожки (не заходит в ряд треугольников границ).
     const [tt, tb] = this.TRACK;
-    this.ctx.fillStyle = "rgba(150, 150, 170, 0.55)"; // как волна вне отрезка
-    this.ctx.fillRect(x - 0.75, tt, 1.5, tb - tt);
+    this._vline(x, tt, tb - tt, "rgba(150, 150, 170, 0.55)"); // как волна вне отрезка
+  },
+
+  // Вертикальная линия ровно по пикселям экрана, одной ширины у всех (текущий
+  // кадр, метка, границы): на дробной координате линии сглаживались
+  // по-разному, и красная казалась сдвинутой относительно синей. Возвращает
+  // центр линии — по нему ставится треугольник.
+  _vline(x, top, height, color) {
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.max(1, Math.round(1.5 * dpr)); // в пикселях экрана
+    const left = Math.round(x * dpr - width / 2);
+    this.ctx.fillStyle = color;
+    this.ctx.fillRect(left / dpr, top, width / dpr, height);
+    return (left + width / 2) / dpr;
   },
 
   _drawBound(x, selected) {
-    const ctx = this.ctx;
-    const [tt, tb] = this.TRACK;
+    const [tt] = this.TRACK;
     const [bt, bb] = this.BOUND_ROW;
     const color = "#5fb4f0";
-    ctx.fillStyle = color;
-    ctx.fillRect(x - 0.75, tt, 1.5, bt - tt);
-    this._triangle(x, bt, bb, color, "up", selected);
+    const center = this._vline(x, tt, bt - tt, color);
+    this._triangle(center, bt, bb, color, "up", selected);
   },
 
   _triangle(x, top, bottom, color, direction, outline = false) {

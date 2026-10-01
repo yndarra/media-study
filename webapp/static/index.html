@@ -151,24 +151,30 @@
       </div>
     </div>
 
+    <!-- Ряд навигации: половины слева и справа от "1 / N" – в каждой кнопки у края
+         и средняя кнопка ровно посередине оставшегося места. -->
     <div id="nav-row" class="nav-grid">
+      <div class="nav-half">
       <div class="group left">
         <button id="nav-back-10" class="step-btn" title="На 10 фрагментов назад">« 10</button>
         <button id="nav-back-1" class="step-btn" title="Предыдущий фрагмент">‹ Назад</button>
       </div>
-      <div class="group stage3">
+      <div class="nav-mid group stage3">
         <span id="stage3-eta" class="readout hidden"></span>
         <button id="stage3-btn" class="step-btn" title="Передать в Anki все фрагменты с первого по текущий включительно">Anki</button>
+      </div>
       </div>
       <div class="group center">
         <span id="position-indicator"></span>
       </div>
-      <div></div>
+      <div class="nav-half">
+      <div class="nav-mid" id="nav-mid-right"></div>
       <div class="group right">
         <button id="nav-fwd-1" class="step-btn" title="Следующий фрагмент">Вперёд ›</button>
         <button id="nav-fwd-10" class="step-btn" title="На 10 фрагментов вперёд">10 »</button>
         <!-- На последнем фрагменте вместо "вперёд" и "10 »": всё видео — отредактировано. -->
         <button id="finish-btn" class="step-btn finish hidden" title="Отметить всё видео отредактированным">Финиш</button>
+      </div>
       </div>
     </div>
   </div>

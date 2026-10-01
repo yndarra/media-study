@@ -1225,3 +1225,15 @@ input.picker-field { display: block; line-height: 30px; }
 /* Текст в полях – на полпикселя выше (как в кнопках; замерено). */
 #view-settings input:not([type=checkbox]):not([type=hidden]), input.picker-field { line-height: 29px; padding-bottom: 1px; }
 .picker-display { padding-bottom: 1px; }
+
+/* Ряд навигации: 1fr | "1 / N" | 1fr; в половинах – кнопки у краёв и средняя
+   кнопка (Anki слева, отметка справа) ровно посередине между ними. */
+.nav-grid { grid-template-columns: 1fr auto 1fr; }
+.nav-half { display: flex; align-items: center; min-width: 0; }
+.nav-mid { flex: 1; display: flex; justify-content: center; align-items: center; gap: 8px; }
+.nav-grid .group.stage3 { justify-self: auto; }
+
+/* Правимая фраза: поле шириной с самую длинную строку (+10 px по бокам), не
+   уже 50 px и не шире места; длиннее – перенос по словам. */
+#cur-text { width: fit-content; min-width: 50px; max-width: 100%; margin: 0 auto; padding: 0 10px; box-sizing: border-box; }
+.nav-grid { column-gap: 0; }
