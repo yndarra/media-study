@@ -133,6 +133,9 @@ DEFAULT_APP_SETTINGS = {
     # Агент перевода (карточки с флагом "перевод"): модель OpenRouter и файл с ключом.
     "openrouter_model": "anthropic/claude-sonnet-5.5",
     "openrouter_key_file": "",
+    # Запасной ключ: когда на основном кончатся деньги (OpenRouter отвечает 402),
+    # запросы переходят на него, и он становится основным.
+    "openrouter_key_file_next": "",
 }
 
 

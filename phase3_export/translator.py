@@ -198,14 +198,36 @@ def request_body(model: str, transcript: str, cards: list[dict], glossary: dict)
     }
 
 
+def _switch_to_next_key(data_dir: Path) -> bool:
+    """Кончились деньги на основном ключе — запасной становится основным (если он есть)."""
+    from webapp.library import app_settings, save_app_settings
+
+    settings = app_settings(data_dir)
+    nxt = settings.get("openrouter_key_file_next") or ""
+    if not nxt or not Path(nxt).exists():
+        return False
+    save_app_settings(data_dir, {"openrouter_key_file": nxt, "openrouter_key_file_next": ""})
+    print("Ключ OpenRouter: деньги кончились — перехожу на запасной ключ", flush=True)
+    return True
+
+
 def _post(data_dir: Path, path: str, body: dict | None = None, method: str = "POST") -> dict:
-    request = urllib.request.Request(
-        API + path, method=method,
-        data=json.dumps(body).encode("utf-8") if body is not None else None,
-        headers={"Authorization": f"Bearer {_key(data_dir)}", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(request, timeout=600) as response:
-        return json.loads(response.read().decode("utf-8"))
+    import urllib.error
+
+    for attempt in range(2):
+        request = urllib.request.Request(
+            API + path, method=method,
+            data=json.dumps(body).encode("utf-8") if body is not None else None,
+            headers={"Authorization": f"Bearer {_key(data_dir)}", "Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            # 402 — на ключе нет денег: тот же запрос — с запасным ключом.
+            if error.code == 402 and attempt == 0 and _switch_to_next_key(data_dir):
+                continue
+            raise
 
 
 def parse_answer(content: str) -> dict:
