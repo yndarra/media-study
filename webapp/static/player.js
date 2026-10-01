@@ -228,12 +228,69 @@ const Player = {
       localStorage.setItem("playback-speed", String(speed));
     } catch (_) {}
     App.renderSpeed();
-    if (!this.playing) return;
-    const frame = clamp(Math.floor(this._audioPosition() * fps() + 1e-6), this.startFrame, this.stopFrame);
-    this._halt();
-    this._unfreeze();
-    this.seekTo(frame);
-    await this._start(frame);
+    if (this.playing) await this._switchSpeed(this._wantedSpeed());
+  },
+
+  // Скорость, с которой сейчас должно играть: 2× при зажатом Shift, иначе выбранная.
+  _wantedSpeed() {
+    return State.boost ? BOOST_SPEED : State.speed;
+  },
+
+  // Сменить скорость на ходу, без паузы: новый (растянутый) звук стартует
+  // ровно с того места, где сейчас старый, старый в тот же момент
+  // останавливается; видео не перематывается — только меняет playbackRate.
+  // Раньше воспроизведение останавливалось и запускалось заново (перемотка
+  // видео + запуск звука) — отсюда был заметный "пролаг".
+  async _switchSpeed(speed) {
+    if (!this.playing || !this.source || Math.abs(speed - this.speed) < 1e-9) return;
+    const f = currentFragment();
+    const token = this.startToken;
+    let audio;
+    let buffer;
+    try {
+      audio = await AudioEngine.load(f);
+      buffer = await AudioEngine.loadAt(f, speed); // обычно уже готов (см. _prepareSpeeds)
+    } catch (err) {
+      App.flash(String(err.message || err));
+      return;
+    }
+    // Пока готовился звук, воспроизведение могли остановить или перезапустить.
+    if (!this.playing || !this.source || token !== this.startToken || currentFragment() !== f) return;
+    const ctx = AudioEngine.context();
+    const when = ctx.currentTime + 0.02;
+    // Место в звуке, которое старый источник сыграет к моменту when.
+    const pos = this.fromSec + Math.max(0, when - this.audioWhen) * this.speed;
+    if (pos >= (this.stopFrame + 1) / fps()) return; // уже доигрывает
+    const old = this.source;
+    old.onended = null;
+    try {
+      old.stop(when);
+    } catch (_) {}
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(when, Math.max(0, pos - audio.startSec) / speed);
+    source.onended = () => {
+      if (this.source === source) this._onAudioEnded();
+    };
+    this.source = source;
+    this.fromSec = pos;
+    this.audioWhen = when;
+    this.speed = speed;
+    this._planStop();
+    // Видео меняет скорость, когда новый звук становится слышен.
+    setTimeout(() => {
+      if (this.source === source) this.video.playbackRate = speed;
+    }, Math.max(0, (when + AudioEngine.latency() - ctx.currentTime) * 1000));
+  },
+
+  // Звук фрагмента для другой скорости (2× на Shift и выбранной) считается
+  // заранее, в свободное время после старта, — переключение потом мгновенное.
+  _prepareSpeeds(f) {
+    const speeds = [BOOST_SPEED, State.speed].filter((v) => Math.abs(v - this.speed) > 1e-9);
+    const run = () => speeds.forEach((v) => AudioEngine.loadAt(f, v).catch(() => {}));
+    if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 1500 });
+    else setTimeout(run, 500);
   },
 
   // Ускорение на зажатый Shift: временная скорость 2×, сохранённая скорость
@@ -246,15 +303,10 @@ const Player = {
     if (!restart) {
       // Если действие сочетания воспроизведение не перезапустило (например,
       // Shift+Пробел без жёлтой метки) — вернуть обычную скорость самим.
-      setTimeout(() => this.playing && this.speed !== State.speed && this.setSpeed(State.speed), 0);
+      setTimeout(() => this.playing && this._switchSpeed(this._wantedSpeed()), 0);
       return;
     }
-    if (!this.playing) return;
-    const frame = clamp(Math.floor(this._audioPosition() * fps() + 1e-6), this.startFrame, this.stopFrame);
-    this._halt();
-    this._unfreeze();
-    this.seekTo(frame);
-    await this._start(frame);
+    if (this.playing) await this._switchSpeed(this._wantedSpeed());
   },
 
   // Открыли другое видео: новый источник, всё состояние воспроизведения сброшено.
@@ -394,7 +446,7 @@ const Player = {
     const ctx = AudioEngine.context();
     // Часы звука запускаются по действию пользователя (правило браузеров).
     ctx.resume();
-    const speed = State.boost ? BOOST_SPEED : State.speed;
+    const speed = this._wantedSpeed();
     let audio;
     let buffer;
     try {
@@ -435,5 +487,6 @@ const Player = {
       if (this.playing && this.source === source) this.video.play().catch(() => {});
     }, Math.max(0, (when + AudioEngine.latency() - ctx.currentTime) * 1000));
     this._tick();
+    this._prepareSpeeds(f);
   },
 };
