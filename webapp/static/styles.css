@@ -782,3 +782,18 @@ a.step-btn { display: inline-flex; align-items: center; box-sizing: border-box; 
   background: #1f1f25; border: 1px solid #45454e; border-radius: 5px; }
 .step-btn.primary { background: #214a73; border-color: #2f5f9e; color: #fff; }
 .step-btn.primary:hover { background: #285a8a; }
+.seg.translated { background: #1d5c5c; }
+
+/* Выбранный файл на странице "Добавить": плашка с крестиком. */
+.file-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; box-sizing: border-box;
+  padding: 0 4px 0 12px; border: 1px dashed #45454e; border-radius: 5px; background: #141418; font-size: 13px;
+  max-width: 420px;
+}
+.file-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-chip-x { width: 24px; height: 24px; padding: 0; border: none; background: transparent; color: var(--dim); font-size: 16px; }
+.file-chip-x:hover:not(:disabled) { background: #28282f; color: var(--text); }
+/* Флажок — по центру строчных букв подписи (у Segoe UI он визуально ниже центра строки);
+   текст подписи не выделяется двойным кликом. */
+label.check, label:has(> input[type=checkbox]) { user-select: none; -webkit-user-select: none; }
+label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=checkbox] { transform: translateY(1px); }

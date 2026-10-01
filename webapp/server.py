@@ -599,6 +599,20 @@ def _anki_flag_counts() -> dict:
     return counts
 
 
+# Место на диске по видео — пересчёт (обход всех файлов) не чаще раза в DISK_TTL секунд.
+DISK_TTL = 30
+_disk_cache: dict[str, tuple[float, int]] = {}
+
+
+def _disk_total(project_id: str) -> int:
+    cached = _disk_cache.get(project_id)
+    if cached and time.time() - cached[0] < DISK_TTL:
+        return cached[1]
+    total = library.disk_usage(DATA_DIR / project_id)["total"]
+    _disk_cache[project_id] = (time.time(), total)
+    return total
+
+
 @app.get("/api/anki/overview")
 def anki_overview():
     """Раздел "Видео": по каждому готовому видео — прогресс правки, Anki и очередь."""
@@ -613,6 +627,7 @@ def anki_overview():
         item["flag_interval"] = sum(per.get(f, 0) for f in INTERVAL_FLAGS)
         item["flag_translation"] = sum(per.get(f, 0) for f in TRANSLATION_FLAGS)
         item["translated"] = _anki_flags_cache.get("translated", {}).get(item["id"], 0)
+        item["disk_total"] = _disk_total(item["id"])
         # Видео готово целиком: всё отредактировано и передано в Anki, ничего
         # не вернулось на правку и все карточки переведены.
         item["complete"] = bool(

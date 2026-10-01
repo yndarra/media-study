@@ -148,7 +148,10 @@ function videoBars(v) {
   segmentBar([
     { n: v.exported - (v.flag_interval || 0), cls: "ok", title: `передано: ${v.exported}` },
     { n: v.flag_interval || 0, cls: "returned", right: true, title: `флаг «обрезка/текст» в Anki: ${v.flag_interval || 0}` },
-  ], v.active_total, `Передано в Anki ${v.exported} / ${v.active_total}`);
+  ], v.active_total, `Передано в Anki ${v.exported} / ${v.active_total}`) +
+  segmentBar([
+    { n: v.translated || 0, cls: "translated", title: `переведено: ${v.translated || 0}` },
+  ], v.notes_in_anki, `Переведено ${v.translated || 0} / ${v.notes_in_anki || 0}`);
 }
 
 // Строка под полосами (только если есть что сказать): вернулись из Anki,
@@ -156,9 +159,8 @@ function videoBars(v) {
 function videoNotes(v) {
   const q = v.stage3 || {};
   const queue = q.state === "waiting_anki" ? "ждёт Anki" : q.notes_left ? `в очереди Anki ${q.notes_left}, ≈ ${Math.max(1, Math.ceil(q.eta_seconds / 60))} мин` : "";
-  const all = v.notes_in_anki > 0 && v.translated >= v.notes_in_anki;
   const parts = [
-    `<span class="${all ? "translated-all" : ""}">${all ? '<span class="tick">✓</span> ' : ""}Переведено: ${v.translated || 0}</span>`,
+    v.disk_total !== undefined ? `Место на диске: ${formatSize(v.disk_total)}` : "",
     v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
     v.flag_translation ? `<span class="translation-text">Перевод: ${v.flag_translation}</span>` : "",
     queue ? escapeHtml(queue) : "",
@@ -292,14 +294,22 @@ function processingBar(v) {
   return progressBar(v.percent, 100, `${v.status}: ${Math.floor(v.percent)}%`);
 }
 
-// Список сгруппирован по автору: группы по алфавиту, внутри – как пришло (новые первыми).
-function groupByAuthor(items) {
+// Список сгруппирован по автору; внутри группы – как пришло (новые первыми).
+// Порядок групп: по алфавиту, или своим сравнением (order).
+function groupByAuthor(items, order = null) {
   const groups = new Map();
   for (const item of items) {
     if (!groups.has(item.group)) groups.set(item.group, []);
     groups.get(item.group).push(item);
   }
-  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  return [...groups.entries()].sort(order || ((a, b) => a[0].localeCompare(b[0])));
+}
+
+// Группы в "Видео": выше – где больше ждёт правки (сумма по видео группы:
+// ещё не отредактированные + вернувшиеся из Anki), затем – где больше видео.
+function byPendingWork(a, b) {
+  const work = (list) => list.reduce((sum, v) => sum + (v.awaiting || 0), 0);
+  return work(b[1]) - work(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
 }
 
 const Pages = {
@@ -346,7 +356,7 @@ const Pages = {
         box.innerHTML = '<p class="muted">Готовых видео пока нет – добавьте их в разделе «Добавить», затем обработайте в «Обработке».</p>';
         return;
       }
-      box.innerHTML = groupByAuthor(items).map(([group, list]) =>
+      box.innerHTML = groupByAuthor(items, byPendingWork).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card${v.complete ? " complete" : ""}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
           videoBars(v) + videoNotes(v) + "</a>").join("") + "</div>",
@@ -524,7 +534,7 @@ const Pages = {
         <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
       </div>
       ${videoBars({ ...v, flag_interval: 0 })}
-      ${videoNotes(v)}
+      ${videoNotes({ ...v, disk_total: undefined })}
       <h2>Статистика</h2>
       <table class="stats">
         ${row("Ролик", `${formatDuration(s.video_seconds)}, карточек ${s.cards}`)}
@@ -683,7 +693,7 @@ const Pages = {
       <p class="muted small">Видео или аудио любого распространённого формата (mp4, mkv, webm, mov, mp3, m4a, wav, flac, ogg…).</p>
       <div class="author-row">
         <label class="step-btn file-pick">Выбрать файл<input id="file-input" type="file" accept="video/*,audio/*" hidden></label>
-        <span id="file-name" class="muted small">файл не выбран</span>
+        <span id="file-chip" class="file-chip hidden"><span class="file-chip-name"></span><button class="file-chip-x" title="Убрать файл">×</button></span>
         <button id="file-go" class="step-btn" disabled>Добавить</button>
       </div>
       <div id="add-note" class="muted small"></div>`;
@@ -692,10 +702,18 @@ const Pages = {
     const fileInput = document.getElementById("file-input");
     // Кнопки активны, только когда есть что добавлять.
     urlInput.addEventListener("input", () => (document.getElementById("download-go").disabled = !urlInput.value.trim()));
-    fileInput.addEventListener("change", () => {
+    // Выбранный файл — плашкой с крестиком (убрать выбор).
+    const chip = document.getElementById("file-chip");
+    const showFile = () => {
       const file = fileInput.files[0];
-      document.getElementById("file-name").textContent = file ? file.name : "файл не выбран";
+      chip.classList.toggle("hidden", !file);
+      chip.querySelector(".file-chip-name").textContent = file ? file.name : "";
       document.getElementById("file-go").disabled = !file;
+    };
+    fileInput.addEventListener("change", showFile);
+    chip.querySelector(".file-chip-x").addEventListener("click", () => {
+      fileInput.value = "";
+      showFile();
     });
     const done = (id) => {
       note.innerHTML = `Добавлено: ${escapeHtml(id)}. Дальше – <a href="#/process">Обработка</a>.`;
@@ -734,19 +752,19 @@ const Pages = {
     el.innerHTML = `<h1>Настройки</h1>
       <table class="stats" id="settings-form">
         <tr><td>Колода Anki</td><td><input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}">
-          <div class="muted small">карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются</div>
+          <div class="muted small">Карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются</div>
           <div id="deck-sync" class="small"></div></td></tr>
-        <tr><td>Запас до и после отрезка</td><td><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"> сек <div class="muted small">по умолчанию для всех видео; уже отредактированные фрагменты не меняются</div></td></tr>
+        <tr><td>Запас до и после отрезка</td><td><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"> сек <div class="muted small">По умолчанию для всех видео; уже отредактированные фрагменты не меняются</div></td></tr>
         <tr><td>Качество скачивания</td><td><select id="set-quality">
           ${[[0, "лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
             .map(([h, name]) => `<option value="${h}" ${Number(s.download_max_height) === h ? "selected" : ""}>${name}</option>`).join("")}
-          </select><div class="muted small">по умолчанию для видео, добавленных по ссылке; клипы для Anki режутся из скачанного</div></td></tr>
+          </select><div class="muted small">По умолчанию для видео, добавленных по ссылке; клипы для Anki режутся из скачанного</div></td></tr>
         <tr><td>После добавления</td><td><label class="check"><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> Сразу обрабатывать</label>
-          <div class="muted small">видео, добавленное по ссылке или файлом, сразу уходит в обработку (распознавание и нарезка) – без захода в «Обработку» и без ссылок на текст для сверки</div></td></tr>
-        <tr><td>Ключ OpenRouter</td><td><div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div><div class="muted small">для агента перевода</div></td></tr>
+          <div class="muted small">Видео, добавленное по ссылке или файлом, сразу уходит в обработку (распознавание и нарезка)</div></td></tr>
+        <tr><td>Ключ OpenRouter</td><td><div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div><div class="muted small">Для агента перевода</div></td></tr>
         <tr><td>Модель перевода</td><td><div class="secret-row picker"><input id="set-model" class="wide" value="${escapeHtml(s.openrouter_model || "")}" placeholder="anthropic/claude-sonnet-5.5"><button id="set-model-pick" class="icon-btn" title="Выбрать из списка">▾</button>
           <div id="model-list" class="model-list hidden"></div></div>
-          <div class="muted small">можно вписать свою (идентификатор на OpenRouter) или выбрать из списка; цена – $ за миллион токенов (вход / выход)</div></td></tr>
+          <div class="muted small">Можно вписать свою (идентификатор на OpenRouter) или выбрать из списка; цена – $ за миллион токенов (вход / выход)</div></td></tr>
       </table>
       <div class="actions"><button id="settings-save" class="step-btn">Сохранить</button><button id="settings-cancel" class="step-btn">Отменить</button></div>`;
     const showDeckSync = (state) => {
@@ -823,8 +841,10 @@ const Activity = {
     } catch (_) {
       return;
     }
+    // Нет фоновых процессов — блок "Сейчас идёт" (с разделителем) не показывается.
+    box.closest(".activity").classList.toggle("hidden", !items.length);
     if (!items.length) {
-      box.textContent = "ничего";
+      box.textContent = "";
       return;
     }
     box.innerHTML = items.map((a) => {
