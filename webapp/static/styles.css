@@ -1422,3 +1422,14 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 .progress-label { top: 2px; }
 /* Полосы с подписью – на 1 px выше снизу (21 px; подпись на месте). */
 .progress:not(.thin) { height: 21px; }
+
+/* ---- "Перевести": полосы в 7 раз шире (182 px); "Выполняется перевод…" –
+   вдвое уже (91 px) и в 1.5 раза быстрее. Длительности – и в pages.js
+   (ZEBRA_MS, фаза от часов). ---- */
+.card-action.translate:not(.busy) { --period: 364px; }
+.card-action.translate.busy { --period: 182px; cursor: pointer; }
+.card-action.translate:not(.busy)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='364' height='20' viewBox='0 0 364 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 190,0 182,20 0,20' fill='%23a3407a'/%3E%3Cpolygon points='-356,0 -174,0 -182,20 -364,20' fill='%23a3407a'/%3E%3C/svg%3E"); animation-duration: 11200ms; }
+.card-action.translate.busy::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='182' height='20' viewBox='0 0 182 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 99,0 91,20 0,20' fill='%23a3407a'/%3E%3Cpolygon points='-174,0 -83,0 -91,20 -182,20' fill='%23a3407a'/%3E%3C/svg%3E"); animation-duration: 3733ms; }
+
+/* Полосы – снова 20 px. */
+.progress:not(.thin) { height: 20px; }

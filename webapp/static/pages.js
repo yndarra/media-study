@@ -230,8 +230,9 @@ function cardState(v) {
 // Фаза бегущих полос – от часов, а не от момента создания кнопки: список
 // перерисовывается каждые 3 с, и без этого анимация каждый раз начиналась
 // заново (рывок). Длительности – как в styles.css (.card-action::before).
-function zebraPhase(busy) {
-  const ms = busy ? 2600 : 1600;
+const ZEBRA_MS = { send: 1600, sendBusy: 2600, translate: 11200, translateBusy: 3733 };
+function zebraPhase(kind) {
+  const ms = ZEBRA_MS[kind];
   return `style="--zdelay:-${Date.now() % ms}ms"`;
 }
 
@@ -240,16 +241,17 @@ function cardAction(v) {
   const just = pressed && Date.now() - pressed.at < 8000 ? pressed.action : null; // нажали, сервер ещё не успел
   const id = escapeHtml(v.id);
   if (v.sending || just === "send") {
-    return `<button class="card-action send busy" data-action="none" data-id="${id}" disabled ${zebraPhase(true)}><span>Передаётся в Anki…</span></button>`;
+    return `<button class="card-action send busy" data-action="none" data-id="${id}" disabled ${zebraPhase("sendBusy")}><span>Передаётся в Anki…</span></button>`;
   }
   if (v.translating || just === "translate") {
-    return `<button class="card-action translate busy" data-action="none" data-id="${id}" disabled ${zebraPhase(true)}><span>Переводится…</span></button>`;
+    // Нажатие – остановить перевод.
+    return `<button class="card-action translate busy" data-action="stop" data-id="${id}" title="Остановить перевод" ${zebraPhase("translateBusy")}><span>Выполняется перевод…</span></button>`;
   }
   if (v.ready_to_send) {
-    return `<button class="card-action send" data-action="send" data-id="${id}" ${zebraPhase(false)}><span>Передать в Anki</span></button>`;
+    return `<button class="card-action send" data-action="send" data-id="${id}" ${zebraPhase("send")}><span>Передать в Anki</span></button>`;
   }
   if (v.ready_to_translate) {
-    return `<button class="card-action translate" data-action="translate" data-id="${id}" ${zebraPhase(false)}><span>Перевести</span></button>`;
+    return `<button class="card-action translate" data-action="translate" data-id="${id}" ${zebraPhase("translate")}><span>Перевести</span></button>`;
   }
   return "";
 }
@@ -854,11 +856,23 @@ const Pages = {
         e.stopPropagation();
         const id = button.dataset.id;
         if (button.dataset.action === "none") return;
+        if (button.dataset.action === "stop") {
+          // "Выполняется перевод…" – остановить перевод.
+          button.disabled = true;
+          Pages.pressedActions.delete(id);
+          try {
+            await Api.agentStop(id);
+          } catch (err) {
+            console.error(err);
+          }
+          if (Pages.videosRender) Pages.videosRender();
+          return;
+        }
         Pages.pressedActions.set(id, { at: Date.now(), action: button.dataset.action });
-        // Сразу – вид "идёт": другой текст, крупные полосы.
+        // Сразу – вид "идёт" (другой текст и полосы); перерисовка подхватит.
         button.disabled = true;
         button.classList.add("busy");
-        button.querySelector("span").textContent = button.dataset.action === "send" ? "Передаётся в Anki…" : "Переводится…";
+        button.querySelector("span").textContent = button.dataset.action === "send" ? "Передаётся в Anki…" : "Выполняется перевод…";
         try {
           if (button.dataset.action === "send") await Api.queueProject(id);
           else await Api.agentRun({ project: id, batch: false });
