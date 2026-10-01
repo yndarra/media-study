@@ -119,6 +119,9 @@ DEFAULT_APP_SETTINGS = {
     "anki_deck_root": "Claude::2. VIDEOS",  # колода Anki: <корень>::<автор>::<видео>
     "context_padding_seconds": 3.0,  # запас до и после отрезка у новых видео
     "auto_process": False,  # обрабатывать видео сразу после добавления
+    # Агент перевода (карточки с флагом "перевод"): модель OpenRouter и файл с ключом.
+    "openrouter_model": "anthropic/claude-sonnet-5.5",
+    "openrouter_key_file": "",
 }
 
 

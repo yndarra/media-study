@@ -34,6 +34,27 @@ const Api = {
     });
   },
 
+  // Агент перевода: ход и предложения; запуск; одобрить/отклонить.
+  agentState() {
+    return this.json("/api/agent");
+  },
+
+  agentRun(limit = null) {
+    return this.json("/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ limit }),
+    });
+  },
+
+  agentApply(approve, reject) {
+    return this.json("/api/agent/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approve, reject }),
+    });
+  },
+
   // Сколько места занимает видео по этапам (и для ещё не обработанного).
   projectDisk(id) {
     return this.json(`/api/p/${encodeURIComponent(id)}/disk`);

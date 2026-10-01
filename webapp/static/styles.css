@@ -635,3 +635,23 @@ textarea.sources {
   border-radius: 6px;
   padding: 5px 8px;
 }
+
+/* Флаги Anki — цветные точки (как в Anki). */
+.flag-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: middle; background: #666; }
+.flag-dot.f1 { background: #e5534b; }
+.flag-dot.f2 { background: #f0883e; }
+.flag-dot.f3 { background: #57ab5a; }
+.flag-dot.f4 { background: #539bf5; }
+.flag-dot.f5 { background: #e275ad; }
+.flag-dot.f6 { background: #39c5cf; }
+.flag-dot.f7 { background: #986ee2; }
+
+/* Предложения агента перевода. */
+.agent-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.agent-head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.agent-en { margin: 6px 0; }
+.agent-comments { color: #ffc857; font-size: 13px; margin-bottom: 6px; }
+.agent-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.agent-back { background: #202027; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.agent-back.old { opacity: 0.75; }
+.agent-back ul { margin: 4px 0 0 18px; padding: 0; }

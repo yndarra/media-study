@@ -521,6 +521,63 @@ class ReturnRequest(BaseModel):
     items: list[ReturnItem]
 
 
+# -- агент перевода (флаг "перевод" в Anki) -----------------------------------------
+
+
+@app.get("/api/agent")
+def agent_state():
+    """Ход агента и его предложения (ещё не одобренные)."""
+    from phase3_export import agent
+
+    return {
+        "status": agent.load_json(DATA_DIR / agent.STATUS_FILE, {"state": "idle"}),
+        "proposals": agent.load_json(DATA_DIR / agent.PROPOSALS_FILE, []),
+    }
+
+
+class AgentRunRequest(BaseModel):
+    limit: int | None = None
+
+
+@app.post("/api/agent/run")
+def agent_run(body: AgentRunRequest):
+    """Запустить агента в фоне: предложения по карточкам с красным/зелёным флагом."""
+    from phase3_export import agent
+
+    status = agent.load_json(DATA_DIR / agent.STATUS_FILE, {})
+    if status.get("state") == "running" and time.time() - status.get("updated", 0) < 300:
+        raise HTTPException(status_code=409, detail="агент уже работает")
+    agent.save_json(DATA_DIR / agent.STATUS_FILE, {"state": "running", "done": 0, "total": 0, "updated": time.time()})
+    log = open(DATA_DIR / "agent.log", "a", encoding="utf-8")
+    args = [sys.executable, "-m", "phase3_export.agent", "--data-dir", str(DATA_DIR)]
+    if body.limit:
+        args += ["--limit", str(body.limit)]
+    subprocess.Popen(
+        args, cwd=str(REPO_DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    return {"started": True}
+
+
+class AgentApplyRequest(BaseModel):
+    approve: list[int] = []
+    reject: list[int] = []
+
+
+@app.post("/api/agent/apply")
+def agent_apply(body: AgentApplyRequest):
+    """Одобренные предложения — в Anki, отклонённые — прочь."""
+    from phase3_export import agent, anki
+
+    try:
+        result = agent.apply(DATA_DIR, body.approve, body.reject)
+    except anki.AnkiUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error))
+    _anki_flags_cache["at"] = 0.0  # флаги изменились — перечитать
+    return result
+
+
 @app.post("/api/anki/return")
 def anki_return(body: ReturnRequest):
     """Вернуть помеченные карточки на правку: их фрагменты снова редактируются в редакторе."""
