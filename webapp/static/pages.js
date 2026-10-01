@@ -42,6 +42,25 @@ const Router = {
   async route() {
     const parts = (location.hash.replace(/^#\/?/, "") || "videos").split("/");
     const [page, id] = [parts[0], decodeURIComponent(parts[1] || "")];
+    // Открыть / закрыть окно поверх уже показанного списка – список не
+    // перерисовывается заново (иначе страница на миг пустеет) и продолжает обновляться.
+    const listShown = (view, box) => State.view === view && document.querySelector(`#${box} a.card`);
+    if ((page === "video" || page === "videos") && listShown("videos", "videos-list")) {
+      if (page === "video" && id) Pages.videoModal(id);
+      else {
+        Modal.close(false);
+        Pages.videosRender && Pages.videosRender();
+      }
+      return;
+    }
+    if (page === "process" && listShown("process", "process-list")) {
+      if (id) Pages.processModal(id);
+      else {
+        Modal.close(false);
+        Pages.processRender && Pages.processRender();
+      }
+      return;
+    }
     Pages.stopRefresh();
     // Окно подробностей живёт только на своём адресе (#/video/..., #/processing/...).
     if (!(page === "video" || (page === "process" && id))) Modal.close(false);
@@ -115,14 +134,105 @@ function progressBar(done, total, label) {
 
 // Полоса из цветных отрезков: segments = [{n, cls}] – слева направо; последний
 // отрезок с right: true прижимается к правому краю (между ними – серое).
-function segmentBar(segments, total, label) {
+// name – подпись слева, done / total – справа. Стыки цветов – под наклоном
+// (классы sl / sr: скошенный левый / правый край, см. styles.css).
+// Ширины и число плавно анимируются – см. animateBars.
+function segmentBar(segments, total, name, done) {
   const pct = (n) => (total ? Math.max(0, Math.min(100, (n / total) * 100)) : 0);
   const left = segments.filter((s) => !s.right && s.n > 0);
   const right = segments.filter((s) => s.right && s.n > 0);
-  const html = (s) => `<div class="seg ${s.cls}" style="width:${pct(s.n).toFixed(2)}%" title="${escapeHtml(s.title || "")}"></div>`;
-  return `<div class="progress segmented" title="${escapeHtml(label)}">` +
-    `<div class="seg-left">${left.map(html).join("")}</div><div class="seg-right">${right.map(html).join("")}</div>` +
-    `<span class="progress-label">${escapeHtml(label)}</span></div>`;
+  const leftEnd = left.reduce((sum, s) => sum + pct(s.n), 0);
+  const html = (s, k, list, side) => {
+    const w = pct(s.n);
+    // Скос слева – у всех, кроме первого слева (у правой группы – и у первого);
+    // скос справа – у последнего левого, если дальше есть серое.
+    const sl = side === "right" || k > 0;
+    const sr = side === "left" && k === list.length - 1 && leftEnd < 99.9;
+    return `<div class="seg ${s.cls}${sl ? " sl" : ""}${sr ? " sr" : ""}" data-w="${w.toFixed(2)}" ` +
+      `style="width:${segWidth(w, sl)}" title="${escapeHtml(s.title || "")}"></div>`;
+  };
+  return `<div class="progress segmented" data-bar="${escapeHtml(name)}" title="${escapeHtml(`${name} ${done} / ${total}`)}">` +
+    `<div class="seg-left">${left.map((s, k) => html(s, k, left, "left")).join("")}</div>` +
+    `<div class="seg-right">${right.map((s, k) => html(s, k, right, "right")).join("")}</div>` +
+    `<span class="progress-label"><span>${escapeHtml(name)}</span>` +
+    `<span class="progress-count" data-done="${done}" data-total="${total || 0}">${done} / ${total || 0}</span></span></div>`;
+}
+
+// Ширина отрезка: со скосом слева он заходит на 6 px под предыдущий.
+function segWidth(w, slanted) {
+  return slanted && w > 0 ? `calc(${w}% + 6px)` : `${w}%`;
+}
+
+// Снимок полос перед перерисовкой: ширины отрезков и числа – чтобы новые
+// значения не прыгали, а плавно доезжали от старых.
+function barSnapshot(root) {
+  const snap = new Map();
+  if (!root) return snap;
+  root.querySelectorAll("[data-bar]").forEach((bar) => {
+    const key = barKey(bar);
+    bar.querySelectorAll(".seg").forEach((seg) => snap.set(`${key}|${seg.classList[1]}`, parseFloat(seg.dataset.w) || 0));
+    const count = bar.querySelector(".progress-count");
+    if (count) snap.set(`${key}|#`, parseFloat(count.dataset.shown ?? count.dataset.done) || 0);
+  });
+  return snap;
+}
+
+function barKey(bar) {
+  const owner = bar.closest("[data-key]") || bar.closest("a.card");
+  return `${owner ? owner.dataset.key || owner.getAttribute("href") : ""}|${bar.dataset.bar}`;
+}
+
+// Плавно довести полосы внутри root от снимка (или от нуля – при первом
+// показе раздела) до их настоящих значений; числа считают вверх/вниз так же.
+function animateBars(root, snap = new Map()) {
+  if (!root) return;
+  const segs = [];
+  root.querySelectorAll("[data-bar]").forEach((bar) => {
+    const key = barKey(bar);
+    bar.querySelectorAll(".seg").forEach((seg) => {
+      const from = snap.get(`${key}|${seg.classList[1]}`) ?? 0;
+      const to = parseFloat(seg.dataset.w) || 0;
+      if (Math.abs(from - to) < 0.01) return;
+      const slanted = seg.classList.contains("sl");
+      seg.style.transition = "none";
+      seg.style.width = segWidth(from, slanted);
+      segs.push([seg, to, slanted]);
+    });
+    const count = bar.querySelector(".progress-count");
+    if (count) countUp(count, snap.get(`${key}|#`) ?? 0, parseFloat(count.dataset.done) || 0);
+  });
+  if (!segs.length) return;
+  root.getBoundingClientRect(); // применить стартовые ширины до включения анимации
+  requestAnimationFrame(() => segs.forEach(([seg, to, slanted]) => {
+    seg.style.transition = "";
+    seg.style.width = segWidth(to, slanted);
+  }));
+}
+
+// Число "N / K" в полосе: плавно от from до to (за то же время, что и полоса).
+function countUp(el, from, to) {
+  const total = el.dataset.total;
+  if (from === to) return;
+  const start = performance.now();
+  const step = (now) => {
+    if (!el.isConnected) return;
+    const t = Math.min(1, (now - start) / BAR_ANIMATION_MS);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const value = Math.round(from + (to - from) * eased);
+    el.dataset.shown = value;
+    el.textContent = `${value} / ${total}`;
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+const BAR_ANIMATION_MS = 900;
+
+// Перерисовать список без мигания: полосы доезжают от прежних значений
+// (first – первый показ раздела: заполняются от нуля).
+function renderSmooth(box, html, first = false) {
+  const snap = first ? new Map() : barSnapshot(box);
+  box.innerHTML = html;
+  animateBars(box, snap);
 }
 
 function formatSize(bytes) {
@@ -144,18 +254,18 @@ function videoBars(v) {
     { n: e.accepted, cls: "accepted", title: `приняты без правок: ${e.accepted}` },
     { n: e.changed, cls: "changed", title: `изменены: ${e.changed}` },
     { n: e.deleted, cls: "deleted", title: `удалены: ${e.deleted}` },
-  ], total, `Отредактировано ${edited} / ${total}`) +
+  ], total, "Отредактировано", edited) +
   segmentBar([
     { n: v.exported - (v.flag_interval || 0), cls: "ok", title: `передано: ${v.exported}` },
     { n: v.flag_interval || 0, cls: "returned", right: true, title: `флаг «обрезка/текст» в Anki: ${v.flag_interval || 0}` },
-  ], v.active_total, `Передано в Anki ${v.exported} / ${v.active_total}`) +
+  ], v.active_total, "Передано в Anki", v.exported) +
   // Переведено: в Anki (оборот заполнен) + переведённые заранее, ждущие передачи в Anki;
   // из всех фрагментов с текстом.
   (() => {
     const done = (v.translated || 0) + (v.translated_waiting || 0);
     return segmentBar([
       { n: done, cls: "translated", title: `переведено: ${done}` + (v.translated_waiting ? `, из них ждут передачи в Anki: ${v.translated_waiting}` : "") },
-    ], v.cards_total, `Переведено ${done} / ${v.cards_total || 0}`);
+    ], v.cards_total, "Переведено", done);
   })();
 }
 
@@ -275,6 +385,7 @@ const Modal = {
     this.close(false);
     const overlay = document.createElement("div");
     overlay.id = "modal-overlay";
+    overlay.className = "modal-overlay";
     overlay.innerHTML = `<div class="modal"><button class="modal-close" title="Закрыть (Esc)">×</button><div class="modal-body">${html}</div></div>`;
     overlay.addEventListener("mousedown", (e) => {
       if (e.target === overlay) this.requestClose();
@@ -314,7 +425,11 @@ const Modal = {
   close(runCallback = true) {
     const overlay = document.getElementById("modal-overlay");
     if (!overlay) return;
-    overlay.remove();
+    // Плавно гаснет (стили .closing), а из поиска по id исчезает сразу –
+    // новое окно можно открыть тут же.
+    overlay.removeAttribute("id");
+    overlay.classList.add("closing");
+    setTimeout(() => overlay.remove(), 160);
     this.guard = null;
     const callback = this.onClose;
     this.onClose = null;
@@ -395,12 +510,14 @@ const Pages = {
         box.innerHTML = '<p class="muted">Готовых видео пока нет – добавьте их в разделе «Добавить», затем обработайте в «Обработке».</p>';
         return;
       }
-      box.innerHTML = groupByAuthor(items, byPendingWork).map(([group, list]) =>
+      const first = !box.querySelector("a.card");
+      renderSmooth(box, groupByAuthor(items, byPendingWork).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card${v.complete ? " complete" : ""}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
           videoBars(v) + videoNotes(v) + "</a>").join("") + "</div>",
-      ).join("");
+      ).join(""), first);
     };
+    this.videosRender = render;
     await render();
     this.refreshEvery(5000, render);
   },
@@ -606,7 +723,7 @@ const Pages = {
         <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
         <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
       </div>
-      ${videoBars({ ...v, flag_interval: 0 })}
+      <div class="modal-bars" data-key="modal">${videoBars({ ...v, flag_interval: 0 })}</div>
       ${videoNotes({ ...v, disk_total: undefined })}
       <h2>Статистика</h2>
       <table class="stats">
@@ -638,6 +755,7 @@ const Pages = {
         <button id="info-save" class="step-btn">Сохранить</button>
       </div>`;
     autoGrow(body.querySelector("#title-input"));
+    animateBars(body.querySelector(".modal-bars"));
     const saveButton = body.querySelector("#info-save");
     watcher = formWatch(body.querySelector(".modal-head"), [saveButton]);
     save = async () => {
@@ -691,7 +809,18 @@ const Pages = {
       note.classList.toggle("running", !!progress);
       if (progress) setNote(`пачка ${Math.min((st.done || 0) + 1, st.total)} из ${st.total}`);
       else if (waitingBatch) setNote("ждём ответ пакета");
+      if (running || wasRunning) refreshBars();
+      wasRunning = running;
       if (running) setTimeout(refreshTranslate, 3000);
+    };
+    // Пока идёт перевод – полосы окна обновляются (плавно), и ещё раз после конца.
+    let wasRunning = false;
+    const refreshBars = async () => {
+      try {
+        const fresh = (await Api.projectStats(id)).summary;
+        const box = body.querySelector(".modal-bars");
+        if (box) renderSmooth(box, videoBars({ ...fresh, flag_interval: 0 }));
+      } catch (_) {}
     };
     translateButton.addEventListener("click", async () => {
       try {
@@ -746,6 +875,7 @@ const Pages = {
           "</a>").join("") + "</div>",
       ).join("");
     };
+    this.processRender = render;
     await render();
     this.refreshEvery(3000, render);
   },
@@ -1002,12 +1132,15 @@ const Activity = {
       box.textContent = "";
       return;
     }
+    // Полоса – тот же отрезок, что и в библиотеке: доезжает до нового значения плавно.
+    const snap = barSnapshot(box);
     box.innerHTML = items.map((a) => {
       const eta = a.eta_seconds ? ` · ≈ ${a.eta_seconds < 60 ? "<1" : Math.ceil(a.eta_seconds / 60)} мин` : "";
-      const bar = a.percent === null || a.percent === undefined ? "" :
-        `<div class="progress thin"><div class="progress-fill" style="width:${a.percent}%"></div></div>`;
-      return `<div class="activity-item"><div class="activity-name">${escapeHtml(a.title)}</div>` +
-        `<div>${escapeHtml(a.label)}${a.percent !== null && a.percent !== undefined ? ` ${Math.floor(a.percent)}%` : ""}${eta}</div>${bar}</div>`;
+      const has = a.percent !== null && a.percent !== undefined;
+      const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ok" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
+      return `<div class="activity-item" data-key="${escapeHtml(`${a.kind}:${a.id}`)}"><div class="activity-name">${escapeHtml(a.title)}</div>` +
+        `<div>${escapeHtml(a.label)}${has ? ` (${Math.floor(a.percent)}%)` : ""}${eta}</div>${bar}</div>`;
     }).join("");
+    animateBars(box, snap);
   },
 };

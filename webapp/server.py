@@ -24,6 +24,7 @@ import uuid
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from common.audio_track import AUDIO_RATE, build_audio_track, sample_for_frame, wav_slice
@@ -622,7 +623,12 @@ def _anki_flag_counts() -> dict:
 
     from phase3_export import anki
 
-    if _time.time() - _anki_flags_cache["at"] < ANKI_FLAGS_TTL:
+    from phase3_export import agent
+
+    # Агент записал новую пачку перевода после последнего подсчёта — считаем заново
+    # сразу (иначе полоса "Переведено" в списке отставала бы до минуты).
+    agent_updated = (agent.load_json(DATA_DIR / agent.STATUS_FILE, {}) or {}).get("updated") or 0
+    if _time.time() - _anki_flags_cache["at"] < ANKI_FLAGS_TTL and agent_updated <= _anki_flags_cache["at"]:
         return _anki_flags_cache["counts"]
     counts: dict = {}
     translated: dict = {}
@@ -675,7 +681,9 @@ def anki_overview():
         # не вернулось на правку и все карточки переведены.
         item["complete"] = bool(
             item["active_total"] and item["exported"] == item["active_total"] and item["reviewed"] >= item["fragments_total"]
-            and not item["flagged"] and not item["flag_interval"] and item["translated"] >= item["notes_in_anki"] > 0
+            and not item["flagged"] and not item["flag_interval"]
+            # Переведены все фрагменты с текстом (пустые карточки "без_текста" перевода не ждут).
+            and item["translated"] >= item["cards_total"] > 0
         )
         result.append(item)
     return result
@@ -1022,6 +1030,12 @@ except Exception as error:  # очередь не должна мешать за
 
 # Файлы видео и статика фронтенда монтируются ПОСЛЕ api-роутов — Starlette
 # матчит в порядке регистрации, поэтому более специфичные /api/* выше.
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Браузер сам спрашивает /favicon.ico (вкладки без <link rel=icon>) — отдаём SVG-значок вместо 404."""
+    return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
+
+
 app.mount("/media", StaticFiles(directory=str(DATA_DIR)), name="media")
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 

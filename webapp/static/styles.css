@@ -582,7 +582,7 @@ textarea.sources {
 .translation-text { color: #7ee787; }
 
 /* Всплывающее окно (подробности видео): затемнение и карточка с круглыми углами. */
-#modal-overlay {
+.modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -836,3 +836,44 @@ label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=c
 #info-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #info-note.running { color: #3fb950; }
 .sources-box label.check { margin-top: 10px; }
+
+/* Полосы: подпись слева, "N / K" справа; ширины меняются плавно. */
+.progress-label { right: 8px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+.progress-count { font-variant-numeric: tabular-nums; }
+.seg { transition: width 0.9s cubic-bezier(0.22, 0.61, 0.36, 1); }
+/* Стык двух цветов – под наклоном: отрезок со скосом слева заходит на 6 px
+   под предыдущий; скос справа – переход в серое. */
+.seg.sl { margin-left: -6px; clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%); }
+.seg.sr { clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.seg.sl.sr { clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.progress.thin .seg { height: 100%; }
+
+/* "Переведено" – розовый акцент. */
+.seg.translated { background: #9d3f72; }
+
+/* Видео готово (всё переведено, править нечего): лёгкий розовый градиент
+   из левого верхнего угла и мягкое свечение – только слева и сверху. */
+a.card.complete {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.13), transparent 55%),
+    linear-gradient(160deg, #19121a, #141418 70%);
+  border-color: rgba(244, 114, 182, 0.28);
+  box-shadow: -10px 0 26px -18px rgba(244, 114, 182, 0.85), 0 -10px 26px -20px rgba(244, 114, 182, 0.6);
+}
+a.card.complete:hover { border-color: rgba(244, 114, 182, 0.5); }
+
+/* Таблицы в окнах: у всех строк одна высота строки, кнопка-стрелка её не
+   раздвигает – раскрытые строки и одиночная выглядят одинаково. */
+.modal table.stats td { line-height: 20px; }
+.multi-first { height: 20px; }
+.multi-toggle { height: 20px; line-height: 20px; }
+
+/* Окно появляется и гаснет мягко (страница под ним не перерисовывается). */
+@keyframes modal-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-pop { from { transform: translateY(6px) scale(0.985); } to { transform: none; } }
+.modal-overlay { animation: modal-in 0.16s ease-out; }
+.modal-overlay .modal { animation: modal-pop 0.16s ease-out; }
+.modal-overlay.closing { opacity: 0; transition: opacity 0.15s ease-in; pointer-events: none; }
+/* Текст в строках таблиц окна — оптически посередине между разделителями
+   (как в кнопках: строка Segoe UI сидит ниже центра, приподнимаем на 1.5 px). */
+.modal table.stats td { padding-top: 2.5px; padding-bottom: 5.5px; }
