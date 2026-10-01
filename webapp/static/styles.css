@@ -1370,3 +1370,14 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
    высота карточки одна и та же (40 px под полосами). */
 .card > .card-action { margin-top: 8px; }
 .card > .muted.small { height: 16px; line-height: 16px; margin-top: 12px; }
+/* Отступы карточки – по цифрам текста (замерено): верх цифр названия на 4 px
+   ниже верха его строки, низ – на 4.64 px выше низа; у строки "Место на диске"
+   (12 px, строка 16 px) – 4.5 и 3 px. Отсюда: поле сверху 11 px → от края до
+   цифр названия 15 px = от цифр "Места на диске" до края (3 + 12); от цифр
+   названия до полосы 4.64 + 11.86 = 16.5 = от полосы до цифр "Места" (12 + 4.5);
+   под полосами – 40 px и с кнопкой (8 + 20 + 12), и без (12 + 16 + 12). */
+.card { padding-top: 11px; }
+.card-title + .progress, .card-title + .card-status, .card-title + .muted { margin-top: 11.86px; }
+
+/* Фаза полос задаётся от часов (pages.js, zebraPhase) – перерисовка не сбрасывает её. */
+.card-action::before { animation-delay: var(--zdelay, 0ms); }

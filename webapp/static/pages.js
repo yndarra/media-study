@@ -219,21 +219,29 @@ function cardState(v) {
 // "Перевести". Пока шаг идёт (или его только что нажали) – кнопки нет.
 // Пока шаг идёт – кнопка остаётся, текст другой, полосы зебры крупнее; шаг
 // закончился – кнопка уходит, возвращается строка "Место на диске".
+// Фаза бегущих полос – от часов, а не от момента создания кнопки: список
+// перерисовывается каждые 3 с, и без этого анимация каждый раз начиналась
+// заново (рывок). Длительности – как в styles.css (.card-action::before).
+function zebraPhase(busy) {
+  const ms = busy ? 2600 : 1600;
+  return `style="--zdelay:-${Date.now() % ms}ms"`;
+}
+
 function cardAction(v) {
   const pressed = Pages.pressedActions.get(v.id);
   const just = pressed && Date.now() - pressed.at < 8000 ? pressed.action : null; // нажали, сервер ещё не успел
   const id = escapeHtml(v.id);
   if (v.sending || just === "send") {
-    return `<button class="card-action send busy" data-action="none" data-id="${id}" disabled><span>Передаётся в Anki…</span></button>`;
+    return `<button class="card-action send busy" data-action="none" data-id="${id}" disabled ${zebraPhase(true)}><span>Передаётся в Anki…</span></button>`;
   }
   if (v.translating || just === "translate") {
-    return `<button class="card-action translate busy" data-action="none" data-id="${id}" disabled><span>Переводится…</span></button>`;
+    return `<button class="card-action translate busy" data-action="none" data-id="${id}" disabled ${zebraPhase(true)}><span>Переводится…</span></button>`;
   }
   if (v.ready_to_send) {
-    return `<button class="card-action send" data-action="send" data-id="${id}"><span>Передать в Anki</span></button>`;
+    return `<button class="card-action send" data-action="send" data-id="${id}" ${zebraPhase(false)}><span>Передать в Anki</span></button>`;
   }
   if (v.ready_to_translate) {
-    return `<button class="card-action translate" data-action="translate" data-id="${id}"><span>Перевести</span></button>`;
+    return `<button class="card-action translate" data-action="translate" data-id="${id}" ${zebraPhase(false)}><span>Перевести</span></button>`;
   }
   return "";
 }
