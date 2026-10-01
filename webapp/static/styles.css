@@ -802,3 +802,4 @@ label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=c
 .agent-batch { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin: 12px 0; }
 .agent-batch-head { display: flex; align-items: center; gap: 8px; }
 .agent-batch-head .spacer { flex: 1; }
+.agent-back.new[contenteditable]:focus { outline: 1px solid #2f5f9e; }

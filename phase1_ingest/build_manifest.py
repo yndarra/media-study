@@ -109,33 +109,6 @@ def find_subtitles(project_dir: Path) -> Path | None:
     return None
 
 
-def _fetch_source_links(project_dir: Path) -> None:
-    """
-    Прикреплённые к видео ссылки на текст (страница "Обработка") -> transcript.txt.
-    Пока понимаются публичные страницы Notion: реплики "Имя: текст" со страницы
-    и всех её подстраниц/строк базы; лишнее потом отсекается сверкой с речью.
-    Агент, который сам ищет достоверный источник, — в планах.
-    """
-    from webapp.library import project_settings
-
-    from .sources import notion
-
-    lines = []
-    for url in project_settings(project_dir).get("sources", []):
-        if "notion" not in url:
-            continue
-        reader = notion.NotionReader(notion.site_of(url))
-        root = notion.page_id_from_url(url)
-        pages = [root] + [bid for _, kind, _, bid in reader.outline(root, max_depth=0) if kind == "page"]
-        for page_id in pages:
-            for text in reader.page_lines(page_id):
-                parsed = notion.dialogue_line(text)
-                if parsed:
-                    lines.append(f"{parsed[0]}: {parsed[1]}")
-    if lines:
-        (Path(project_dir) / "transcript.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def process_project(project_dir: Path, transcript_path: Path | None = None) -> Manifest:
     """
     Этап 1, вторая половина — "обработать" уже добавленное видео (или аудио):
@@ -169,7 +142,12 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
     whisper_transcript = transcribe_mod.transcribe_and_save(proxy_path, raw_dir / "whisper_transcript.json")
     report(project_dir, "segment", None, force=True)
     if transcript_path is None and not (project_dir / "transcript.txt").exists():
-        _fetch_source_links(project_dir)
+        # Ссылки пользователя и/или агент поиска -> transcript.txt (sources/search_agent.py).
+        from .sources.search_agent import build_transcript
+
+        report(project_dir, "search", None, force=True)
+        build_transcript(project_dir, whisper_transcript, log=lambda m: print(m, flush=True))
+        report(project_dir, "segment", None, force=True)
     if transcript_path is None and (project_dir / "transcript.txt").exists():
         transcript_path = project_dir / "transcript.txt"
     subtitle_path = find_subtitles(project_dir)

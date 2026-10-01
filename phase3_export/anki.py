@@ -108,7 +108,7 @@ def parse_tags(tags: list[str]) -> tuple[str, str]:
 
 
 def add_clip_note(deck: str, clip_path, media_name: str, text: str, project: str, fragment_id: str, clip: str,
-                  known_speakers: set[str] | None = None) -> int:
+                  known_speakers: set[str] | None = None, back: str = "", extra_tags: list[str] | None = None) -> int:
     """
     Кладёт клип в медиа Anki и создаёт заметку. Имена говорящих из текста
     уходят в метки (split_speakers). Возвращает id заметки.
@@ -120,8 +120,8 @@ def add_clip_note(deck: str, clip_path, media_name: str, text: str, project: str
         note={
             "deckName": deck,
             "modelName": MODEL_NAME,
-            "fields": {FRONT_FIELD: front_html(media_name, text), BACK_FIELD: ""},
-            "tags": note_tags(project, fragment_id, speakers, **flags),
+            "fields": {FRONT_FIELD: front_html(media_name, text), BACK_FIELD: back},
+            "tags": note_tags(project, fragment_id, speakers, **flags) + list(extra_tags or []),
             "options": {"allowDuplicate": False},
         },
     )

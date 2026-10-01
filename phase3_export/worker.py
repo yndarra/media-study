@@ -163,6 +163,11 @@ class Worker:
                 anki.ensure_model()
                 self.anki_ready = True
             anki.ensure_deck(deck)
+            # Перевод, сделанный заранее (фрагмент перевели до передачи в Anki), —
+            # сразу на оборот, если текст фрагмента с тех пор не менялся.
+            from .translator import stored_translation
+
+            back = stored_translation(project, entry["fragment_id"], entry["text"])
             try:
                 entry["anki_note_id"] = anki.add_clip_note(
                     deck,
@@ -173,6 +178,8 @@ class Worker:
                     entry["fragment_id"],
                     entry["clip"],
                     self.speakers.get(project.name, set()),
+                    back=back,
+                    extra_tags=["агент_перевод"] if back else None,
                 )
             except RuntimeError as error:
                 # Карточка уже создана прошлым запуском, который упал, не успев

@@ -187,6 +187,13 @@ def project_stats(project_id: str):
     summary = library.summary(p.dir)
     _anki_flag_counts()  # обновить кэш переведённых, если устарел
     summary["translated"] = _anki_flags_cache.get("translated", {}).get(project_id, 0)
+    # Сколько фрагментов ещё без перевода (и переданные в Anki, и нет) — для кнопки "Перевести".
+    from phase3_export import anki, translator
+
+    try:
+        summary["to_translate"] = len(translator.project_cards(p.dir))
+    except (anki.AnkiUnavailable, RuntimeError):
+        summary["to_translate"] = None  # Anki закрыт — неизвестно
     return {"summary": summary, "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir),
             "deck_sync": _deck_sync_state()}
 
@@ -695,6 +702,30 @@ def agent_state():
     }
 
 
+_batch_poller = {"running": False}
+
+
+def _ensure_batch_poller() -> None:
+    """Пока есть заявки Batch API — раз в BATCH_POLL_SECONDS забирать готовые (в фоне)."""
+    from phase3_export import agent
+
+    if _batch_poller["running"]:
+        return
+    _batch_poller["running"] = True
+
+    def loop():
+        while agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, []):
+            time.sleep(BATCH_POLL_SECONDS)
+            try:
+                agent.poll_batches(DATA_DIR)
+                _anki_flags_cache["at"] = 0.0  # переведённые поменялись — перечитать
+            except Exception:
+                pass
+        _batch_poller["running"] = False
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
 class AgentRunRequest(BaseModel):
     limit: int | None = None
     project: str | None = None  # перевести непереведённые карточки этого видео (иначе — по флагам)
@@ -718,6 +749,7 @@ def agent_run(body: AgentRunRequest):
         args += ["--project", body.project]
     if body.batch:
         args += ["--batch"]
+        threading.Timer(5, _ensure_batch_poller).start()  # заявка уйдёт — начать ждать ответ
     subprocess.Popen(
         args, cwd=str(REPO_DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True,
@@ -729,6 +761,7 @@ def agent_run(body: AgentRunRequest):
 class AgentApplyRequest(BaseModel):
     approve: list[int] = []
     reject: list[int] = []
+    edits: dict[str, str] = {}  # id заметки -> оборот, поправленный вручную
 
 
 @app.post("/api/agent/apply")
@@ -737,7 +770,7 @@ def agent_apply(body: AgentApplyRequest):
     from phase3_export import agent, anki
 
     try:
-        result = agent.apply(DATA_DIR, body.approve, body.reject)
+        result = agent.apply(DATA_DIR, body.approve, body.reject, body.edits)
     except anki.AnkiUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error))
     _anki_flags_cache["at"] = 0.0  # флаги изменились — перечитать
@@ -917,3 +950,10 @@ except Exception as error:  # очередь не должна мешать за
 # матчит в порядке регистрации, поэтому более специфичные /api/* выше.
 app.mount("/media", StaticFiles(directory=str(DATA_DIR)), name="media")
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+
+
+# Заявки Batch API, оставшиеся с прошлого запуска сервера, — продолжать ждать ответ.
+try:
+    _ensure_batch_poller()
+except Exception:  # data/ ещё нет и т.п.
+    pass

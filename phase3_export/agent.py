@@ -162,9 +162,12 @@ def _status_writer(data_dir: Path, model: str, label: str):
 def run(data_dir: Path, project: str | None = None, batch: bool = False, only_flagged: bool = False,
         limit: int | None = None) -> None:
     """
-    Перевод пачками (translator.py): карточки с флагом "перевод" (only_flagged)
-    или все непереведённые карточки видео project. batch — одной заявкой
-    OpenRouter Batch API (ответ подтянется позже, см. poll_batches).
+    Перевод пачками (translator.py).
+      - project: перевести целое видео — все фрагменты без перевода; результат
+        пишется сразу (переданным в Anki — на оборот, остальным — в хранилище);
+      - иначе: карточки с флагом "перевод" всех видео — результат идёт в
+        предложения (окно "Перевод": посмотреть, поправить, одобрить).
+    batch — одной заявкой OpenRouter Batch API (ответ подтянется позже, см. poll_batches).
     """
     from webapp.library import app_settings
 
@@ -172,22 +175,26 @@ def run(data_dir: Path, project: str | None = None, batch: bool = False, only_fl
 
     model = app_settings(data_dir).get("openrouter_model") or DEFAULT_MODEL
     proposals_path = data_dir / PROPOSALS_FILE
-    proposals = load_json(proposals_path, [])
-    pending = {p["note_id"] for p in proposals}
+    pending = {p["note_id"] for p in load_json(proposals_path, [])}
     projects = [data_dir / project] if project else sorted(
         d for d in data_dir.iterdir() if (d / "export" / "index.json").exists())
+    direct = bool(project)
     spent = 0.0
-    status = _status_writer(data_dir, model, "перевод")
+    status = _status_writer(data_dir, model, "перевод видео" if direct else "перевод по флагам")
     try:
         for project_dir in projects:
-            cards = [c for c in translator.cards_to_translate(project_dir, only_flagged=only_flagged)
-                     if c["note_id"] not in pending]
+            if direct:
+                cards = translator.project_cards(project_dir)
+            else:
+                cards = [c for c in translator.cards_to_translate(project_dir, only_flagged=True)
+                         if c["note_id"] not in pending]
             if limit:
                 cards = cards[:limit]
             if not cards:
                 continue
             if batch:
                 job = translator.submit_batch(data_dir, project_dir, cards, model)
+                job["direct"] = direct
                 jobs = load_json(data_dir / BATCH_JOBS_FILE, [])
                 jobs.append(job)
                 save_json(data_dir / BATCH_JOBS_FILE, jobs)
@@ -195,9 +202,12 @@ def run(data_dir: Path, project: str | None = None, batch: bool = False, only_fl
                 continue
             new, cost = translator.translate_realtime(data_dir, project_dir, cards, model, status)
             spent += cost
-            proposals = load_json(proposals_path, []) + new
-            save_json(proposals_path, proposals)
-            print(f"{project_dir.name}: {len(new)} предложений (${cost:.4f})", flush=True)
+            if direct:
+                done = translator.apply_direct(project_dir, new, cards)
+                print(f"{project_dir.name}: переведено {done} (${cost:.4f})", flush=True)
+            else:
+                save_json(proposals_path, load_json(proposals_path, []) + new)
+                print(f"{project_dir.name}: {len(new)} предложений (${cost:.4f})", flush=True)
     except Exception as error:  # сеть, баланс, модель — показать в окне "Перевод"
         save_json(data_dir / STATUS_FILE, {"state": "error", "message": str(error)[:300], "model": model,
                                            "spent": round(spent, 4), "updated": time.time()})
@@ -206,7 +216,7 @@ def run(data_dir: Path, project: str | None = None, batch: bool = False, only_fl
 
 
 def poll_batches(data_dir: Path) -> int:
-    """Готовые заявки Batch API -> предложения. Возвращает, сколько предложений добавлено."""
+    """Готовые заявки Batch API: целое видео — сразу записать, по флагам — в предложения."""
     from . import translator
 
     jobs = load_json(data_dir / BATCH_JOBS_FILE, [])
@@ -220,8 +230,10 @@ def poll_batches(data_dir: Path) -> int:
             left.append(job)
             continue
         if state == "completed":
-            proposals = load_json(data_dir / PROPOSALS_FILE, []) + new
-            save_json(data_dir / PROPOSALS_FILE, proposals)
+            if job.get("direct"):
+                translator.apply_direct(data_dir / job["project"], new, job["cards"])
+            else:
+                save_json(data_dir / PROPOSALS_FILE, load_json(data_dir / PROPOSALS_FILE, []) + new)
             added += len(new)
         elif state in ("failed", "expired", "cancelled"):
             continue
@@ -255,7 +267,7 @@ def prune_stale(data_dir: Path) -> list[dict]:
     return kept
 
 
-def apply(data_dir: Path, approve: list[int], reject: list[int]) -> dict:
+def apply(data_dir: Path, approve: list[int], reject: list[int], edits: dict | None = None) -> dict:
     """
     Одобренные предложения — в Anki (лицо без комментариев, новый оборот,
     метка агент_перевод; флаг "перевод" снимается: зелёный -> без флага,
@@ -264,6 +276,11 @@ def apply(data_dir: Path, approve: list[int], reject: list[int]) -> dict:
     proposals_path = data_dir / PROPOSALS_FILE
     proposals = load_json(proposals_path, [])
     approve, reject = set(approve), set(reject)
+    # Оборот, поправленный вручную в окне "Перевод" перед одобрением.
+    for p in proposals:
+        edited = (edits or {}).get(str(p["note_id"]))
+        if edited is not None:
+            p["back_new"] = edited
     done = []
     for p in proposals:
         if p["note_id"] not in approve:

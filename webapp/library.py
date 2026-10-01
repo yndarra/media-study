@@ -132,6 +132,8 @@ DEFAULT_APP_SETTINGS = {
     "auto_process": False,  # обрабатывать видео сразу после добавления
     # Агент перевода (карточки с флагом "перевод"): модель OpenRouter и файл с ключом.
     "openrouter_model": "google/gemini-3.8-flash",
+    # Модель агента поиска источников (с веб-поиском OpenRouter).
+    "search_model": "anthropic/claude-sonnet-5.5",
     "openrouter_key_file": "",
     # Запасной ключ: когда на основном кончатся деньги (OpenRouter отвечает 402),
     # запросы переходят на него, и он становится основным.

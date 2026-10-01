@@ -158,7 +158,8 @@ def cards_to_translate(project_dir: Path, only_flagged: bool = False, fragment_i
         if not texts.get(entry["fragment_id"], "").strip():
             continue  # без текста — переводить нечего
         result.append({
-            "id": entry["clip"].split(".")[0], "note_id": note["noteId"], "fragment_id": entry["fragment_id"],
+            # Номер — как в тексте видео для модели (порядок фрагментов в редакторе).
+            "id": f"{order[entry['fragment_id']] + 1:04d}", "note_id": note["noteId"], "fragment_id": entry["fragment_id"],
             "flag": flags.get(note["noteId"], 0), "project": project_dir.name,
             "front_old": front, "back_old": back, "front_new": front_clean,
             "text": front_text(front_clean), "speaker_text": texts.get(entry["fragment_id"], ""),
@@ -269,7 +270,7 @@ def translate_realtime(data_dir: Path, project_dir: Path, cards: list[dict], mod
     в памяти и в data/glossary не пишется.
     """
     if transcript is None:
-        transcript, _ = video_transcript(project_dir)
+        transcript, _ = video_transcript(project_dir, number_all=True)
     proposals, spent = [], 0.0
     groups = chunks(cards)
     for n, group in enumerate(groups, 1):
@@ -300,7 +301,7 @@ def translate_realtime(data_dir: Path, project_dir: Path, cards: list[dict], mod
 
 def submit_batch(data_dir: Path, project_dir: Path, cards: list[dict], model: str) -> dict:
     """Все пачки одной заявкой OpenRouter Batch API (вдвое дешевле, ответ — позже)."""
-    transcript, _ = video_transcript(project_dir)
+    transcript, _ = video_transcript(project_dir, number_all=True)
     glossary = load_glossary(data_dir, project_dir)
     groups = chunks(cards)
     requests = []
@@ -337,3 +338,91 @@ def collect_batch(data_dir: Path, job: dict) -> tuple[str, list[dict], float]:
         proposals += proposals_from(answer, group, job["model"], cost / max(1, len(job["groups"])),
                                     f"{job['project']}:{first}-{last}")
     return state, proposals, cost
+
+
+# -- перевод целого видео: сразу в Anki / в хранилище ---------------------------------
+#
+# Кнопка "Перевести" (подробности видео) переводит все фрагменты видео без
+# перевода — и уже переданные в Anki, и ещё нет. Переданным перевод пишется
+# сразу на оборот карточки; остальные — в хранилище export/translations.json
+# (фрагмент -> текст, перевод): когда фрагмент передадут в Anki с тем же
+# текстом, карточка сразу создаётся с переводом (worker.py).
+
+TRANSLATIONS_FILE = "translations.json"
+TRANSLATED_TAG = "агент_перевод"
+
+
+def _translations_path(project_dir: Path) -> Path:
+    return Path(project_dir) / "export" / TRANSLATIONS_FILE
+
+
+def stored_translation(project_dir: Path, fragment_id: str, text: str) -> str:
+    """Оборот, переведённый заранее для этого фрагмента (если текст тот же), иначе ""."""
+    item = load_json(_translations_path(project_dir), {}).get(fragment_id)
+    return item["back"] if item and item.get("text", "").strip() == (text or "").strip() else ""
+
+
+def store_translations(project_dir: Path, items: list[dict]) -> None:
+    path = _translations_path(project_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = load_json(path, {})
+    for item in items:
+        data[item["fragment_id"]] = {"text": item["speaker_text"], "back": item["back"], "model": item["model"],
+                                     "created": datetime.now().isoformat(timespec="seconds")}
+    save_json(path, data)
+
+
+def project_cards(project_dir: Path) -> list[dict]:
+    """
+    Все фрагменты видео с текстом, которым нужен перевод, по порядку: переданные
+    в Anki — без оборота; ещё не переданные — без перевода в хранилище (или
+    текст с тех пор изменили). id — номер фрагмента в редакторе (как в тексте
+    видео для модели).
+    """
+    from common.manifest_schema import Manifest, STATUS_ACTIVE
+    from .worker import read_json
+
+    manifest = Manifest.load(project_dir / "manifest.json")
+    index = {e["fragment_id"]: e for e in read_json(project_dir / "export" / "index.json", []) if e.get("anki_note_id")}
+    notes = {}
+    if index:
+        notes = {n["noteId"]: n for n in anki.invoke("notesInfo", notes=[e["anki_note_id"] for e in index.values()])}
+    cards = []
+    for k, f in enumerate(manifest.fragments):
+        if f.status != STATUS_ACTIVE or not f.text.strip():
+            continue
+        plain = "\n".join(line.split(": ", 1)[1] if ": " in line else line for line in f.text.split("\n"))
+        card = {"id": f"{k + 1:04d}", "note_id": None, "fragment_id": f.id, "flag": 0, "project": project_dir.name,
+                "front_old": "", "back_old": "", "front_new": "", "text": plain, "speaker_text": f.text,
+                "back_text": "", "comments": []}
+        entry = index.get(f.id)
+        if entry:
+            note = notes.get(entry["anki_note_id"])
+            if not note:
+                continue
+            back = note["fields"][anki.BACK_FIELD]["value"]
+            if front_text(extract_comments(back)[0]).strip():
+                continue  # уже переведена в Anki
+            card.update(note_id=note["noteId"], front_old=note["fields"][anki.FRONT_FIELD]["value"])
+        elif stored_translation(project_dir, f.id, f.text):
+            continue  # уже переведена заранее
+        cards.append(card)
+    return cards
+
+
+def apply_direct(project_dir: Path, proposals: list[dict], cards: list[dict]) -> int:
+    """
+    Перевод целого видео: переданным в Anki — сразу на оборот (метка
+    агент_перевод, короткое тире на всей карточке), остальным — в хранилище.
+    """
+    by_fragment = {c["fragment_id"]: c for c in cards}
+    stored = []
+    for p in proposals:
+        card = by_fragment[p["fragment_id"]]
+        stored.append({**card, "back": p["back_new"], "model": p["model"]})
+        if card["note_id"]:
+            anki.invoke("updateNoteFields", note={"id": card["note_id"], "fields": {
+                anki.FRONT_FIELD: card["front_old"].replace("—", "–"), anki.BACK_FIELD: p["back_new"].replace("—", "–")}})
+            anki.invoke("addTags", notes=[card["note_id"]], tags=TRANSLATED_TAG)
+    store_translations(project_dir, stored)
+    return len(stored)

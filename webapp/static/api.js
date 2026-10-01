@@ -48,11 +48,12 @@ const Api = {
     });
   },
 
-  agentApply(approve, reject) {
+  // edits: {id заметки: оборот, поправленный вручную}.
+  agentApply(approve, reject, edits = {}) {
     return this.json("/api/agent/apply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approve, reject }),
+      body: JSON.stringify({ approve, reject, edits }),
     });
   },
 

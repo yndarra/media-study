@@ -418,7 +418,7 @@ const Pages = {
               ${(p.comments || []).length ? `<div class="agent-comments">Ваши комментарии: ${p.comments.map((c) => `«${escapeHtml(c)}»`).join(", ")}</div>` : ""}
               <div class="agent-diff">
                 <div><div class="muted small">было</div><div class="agent-back old">${p.back_old || '<span class="muted">пусто</span>'}</div></div>
-                <div><div class="muted small">станет</div><div class="agent-back new">${p.back_new}</div></div>
+                <div><div class="muted small">станет <span class="muted">(можно поправить)</span></div><div class="agent-back new" contenteditable="true">${p.back_new}</div></div>
               </div>
             </div>`).join("")}
           </div>`).join("") : '<p class="muted">Предложений нет.</p>'}</div>
@@ -435,13 +435,19 @@ const Pages = {
         }
         draw();
       });
+      // Обороты, которые поправили вручную (отличаются от предложенного).
+      const original = new Map(proposals.map((p) => [String(p.note_id), p.back_new]));
+      const editsOf = (ids) => Object.fromEntries(ids.map((id) => {
+        const el = body.querySelector(`.agent-item[data-note="${id}"] .agent-back.new`);
+        return [String(id), el ? el.innerHTML : null];
+      }).filter(([id, html]) => html !== null && html !== original.get(id)));
       const checked = () => [...body.querySelectorAll(".agent-item")]
         .filter((el) => el.querySelector("input").checked).map((el) => Number(el.dataset.note));
       const act = async (approve) => {
         const ids = checked();
         if (!ids.length) return;
         try {
-          approve ? await Api.agentApply(ids, []) : await Api.agentApply([], ids);
+          approve ? await Api.agentApply(ids, [], editsOf(ids)) : await Api.agentApply([], ids);
           draw();
         } catch (err) {
           body.querySelector(".note").textContent = err.message;
@@ -456,7 +462,7 @@ const Pages = {
         const ids = () => [...group.querySelectorAll(".agent-item")].map((el) => Number(el.dataset.note));
         const run = async (approve) => {
           try {
-            approve ? await Api.agentApply(ids(), []) : await Api.agentApply([], ids());
+            approve ? await Api.agentApply(ids(), [], editsOf(ids())) : await Api.agentApply([], ids());
             draw();
           } catch (err) {
             body.querySelector(".note").textContent = err.message;
@@ -560,8 +566,8 @@ const Pages = {
     const lines = lineItems.reduce((acc, item, i) => acc + (i === 0 ? "" : i % 6 === 0 ? ",<br>" : ", ") + item, "");
     const pct = (n) => (s.cards ? `${Math.round((n / s.cards) * 100)}%` : "0%");
     const shift = s.bound_shift_frames;
-    // Карточек в Anki без перевода (кнопка "Перевести" — пока без действия).
-    const untranslated = Math.max(0, (v.notes_in_anki || 0) - (v.translated || 0));
+    // Фрагментов без перевода (переданные в Anki и ещё нет); null — Anki закрыт, неизвестно.
+    const untranslated = v.to_translate === null ? 1 : v.to_translate || 0;
     body.innerHTML = `
       <div class="modal-head">
         <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
@@ -592,7 +598,7 @@ const Pages = {
       </div>
       <div class="modal-actions">
         <a class="step-btn primary" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
-        <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
+        <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести${v.to_translate ? ` (${v.to_translate})` : ""}</button>
         <label class="check small" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом</label>
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn">Сохранить</button>
@@ -617,8 +623,8 @@ const Pages = {
         await Api.agentRun({ project: id, batch });
         e.target.disabled = true;
         body.querySelector("#info-note").textContent = batch
-          ? "Заявка отправлена – переводы появятся в окне «Перевод», когда OpenRouter их вернёт"
-          : "Перевод запущен – предложения появятся в окне «Перевод»";
+          ? "Заявка отправлена – переводы запишутся, когда OpenRouter их вернёт"
+          : "Перевод запущен – переданные в Anki получат перевод сразу, остальные – когда их передадут";
       } catch (err) {
         body.querySelector("#info-note").textContent = err.message;
       }
@@ -812,6 +818,9 @@ const Pages = {
         <tr><td>Модель перевода</td><td><div class="secret-row picker"><input id="set-model" class="wide" value="${escapeHtml(s.openrouter_model || "")}" placeholder="anthropic/claude-sonnet-5.5"><button id="set-model-pick" class="icon-btn" title="Выбрать из списка">▾</button>
           <div id="model-list" class="model-list hidden"></div></div>
           <div class="muted small">Можно вписать свою (идентификатор на OpenRouter) или выбрать из списка; цена – $ за миллион токенов (вход / выход)</div></td></tr>
+        <tr><td>Модель поиска</td><td><div class="secret-row picker"><input id="set-search-model" class="wide" value="${escapeHtml(s.search_model || "")}" placeholder="anthropic/claude-sonnet-5.5"><button id="set-search-pick" class="icon-btn" title="Выбрать из списка">▾</button>
+          <div id="search-model-list" class="model-list hidden"></div></div>
+          <div class="muted small">Агент поиска источников текста для сверки (с веб-поиском OpenRouter); лучше брать сильную модель – запросов мало</div></td></tr>
       </table>
       <div class="actions"><button id="settings-save" class="step-btn">Сохранить</button><button id="settings-cancel" class="step-btn">Отменить</button></div>`;
     const showDeckSync = (state) => {
@@ -835,28 +844,33 @@ const Pages = {
       const input = document.getElementById("set-key");
       input.type = input.type === "password" ? "text" : "password";
     });
-    const list = document.getElementById("model-list");
-    document.getElementById("set-model-pick").addEventListener("click", async () => {
-      if (!list.classList.contains("hidden")) {
-        list.classList.add("hidden");
-        return;
-      }
-      list.classList.remove("hidden");
-      list.innerHTML = '<div class="muted small">загрузка…</div>';
-      try {
-        const models = await Api.openrouterModels();
-        list.innerHTML = models.map((m) =>
-          `<div class="model-item" data-id="${escapeHtml(m.id)}"><span>${escapeHtml(m.id)}</span><span class="muted small">$${m.prompt} / $${m.completion}</span></div>`).join("");
-        list.querySelectorAll(".model-item").forEach((item) => item.addEventListener("click", () => {
-          const input = document.getElementById("set-model");
-          input.value = item.dataset.id;
-          input.dispatchEvent(new Event("input", { bubbles: true }));
+    // Выбор модели из списка OpenRouter (кнопка ▾ справа от поля).
+    const modelPicker = (buttonId, listId, inputId) => {
+      const list = document.getElementById(listId);
+      document.getElementById(buttonId).addEventListener("click", async () => {
+        if (!list.classList.contains("hidden")) {
           list.classList.add("hidden");
-        }));
-      } catch (err) {
-        list.innerHTML = `<div class="muted small">не удалось загрузить список: ${escapeHtml(err.message)}</div>`;
-      }
-    });
+          return;
+        }
+        list.classList.remove("hidden");
+        list.innerHTML = '<div class="muted small">загрузка…</div>';
+        try {
+          const models = await Api.openrouterModels();
+          list.innerHTML = models.map((m) =>
+            `<div class="model-item" data-id="${escapeHtml(m.id)}"><span>${escapeHtml(m.id)}</span><span class="muted small">$${m.prompt} / $${m.completion}</span></div>`).join("");
+          list.querySelectorAll(".model-item").forEach((item) => item.addEventListener("click", () => {
+            const input = document.getElementById(inputId);
+            input.value = item.dataset.id;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            list.classList.add("hidden");
+          }));
+        } catch (err) {
+          list.innerHTML = `<div class="muted small">не удалось загрузить список: ${escapeHtml(err.message)}</div>`;
+        }
+      });
+    };
+    modelPicker("set-model-pick", "model-list", "set-model");
+    modelPicker("set-search-pick", "search-model-list", "set-search-model");
     cancelButton.addEventListener("click", () => watcher.restore());
     saveButton.addEventListener("click", async () => {
       const saved = await Api.saveSettings({
@@ -866,6 +880,7 @@ const Pages = {
         auto_process: document.getElementById("set-auto").checked,
         openrouter_key: document.getElementById("set-key").value.trim(),
         openrouter_model: document.getElementById("set-model").value.trim(),
+        search_model: document.getElementById("set-search-model").value.trim(),
       });
       watcher.snapshot();
       watchDeckSync(saved.deck_sync);
