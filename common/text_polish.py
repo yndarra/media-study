@@ -90,6 +90,12 @@ def _is_apostrophe(text: str, i: int) -> bool:
     if not after.isalnum() and i > 1 and text[i - 2].isalpha():
         if before in "sS" or text[i - 2: i].lower() == "in":
             return True
+    return _is_leading_elision(text, i)
+
+
+def _is_leading_elision(text: str, i: int) -> bool:
+    """Знак в начале просторечного сокращения: 'cause, ‘em, 'round."""
+    before = text[i - 1] if i > 0 else " "
     word = re.match(r"[A-Za-z]+", text[i + 1:])
     return not before.strip() and bool(word) and word.group(0).lower() in _LEADING_ELISIONS
 
@@ -114,6 +120,10 @@ def _balance_quotes(text: str) -> str:
     openers, closers = [], []
     for i, ch in enumerate(text):
         if ch not in "'‘’" or (ch != "‘" and _is_apostrophe(text, i)):
+            continue
+        # ‘ перед просторечным сокращением ('cause, 'em, 'round) — тоже
+        # апостроф, а не открывающая кавычка (в источниках бывает и так).
+        if ch == "‘" and _is_leading_elision(text, i):
             continue
         before = text[i - 1] if i > 0 else " "
         after = text[i + 1] if i + 1 < len(text) else " "

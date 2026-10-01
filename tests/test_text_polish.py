@@ -40,6 +40,14 @@ class TestPolish(unittest.TestCase):
                      "There should be some Roseshrooms 'round here.", "You been playin' the fool all along?"):
             self.assertEqual(polish_line(line), line)
 
+    def test_typographic_leading_elision_is_not_quote(self):
+        # ‘cause (= because) с типографским апострофом — не открывающая кавычка:
+        # закрывающая ’ в конце не добавляется.
+        line = "Timid Civilian: Some of us can barely move ‘cause we’re so damn hungry."
+        self.assertEqual(polish_text(line), line)
+        # А настоящая непарная ‘ по-прежнему закрывается.
+        self.assertEqual(polish_line("He said ‘come here."), "He said ‘come here.’")
+
     def test_continuation_start_kept(self):
         self.assertEqual(polish_line("– while I couldn't feel a thing, haha."), "– while I couldn't feel a thing, haha.")
 
