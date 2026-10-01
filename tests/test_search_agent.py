@@ -25,5 +25,22 @@ class TestTrim(unittest.TestCase):
         self.assertEqual(sa._dialogue(parser.lines), ["Chixia: Hi there!", "Rover: Hello."])
 
 
+
+class TestFillGaps(unittest.TestCase):
+    def test_missing_line_comes_from_other_source_in_place(self):
+        speech = {"segments": [
+            {"start": 1.0, "text": "we are going to the noodle shop right now"},
+            {"start": 2.0, "text": "I was worried you just stood there and gazed into the distance"},
+            {"start": 3.0, "text": "the noodles here are the best in the whole city"},
+        ]}
+        main = ["Chixia: We are going to the noodle shop right now!", "Chixia: The noodles here are the best in the whole city."]
+        other = ["Elder: Something unrelated about the weather today.",
+                 "Yangyang: I was worried... You just stood there and gazed into the distance."]
+        lines, added = sa.fill_gaps(main, [other], speech)
+        self.assertEqual(added, 1)
+        self.assertEqual(lines, [main[0], other[1], main[1]])
+        self.assertEqual(sa.missing_segments(lines, speech), [])
+
+
 if __name__ == "__main__":
     unittest.main()

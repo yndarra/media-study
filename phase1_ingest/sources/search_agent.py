@@ -58,6 +58,13 @@ COMMON_PROMPT = """Ты – агент поиска текстовых исто�
 
 SEARCH_PROMPT = """РЕЖИМ: самостоятельный поиск. Ссылок от пользователя нет – найди достоверные источники сам по названию видео, каналу и репликам."""
 
+GAP_PROMPT = """РЕЖИМ: поиск недостающих реплик. Основной источник уже найден, но в нём нет части реплик, которые звучат в видео (их список ниже – распознанная речь, с ошибками распознавания). Найди страницы, где эти реплики есть с именами говорящих: другие транскрипты этой же главы/квеста, страницы отдельных сцен, вики персонажей, обсуждения с цитатами. Основной источник повторно не возвращай."""
+
+# Пропуски основного источника: сколько ненайденных реплик речи (каждая не
+# короче MIN_PAIRS пар слов) стоит отдельного запроса агенту.
+GAP_QUERY_MIN = 3
+GAP_QUERY_SAMPLES = 15
+
 DEEP_PROMPT = """РЕЖИМ: глубокий поиск. Пользователь дал ссылки – это отправная точка (часто это сборник сценариев, где лежит и этот контент, и много другого). Твоя задача:
 1. разобраться, что по этим ссылкам: какие страницы/подстраницы/главы соответствуют ИМЕННО этому видео (по названию акта/квеста и по репликам);
 2. вернуть самые точные ссылки (ссылки пользователя тоже, если они подходят целиком);
@@ -208,6 +215,80 @@ def coverage(lines: list[str], heard: set) -> float:
     return len(heard & have) / len(heard) if heard else 0.0
 
 
+# -- недостающие реплики из других источников ----------------------------------------
+
+def _segments(whisper_transcript: dict) -> list[dict]:
+    """Фразы распознанной речи по порядку: {start, text, pairs}."""
+    result = []
+    for seg in whisper_transcript.get("segments", []):
+        text = (seg.get("text") or "").strip()
+        pairs = _pairs(_words(text))
+        if text and pairs:
+            result.append({"start": seg.get("start", 0.0), "text": text, "pairs": pairs})
+    return result
+
+
+def _line_pairs(line: str) -> set:
+    return _pairs(_words(line.split(": ", 1)[-1]))
+
+
+def _best_line(segment_pairs: set, lines: list[str], pairs_of: list[set]) -> int | None:
+    """Строка, где больше всего пар слов фразы (не меньше LINE_MATCH от фразы)."""
+    best, best_share = None, 0.0
+    for k, pairs in enumerate(pairs_of):
+        if not pairs:
+            continue
+        share = len(segment_pairs & pairs) / len(segment_pairs)
+        if share > best_share:
+            best, best_share = k, share
+    return best if best_share >= LINE_MATCH else None
+
+
+def missing_segments(lines: list[str], whisper_transcript: dict) -> list[dict]:
+    """Фразы речи (не короче MIN_PAIRS пар), которых в репликах lines нет."""
+    pairs_of = [_line_pairs(line) for line in lines]
+    return [seg for seg in _segments(whisper_transcript)
+            if len(seg["pairs"]) >= MIN_PAIRS and _best_line(seg["pairs"], lines, pairs_of) is None]
+
+
+def fill_gaps(main: list[str], others: list[list[str]], whisper_transcript: dict) -> tuple[list[str], int]:
+    """
+    Реплики речи, которых нет в основном источнике, ищутся в других
+    источниках; найденная строка вставляется на своё место по времени — после
+    реплики основного источника, совпавшей с предыдущей фразой речи.
+    Возвращает (реплики, сколько вставлено).
+    """
+    main = list(main)
+    main_pairs = [_line_pairs(line) for line in main]
+    other_lines = [line for lines in others for line in lines]
+    other_pairs = [_line_pairs(line) for line in other_lines]
+    # Для каждой фразы речи: строка основного источника (индекс) или вставка.
+    anchor = -1  # последняя совпавшая строка основного источника
+    inserts: dict[int, list[str]] = {}
+    taken = set(main)
+    added = 0
+    for seg in _segments(whisper_transcript):
+        if len(seg["pairs"]) < MIN_PAIRS:
+            continue
+        k = _best_line(seg["pairs"], main, main_pairs)
+        if k is not None:
+            anchor = max(anchor, k)
+            continue
+        j = _best_line(seg["pairs"], other_lines, other_pairs)
+        if j is None or other_lines[j] in taken:
+            continue
+        taken.add(other_lines[j])
+        inserts.setdefault(anchor, []).append(other_lines[j])
+        added += 1
+    if not added:
+        return main, 0
+    result = list(inserts.get(-1, []))
+    for k, line in enumerate(main):
+        result.append(line)
+        result.extend(inserts.get(k, []))
+    return result, added
+
+
 # -- агент ---------------------------------------------------------------------------
 
 def _samples(whisper_transcript: dict) -> str:
@@ -219,7 +300,8 @@ def _samples(whisper_transcript: dict) -> str:
     return "\n".join(picked)
 
 
-def ask_agent(data_dir: Path, project_dir: Path, mode: str, links: list[str], whisper_transcript: dict) -> dict:
+def ask_agent(data_dir: Path, project_dir: Path, mode: str, links: list[str], whisper_transcript: dict,
+              missing: list[str] | None = None) -> dict:
     """Запрос к модели поиска (с веб-поиском OpenRouter). Возвращает {"sources": [...], "note": ...}."""
     from webapp.library import app_settings, title_of, video_info, group_of
     from phase3_export.translator import _post, parse_answer
@@ -233,10 +315,14 @@ def ask_agent(data_dir: Path, project_dir: Path, mode: str, links: list[str], wh
     )
     if mode == "deep":
         user += "Ссылки пользователя:\n" + ("\n".join(links) or "—") + "\n\n"
-    user += "Примеры реплик из распознанной речи видео (с ошибками распознавания):\n" + _samples(whisper_transcript)
+    if missing:
+        user += "Основной источник: " + "\n".join(links) + "\n\nРеплики видео, которых в нём нет:\n" + "\n".join(missing)
+    else:
+        user += "Примеры реплик из распознанной речи видео (с ошибками распознавания):\n" + _samples(whisper_transcript)
     body = {
         "model": model,
-        "messages": [{"role": "system", "content": COMMON_PROMPT + "\n\n" + (DEEP_PROMPT if mode == "deep" else SEARCH_PROMPT)},
+        "messages": [{"role": "system", "content": COMMON_PROMPT + "\n\n" + (
+            GAP_PROMPT if missing else DEEP_PROMPT if mode == "deep" else SEARCH_PROMPT)},
                      {"role": "user", "content": user}],
         "plugins": [{"id": "web", "max_results": 8}],
         "temperature": 0.2,
@@ -295,8 +381,40 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
     checked = [c for c in checked if c["lines"]]
     checked.sort(key=lambda c: -c["coverage"])
     used = checked[:1]
-    if checked and checked[0]["coverage"] < GOOD_COVERAGE and len(checked) > 1:
-        used.append(checked[1])  # лучший покрывает мало — добавить следующий
+    lines = list(checked[0]["lines"]) if checked else []
+    if checked:
+        # Реплики речи, которых нет в основном источнике, — точечно из других
+        # найденных источников (на своё место по времени).
+        lines, added = fill_gaps(lines, [c["lines"] for c in checked[1:]], whisper_transcript)
+        if added:
+            log(f"  Недостающие реплики из других источников: {added}")
+            used += [c for c in checked[1:] if any(line in lines for line in c["lines"])]
+        # Всё ещё много не найдено, и агент включён — спросить его именно про них.
+        missing = missing_segments(lines, whisper_transcript)
+        if len(missing) >= GAP_QUERY_MIN and mode in ("deep", "search"):
+            quotes = [seg["text"] for seg in missing[:GAP_QUERY_SAMPLES]]
+            log(f"  Не найдено реплик: {len(missing)} — агент ищет их отдельно…")
+            try:
+                report(project_dir, "agent_search", None, force=True)
+                gap_answer = ask_agent(data_dir, project_dir, mode, [checked[0]["url"]], whisper_transcript, missing=quotes)
+                report(project_dir, "search", None, force=True)
+                log(f"  Агент: {gap_answer.get('note', '')} (${gap_answer.get('cost', 0):.4f})")
+                extra = []
+                for source in gap_answer.get("sources", [])[:MAX_SOURCES]:
+                    if not source.get("url") or any(source["url"] == c["url"] for c in checked):
+                        continue
+                    try:
+                        extra_lines = fetch_lines(source["url"], log)
+                    except Exception as error:
+                        log(f"  {source['url']}: не скачалось ({error})")
+                        continue
+                    extra.append({**source, "lines": extra_lines, "coverage": coverage(extra_lines, heard)})
+                lines, added = fill_gaps(lines, [c["lines"] for c in extra], whisper_transcript)
+                log(f"  Ещё добавлено из найденного агентом: {added}")
+                checked += extra
+                used += [c for c in extra if any(line in lines for line in c["lines"])]
+            except Exception as error:
+                log(f"  Агент не смог: {error}")
     settings["found_sources"] = [{"url": c["url"], "title": c.get("title", ""), "coverage": round(c["coverage"], 3),
                                   "used": c in used} for c in checked]
     if note:
@@ -304,6 +422,5 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
     save_project_settings(project_dir, settings)
     if not used:
         return False
-    lines = [line for c in used for line in c["lines"]]
     (project_dir / "transcript.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return True
