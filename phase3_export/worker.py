@@ -10,12 +10,19 @@
 работает только один такой процесс (блокировка файла data/.stage3_worker.lock).
 
 Для каждого проекта в data/ (папка с manifest.json):
-  1. каждый переданный, живой фрагмент с текстом, которого ещё нет в
-     export/index.json, превращается в клип (phase3_export.export_clips.render_clip)
-     и запись в index.json;
-  2. для каждой записи без карточки создаётся карточка в Anki. Если Anki
-     закрыт, клипы продолжают резаться, а карточки создаются, как только он
-     откроется (повтор раз в ANKI_RETRY_SECONDS).
+  1. каждый переданный живой фрагмент (и с текстом, и без — у пустых
+     карточка с меткой без_текста), которого ещё нет в export/index.json,
+     превращается в клип (phase3_export.export_clips.render_clip) и запись
+     в index.json;
+  2. для каждой записи без карточки создаётся карточка в Anki — или
+     переиспользуется карточка фрагмента, из которого он получился
+     (вернувшийся из Anki фрагмент объединили/разделили: его карточка
+     остаётся на своём месте с новым клипом). Карточки фрагментов, которые
+     удалили, удаляются из Anki;
+  3. после изменений новые карточки всех видео выстраиваются по порядку
+     фрагментов (anki.resequence): вставка в середину сдвигает последующие.
+  Если Anki закрыт, клипы продолжают резаться, а карточки создаются, как
+  только он откроется (повтор раз в ANKI_RETRY_SECONDS).
 Манифест процесс только читает; пишет он index.json и файл состояния
 export/stage3_status.json (редактор берёт из него скорость кодирования,
 чтобы показать оставшееся время).
@@ -85,12 +92,37 @@ def known_speakers(project: Path, manifest: Manifest) -> set[str]:
     return names
 
 
+def active_successors(manifest: Manifest, fragment_id: str) -> list:
+    """
+    Живые фрагменты, в которые превратился удалённый фрагмент (объединение —
+    absorbed_into, разделение — split_into, по цепочке). Пусто — его просто удалили.
+    """
+    by_id = {f.id: f for f in manifest.fragments}
+    result, queue, seen = [], [fragment_id], set()
+    while queue:
+        fid = queue.pop(0)
+        if fid in seen or fid not in by_id:
+            continue
+        seen.add(fid)
+        f = by_id[fid]
+        if f.status == STATUS_ACTIVE:
+            result.append(f)
+        else:
+            queue += [f.absorbed_into] if f.absorbed_into else []
+            queue += list(f.split_into or [])
+    order = {f.id: k for k, f in enumerate(manifest.fragments)}
+    return sorted(result, key=lambda f: order[f.id])
+
+
 def pending_fragments(manifest: Manifest, index: list[dict]) -> list:
-    """Переданные фрагменты, по которым клипа ещё нет или его надо переделать (вернулся из Anki)."""
+    """
+    Переданные фрагменты, по которым клипа ещё нет или его надо переделать
+    (вернулся из Anki). Пустые (без текста) — тоже: у них карточка без_текста.
+    """
     done = {entry["fragment_id"] for entry in index if not entry.get("redo")}
     return [
         f for f in manifest.fragments
-        if f.exported and f.status == STATUS_ACTIVE and f.text.strip() and f.id not in done
+        if f.exported and f.status == STATUS_ACTIVE and f.id not in done
     ]
 
 
@@ -101,6 +133,7 @@ class Worker:
         self.anki_ready = False
         self.speakers: dict[str, set[str]] = {}  # говорящие по видео (для меток Anki)
         self.anki_down_until = 0.0
+        self.reorder_needed = False  # создавались/удалялись карточки — выровнять порядок
 
     def projects(self) -> list[Path]:
         if self.only_project:
@@ -157,6 +190,76 @@ class Worker:
             print(f"Anki недоступен: {error} — карточки создадутся позже", flush=True)
             self.anki_down_until = time.time() + ANKI_RETRY_SECONDS
             return False
+
+    def _adopt_note(self, manifest: Manifest, index: list[dict], entry: dict):
+        """
+        Карточка для нового фрагмента от удалённого предшественника: первый
+        по порядку преемник объединения/разделения забирает карточку
+        предшественника (её место в колоде и история повторений сохраняются).
+        """
+        by_id = {f.id: f for f in manifest.fragments}
+        for old in index:
+            fragment = by_id.get(old["fragment_id"])
+            if old is entry or not old.get("anki_note_id") or fragment is None or fragment.status == STATUS_ACTIVE:
+                continue
+            successors = active_successors(manifest, old["fragment_id"])
+            if successors and successors[0].id == entry["fragment_id"]:
+                note = (old["anki_note_id"], old.get("anki_deck"))
+                old["anki_note_id"] = None  # карточка передана преемнику
+                old["orphan"] = True
+                return note
+        return None
+
+    def _drop_orphans(self, project: Path, manifest: Manifest, index: list[dict], index_path: Path) -> bool:
+        """Записи удалённых фрагментов: карточку (если осталась) — из Anki, запись и клип — прочь."""
+        by_id = {f.id: f for f in manifest.fragments}
+        keep, drop = [], []
+        for entry in index:
+            fragment = by_id.get(entry["fragment_id"])
+            gone = fragment is None or fragment.status != STATUS_ACTIVE
+            # Пока преемник ещё правится (не передан в Anki снова) — ждём:
+            # его карточка займёт место предшественника.
+            waiting = gone and any(not s.exported for s in active_successors(manifest, entry["fragment_id"]))
+            (drop if gone and not waiting else keep).append(entry)
+        if not drop:
+            return False
+        try:
+            anki.delete_notes([e["anki_note_id"] for e in drop if e.get("anki_note_id")])
+        except anki.AnkiUnavailable:
+            return False
+        for entry in drop:
+            for name in (entry.get("clip"), entry.get("text_file")):
+                if name and not any(k.get("clip") == name or k.get("text_file") == name for k in keep):
+                    (project / "export" / name).unlink(missing_ok=True)
+            print(f"{project.name}: {entry['fragment_id']} удалён — его карточка убрана из Anki", flush=True)
+        index[:] = keep
+        write_json(index_path, index)
+        self.reorder_needed = True
+        return True
+
+    def reorder(self) -> None:
+        """
+        Новые карточки всех видео — по порядку: видео в порядке их первых
+        карточек в Anki, внутри видео — по порядку фрагментов на шкале времени.
+        """
+        projects = []
+        for project in self.projects():
+            manifest = Manifest.load(project / "manifest.json")
+            index = read_json(project / "export" / "index.json", [])
+            start = {f.id: f.algo_start_frame for f in manifest.fragments}
+            notes = sorted(
+                (e for e in index if e.get("anki_note_id")),
+                key=lambda e: (start.get(e["fragment_id"], e.get("start_frame", 0)), e["clip"]),
+            )
+            if notes:
+                projects.append([e["anki_note_id"] for e in notes])
+        if not projects:
+            return
+        # Порядок видео — по наименьшему id карточки (кто раньше попал в Anki).
+        projects.sort(key=min)
+        moved = anki.resequence([n for notes in projects for n in notes])
+        if moved:
+            print(f"Порядок карточек в Anki обновлён: переставлено {moved}", flush=True)
 
     def _update_note(self, project: Path, entry: dict) -> bool:
         """Обновляет существующую карточку переделанным клипом и текстом. False — Anki недоступен."""
@@ -228,28 +331,42 @@ class Worker:
             else:
                 index.append(entry)
             write_json(index_path, index)
-            print(f"{project.name}: {name}.mp4 ({frames} кадров, {clip_path.stat().st_size / 2**20:.1f} МБ) {fragment.text.splitlines()[0][:50]}", flush=True)
-            if redo and entry.get("anki_note_id"):
+            first_line = fragment.text.splitlines()[0][:50] if fragment.text.strip() else "(без текста)"
+            print(f"{project.name}: {name}{ext} ({frames} кадров, {clip_path.stat().st_size / 2**20:.1f} МБ) {first_line}", flush=True)
+            if not redo:
+                # Получился из вернувшегося фрагмента (объединение/разделение) —
+                # берёт его карточку, она остаётся на своём месте.
+                adopted = self._adopt_note(manifest, index, entry)
+                if adopted:
+                    entry["anki_note_id"], entry["anki_deck"] = adopted
+            if entry.get("anki_note_id"):
                 entry["anki_update_pending"] = True
                 self._update_note(project, entry)
             else:
                 self._make_note(project, deck, entry)
             write_json(index_path, index)
             did = True
+            self.reorder_needed = True
+
+        # Фрагменты, которые удалили (без живых преемников) или чьи преемники
+        # уже получили свои карточки, — их карточки больше не нужны.
+        if self._anki_available():
+            did |= self._drop_orphans(project, manifest, index, index_path)
 
         for entry in [e for e in index if e.get("anki_update_pending")]:
             if not self._update_note(project, entry):
                 break
             write_json(index_path, index)
             did = True
-        without_note = [e for e in index if not e.get("anki_note_id")]
+        without_note = [e for e in index if not e.get("anki_note_id") and not e.get("orphan")]
         for entry in without_note:
             self.status(project, "anki", "создаю карточки", seconds_per_frame=spf)
             if not self._make_note(project, deck, entry):
                 break
             write_json(index_path, index)
             did = True
-        waiting = any(not e.get("anki_note_id") or e.get("anki_update_pending") for e in index)
+            self.reorder_needed = True
+        waiting = any((not e.get("anki_note_id") and not e.get("orphan")) or e.get("anki_update_pending") for e in index)
         self.status(project, "waiting_anki" if waiting else "idle",
                     "жду Anki, чтобы создать карточки" if waiting else "", seconds_per_frame=spf)
         return did, waiting
@@ -264,6 +381,12 @@ class Worker:
                 waiting_any |= waiting
             if did_any:
                 continue
+            if self.reorder_needed and self._anki_available():
+                try:
+                    self.reorder()
+                    self.reorder_needed = False
+                except anki.AnkiUnavailable:
+                    self.anki_down_until = time.time() + ANKI_RETRY_SECONDS
             if waiting_any:
                 time.sleep(ANKI_RETRY_SECONDS)
                 continue

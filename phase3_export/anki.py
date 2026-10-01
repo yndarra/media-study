@@ -31,6 +31,11 @@ MODEL_NAME = "1.0 Левобережье"
 FRONT_FIELD = "Лицо"
 BACK_FIELD = "Оборот"
 TAG = "media-study"
+# Карточка фрагмента без текста (пауза, звуки) — тоже карточка, с этой меткой.
+TAG_NO_TEXT = "без_текста"
+# Текст есть, но у части реплик не определён говорящий (только для видео,
+# где говорящие вообще известны — иначе метка была бы на всех карточках).
+TAG_NO_SPEAKER = "без_автора"
 # Тип заметок, которым приложение пользовалось раньше, — его карточки
 # переводятся на MODEL_NAME (migrate_old_notes).
 OLD_MODEL_NAME = "media-study"
@@ -68,13 +73,29 @@ def text_to_html(text: str) -> str:
 
 
 def front_html(media_name: str, text: str) -> str:
-    """Лицо: клип, под ним — текст фрагмента."""
-    return f"[sound:{media_name}]<br>{text_to_html(text)}"
+    """Лицо: клип, под ним — текст фрагмента (у пустого фрагмента — только клип)."""
+    return f"[sound:{media_name}]<br>{text_to_html(text)}" if text.strip() else f"[sound:{media_name}]"
 
 
-def note_tags(project: str, fragment_id: str, speakers: list[str] | None = None) -> list[str]:
-    """Служебные метки приложения + говорящие персонажи карточки."""
-    return [TAG, f"{TAG}::{project}::{fragment_id}", *(speaker_tag(s) for s in speakers or [])]
+def note_tags(project: str, fragment_id: str, speakers: list[str] | None = None,
+              no_text: bool = False, no_speaker: bool = False) -> list[str]:
+    """Служебные метки приложения + говорящие персонажи + без_текста / без_автора."""
+    tags = [TAG, f"{TAG}::{project}::{fragment_id}", *(speaker_tag(s) for s in speakers or [])]
+    if no_text:
+        tags.append(TAG_NO_TEXT)
+    elif no_speaker:
+        tags.append(TAG_NO_SPEAKER)
+    return tags
+
+
+def card_content(text: str, known_speakers: set[str] | None) -> tuple[str, list[str], dict]:
+    """
+    Текст лица (без имён говорящих), говорящие и метки-признаки карточки
+    (без_текста / без_автора) — общее для создания и обновления карточки.
+    """
+    clean, speakers, anonymous = split_speakers_ex(text, known_speakers or set())
+    flags = {"no_text": not text.strip(), "no_speaker": bool(known_speakers) and anonymous}
+    return clean, speakers, flags
 
 
 def parse_tags(tags: list[str]) -> tuple[str, str]:
@@ -92,7 +113,7 @@ def add_clip_note(deck: str, clip_path, media_name: str, text: str, project: str
     Кладёт клип в медиа Anki и создаёт заметку. Имена говорящих из текста
     уходят в метки (split_speakers). Возвращает id заметки.
     """
-    text, speakers = split_speakers(text, known_speakers or set())
+    text, speakers, flags = card_content(text, known_speakers)
     invoke("storeMediaFile", filename=media_name, path=str(clip_path))
     return invoke(
         "addNote",
@@ -100,7 +121,7 @@ def add_clip_note(deck: str, clip_path, media_name: str, text: str, project: str
             "deckName": deck,
             "modelName": MODEL_NAME,
             "fields": {FRONT_FIELD: front_html(media_name, text), BACK_FIELD: ""},
-            "tags": note_tags(project, fragment_id, speakers),
+            "tags": note_tags(project, fragment_id, speakers, **flags),
             "options": {"allowDuplicate": False},
         },
     )
@@ -142,11 +163,11 @@ def update_clip_note(note_id: int, clip_path, media_name: str, text: str,
     Переделанный фрагмент: клип заменяется под тем же именем, текст карточки
     обновляется, флаг с её карточек снимается. История повторений сохраняется.
     """
-    text, speakers = split_speakers(text, known_speakers or set())
+    text, speakers, flags = card_content(text, known_speakers)
     invoke("storeMediaFile", filename=media_name, path=str(clip_path), deleteExisting=True)
     invoke("updateNoteFields", note={"id": note_id, "fields": {FRONT_FIELD: front_html(media_name, text)}})
     if project and fragment_id:
-        invoke("updateNoteTags", note=note_id, tags=note_tags(project, fragment_id, speakers))
+        invoke("updateNoteTags", note=note_id, tags=note_tags(project, fragment_id, speakers, **flags))
     for card_id in invoke("findCards", query=f"nid:{note_id}"):
         try:
             invoke("setSpecificValueOfCard", card=card_id, keys=["flags"], newValues=[0])
@@ -181,6 +202,12 @@ def speaker_tag(name: str) -> str:
 
 
 def split_speakers(text: str, known: set[str]) -> tuple[str, list[str]]:
+    """См. split_speakers_ex (без признака "есть реплики без говорящего")."""
+    clean, speakers, _ = split_speakers_ex(text, known)
+    return clean, speakers
+
+
+def split_speakers_ex(text: str, known: set[str]) -> tuple[str, list[str], bool]:
     """
     Текст карточки без имён говорящих и сами говорящие (для меток).
 
@@ -192,7 +219,7 @@ def split_speakers(text: str, known: set[str]) -> tuple[str, list[str]]:
     перед ними; новый персонаж — новая строка.
     """
     if not known:
-        return text, []
+        return text, [], bool(text.strip())
     names = "|".join(re.escape(n) for n in sorted(known, key=len, reverse=True))
     marker = re.compile(rf"(?:^|(?<=\s))({names}):\s*")
     groups: list[list] = []  # [говорящий, [куски текста]]
@@ -218,4 +245,95 @@ def split_speakers(text: str, known: set[str]) -> tuple[str, list[str]]:
                 groups.append([None, []])
             groups[-1][1].append(rest)
     lines = [" ".join(parts) for _, parts in groups if parts]
-    return "\n".join(lines), speakers
+    anonymous = any(name is None and parts for name, parts in groups)
+    return "\n".join(lines), speakers, anonymous
+
+
+# -- порядок карточек ---------------------------------------------------------------
+
+def delete_notes(note_ids: list[int]) -> None:
+    """Удаляет карточки приложения (только свои — по id из index.json)."""
+    if note_ids:
+        invoke("deleteNotes", notes=note_ids)
+
+
+def _longest_increasing(cards: list[dict]) -> set[int]:
+    """
+    Индексы карточек, которые уже стоят по порядку (самая длинная строго
+    возрастающая по позиции цепочка) — их позиции можно не менять.
+    """
+    import bisect
+
+    tails, tail_index, parent = [], [], [-1] * len(cards)
+    for k, card in enumerate(cards):
+        pos = bisect.bisect_left(tails, card["due"])
+        if pos == len(tails):
+            tails.append(card["due"])
+            tail_index.append(k)
+        else:
+            tails[pos] = card["due"]
+            tail_index[pos] = k
+        parent[k] = tail_index[pos - 1] if pos else -1
+    result, k = set(), tail_index[-1] if tail_index else -1
+    while k != -1:
+        result.add(k)
+        k = parent[k]
+    return result
+
+
+def resequence(note_ids: list[int], dry_run: bool = False) -> int:
+    """
+    Новые (ещё не изучавшиеся) карточки заметок note_ids встают по порядку
+    списка подряд, начиная с наименьшей их текущей позиции: вставка в
+    середину сдвигает все последующие, дублей позиций нет. Изучавшиеся
+    карточки (у них не позиция, а срок повторения) не трогаются.
+
+    Если в нужном диапазоне позиций оказались новые карточки других колод,
+    они (и все чужие после них) сдвигаются дальше с сохранением их порядка.
+    Возвращает, сколько карточек получили новую позицию.
+    """
+    if not note_ids:
+        return 0
+    cards = []
+    for chunk_start in range(0, len(note_ids), 500):
+        chunk = note_ids[chunk_start: chunk_start + 500]
+        query = "nid:" + ",".join(str(n) for n in chunk)
+        cards += invoke("cardsInfo", cards=invoke("findCards", query=f"{query} is:new"))
+    order = {note_id: k for k, note_id in enumerate(note_ids)}
+    cards = sorted((c for c in cards if c["note"] in order), key=lambda c: (order[c["note"]], c["ord"]))
+    if not cards:
+        return 0
+    # Минимум перестановок: карточка, стоящая по порядку, остаётся на своей
+    # позиции (дыры от уже изучаемых карточек не "уплотняются"). Карточка не
+    # на своём месте (новая — Anki ставит её в конец; её позиция больше, чем у
+    # следующей по порядку) встаёт сразу за предыдущей, а следующие за ней
+    # сдвигаются на одну, пока сдвиг не упрётся в свободную позицию.
+    in_place = _longest_increasing(cards)
+    assigned = []
+    previous = None
+    for k, card in enumerate(cards):
+        due = card["due"]
+        if previous is not None and (k not in in_place or due <= previous):
+            due = previous + 1
+        assigned.append(due)
+        previous = due
+    updates = [(c["cardId"], due) for c, due in zip(cards, assigned) if c["due"] != due]
+    # Новая карточка другой колоды на той же позиции, что наша, — дубль: такие
+    # чужие (и все чужие после них) сдвигаются за наш блок, их порядок сохраняется.
+    ours = {c["cardId"] for c in cards}
+    taken = set(assigned)
+    others = invoke("cardsInfo", cards=invoke("findCards", query=f"is:new -tag:{TAG} prop:pos>={min(assigned)}"))
+    others = sorted((c for c in others if c["cardId"] not in ours), key=lambda c: c["due"])
+    clash = next((c for c in others if c["due"] in taken), None)
+    if clash:
+        delta = max(assigned) + 1 - clash["due"]
+        updates += [(c["cardId"], c["due"] + delta) for c in others if c["due"] >= clash["due"]]
+    if dry_run:
+        return len(updates)
+    for chunk_start in range(0, len(updates), 200):
+        invoke("multi", actions=[
+            {"action": "setSpecificValueOfCard",
+             "params": {"card": card_id, "keys": ["due"], "newValues": [due], "warning_check": True}}
+            for card_id, due in updates[chunk_start: chunk_start + 200]
+        ])
+    return len(updates)
