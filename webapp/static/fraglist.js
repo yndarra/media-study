@@ -71,8 +71,8 @@ const FragList = {
   // Цвет правки (номер и текст).
   editClass(f, i, reviewed) {
     if (f.status !== "active") return "deleted";
+    if (isUnvoiced(f)) return "unvoiced"; // бирюзовый важнее жёлтого
     if (isTextEdited(f) || isBoundsEdited(f) || f.context_custom || f.merged_from || f.split_from) return "changed";
-    if (isUnvoiced(f)) return "unvoiced";
     return i <= reviewed ? "accepted" : "";
   },
 

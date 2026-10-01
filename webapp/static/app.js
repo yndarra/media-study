@@ -58,12 +58,9 @@ function isTouched(f) {
   return !!(f.exported || f.status !== "active" || isTextEdited(f) || isBoundsEdited(f) || f.context_custom || f.merged_from || f.split_from);
 }
 
-// Отметка "не озвучено": заданная кнопкой или по умолчанию — есть реплика Rover
-// (то же правило, что Fragment.is_unvoiced в common/manifest_schema.py).
+// Отметка "не озвучено" — ставится кнопкой (как Fragment.is_unvoiced на сервере).
 function isUnvoiced(f) {
-  if (!f) return false;
-  if (f.unvoiced === true || f.unvoiced === false) return f.unvoiced;
-  return /^\s*Rover\s*:/m.test(f.text || "");
+  return !!(f && f.unvoiced);
 }
 
 // Фрагмент передан в Anki (этап 3): его можно только просматривать.
