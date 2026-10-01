@@ -168,11 +168,18 @@ def update_clip_note(note_id: int, clip_path, media_name: str, text: str,
     invoke("updateNoteFields", note={"id": note_id, "fields": {FRONT_FIELD: front_html(media_name, text)}})
     if project and fragment_id:
         invoke("updateNoteTags", note=note_id, tags=note_tags(project, fragment_id, speakers, **flags))
-    for card_id in invoke("findCards", query=f"nid:{note_id}"):
+    # Обрезка/текст поправлены: оранжевый флаг снимается, красный ("и
+    # обрезка, и перевод") становится зелёным — перевод ещё за агентом.
+    cards = invoke("cardsInfo", cards=invoke("findCards", query=f"nid:{note_id}"))
+    for card in cards:
+        flag = card.get("flags", 0)
+        new_flag = {1: 3, 2: 0}.get(flag, flag)
+        if new_flag == flag:
+            continue
         try:
-            invoke("setSpecificValueOfCard", card=card_id, keys=["flags"], newValues=[0])
+            invoke("setSpecificValueOfCard", card=card["cardId"], keys=["flags"], newValues=[new_flag])
         except RuntimeError:
-            pass  # не получилось — флаг снимется вручную
+            pass  # не получилось — флаг поправится вручную
 
 
 def migrate_old_notes() -> int:
