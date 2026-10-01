@@ -43,7 +43,7 @@ TRANSLATION_FLAGS = (1, 3)
 AGENT_TAG = "агент_перевод"
 PROPOSALS_FILE = "agent_proposals.json"
 STATUS_FILE = "agent_status.json"
-DEFAULT_MODEL = "anthropic/claude-sonnet-5.5"
+DEFAULT_MODEL = "google/gemini-3.8-flash"
 def _key(data_dir: Path) -> str:
     """Ключ OpenRouter: переменная OPENROUTER_API_KEY или файл из настроек (data/settings.json)."""
     from webapp.library import app_settings
@@ -268,8 +268,9 @@ def apply(data_dir: Path, approve: list[int], reject: list[int]) -> dict:
     for p in proposals:
         if p["note_id"] not in approve:
             continue
+        # Этап 4 (перевод) — вся карточка: длинное тире "—" -> короткое "–" (и лицо, и оборот).
         anki.invoke("updateNoteFields", note={"id": p["note_id"], "fields": {
-            anki.FRONT_FIELD: p["front_new"], anki.BACK_FIELD: p["back_new"]}})
+            anki.FRONT_FIELD: p["front_new"].replace("—", "–"), anki.BACK_FIELD: p["back_new"].replace("—", "–")}})
         anki.invoke("addTags", notes=[p["note_id"]], tags=AGENT_TAG)
         if p.get("flag"):  # перевод по флагу: зелёный снимается, красный -> оранжевый
             new_flag = 2 if p["flag"] == 1 else 0
