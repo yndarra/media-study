@@ -79,7 +79,13 @@ const Player = {
   // Медиа-время, которое сейчас слышно (звук идёт со скоростью this.speed:
   // секунда часов звука = speed секунд видео).
   _audioPosition() {
-    return this.fromSec + Math.max(0, AudioEngine.now() - this.audioWhen) * this.speed;
+    const now = AudioEngine.now();
+    // Сменили скорость на ходу: до момента переключения ещё слышен старый
+    // звук – позиция идёт по нему (иначе текущий кадр прыгал вперёд и
+    // замирал, пока не догонит новый звук).
+    const prev = this.prevSegment;
+    if (prev && now < prev.until) return prev.fromSec + Math.max(0, now - prev.audioWhen) * prev.speed;
+    return this.fromSec + Math.max(0, now - this.audioWhen) * this.speed;
   },
 
   // Каждый показанный видеокадр: подстраиваем видео под звук и, если
@@ -273,6 +279,8 @@ const Player = {
     source.onended = () => {
       if (this.source === source) this._onAudioEnded();
     };
+    // До момента when слышен старый звук – позиция до него считается по старому.
+    this.prevSegment = { fromSec: this.fromSec, audioWhen: this.audioWhen, speed: this.speed, until: when };
     this.source = source;
     this.fromSec = pos;
     this.audioWhen = when;
@@ -461,6 +469,7 @@ const Player = {
     await ctx.resume();
 
     const rate = fps();
+    this.prevSegment = null;
     this.startFrame = from;
     this.fromSec = from / rate;
     this.speed = speed;

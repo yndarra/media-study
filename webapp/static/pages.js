@@ -430,39 +430,42 @@ const Modal = {
 
   // Содержимое окна сменилось (например, "Загрузка…" -> подробности) – окно
   // не прыгает, а плавно раздвигается (или сжимается) до новой высоты.
+  // Высота окна всегда плавно подстраивается под содержимое ("Загрузка…" ->
+  // подробности, раскрытие строк, поля и т.п.): следим за настоящим размером
+  // содержимого (ResizeObserver), а не угадываем его – без перелёта и рывка.
+  // Новое содержимое после "Загрузка…" плавно проявляется.
   animateHeight(modal, body) {
-    let height = modal.offsetHeight;
-    let frame = 0;
-    new MutationObserver(() => {
-      // Высота "до" – та, что была на экране; окно держим на ней, пока
-      // новое содержимое не уложится (поля подстраивают высоту, полосы и т.п.),
-      // и только потом меряем высоту "после" – иначе в конце был рывок.
-      const from = modal.style.height ? parseFloat(modal.style.height) : height;
+    const cs = getComputedStyle(modal);
+    const extra = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"]
+      .reduce((sum, k) => sum + parseFloat(cs[k]), 0);
+    modal.style.boxSizing = "border-box";
+    let current = null;
+    const done = () => {
+      modal.style.transition = "";
+      modal.style.overflow = "";
+    };
+    new ResizeObserver(() => {
+      const target = body.offsetHeight + extra;
+      if (current === null) {
+        current = target;
+        modal.style.height = `${target}px`;
+        return;
+      }
+      if (Math.abs(target - current) < 1) return;
+      const from = modal.offsetHeight; // видимая сейчас (в том числе посреди анимации)
+      current = target;
       modal.style.transition = "none";
-      // Высоты меряются целиком, с отступами и рамкой (offsetHeight), поэтому
-      // и задаются так же – иначе в конце прибавлялись бы отступы (рывок).
-      modal.style.boxSizing = "border-box";
       modal.style.height = `${from}px`;
       modal.style.overflow = "hidden";
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        modal.style.height = "auto";
-        const to = modal.offsetHeight;
-        height = to;
-        modal.style.height = `${from}px`;
-        modal.getBoundingClientRect();
-        const done = () => {
-          modal.style.transition = "";
-          modal.style.height = "";
-          modal.style.overflow = "";
-          modal.style.boxSizing = "";
-          modal.removeEventListener("transitionend", done);
-        };
-        if (Math.abs(to - from) < 2) return done();
-        modal.style.transition = "height 0.28s cubic-bezier(0.22, 0.61, 0.36, 1)";
-        modal.style.height = `${to}px`;
-        modal.addEventListener("transitionend", done);
-      });
+      modal.getBoundingClientRect();
+      modal.style.transition = "height 0.3s cubic-bezier(0.22, 0.61, 0.36, 1)";
+      modal.style.height = `${target}px`;
+      modal.addEventListener("transitionend", done, { once: true });
+    }).observe(body);
+    // Первое настоящее содержимое (вместо "Загрузка…") – проявляется.
+    new MutationObserver((_, observer) => {
+      observer.disconnect();
+      [...body.children].forEach((el) => el.classList.add("appear"));
     }).observe(body, { childList: true });
   },
 
@@ -477,15 +480,15 @@ const Modal = {
     }
     const box = document.createElement("div");
     box.className = "confirm-box";
-    box.innerHTML = `<div class="confirm"><div>Сохранить изменения?</div>
-      <div class="confirm-actions"><button class="step-btn" data-a="cancel">Отмена</button>
-      <button class="step-btn" data-a="drop">Не сохранять</button>
-      <button class="big-btn" data-a="save">Сохранить</button></div></div>`;
+    // "Нет" – закрыть без сохранения; клик мимо вопроса – отмена (окно остаётся).
+    box.innerHTML = `<div class="confirm"><div class="confirm-text">Сохранить изменения?</div>
+      <div class="confirm-actions"><button class="step-btn danger" data-a="drop">Нет</button>
+      <button class="step-btn primary" data-a="save">Сохранить</button></div></div>`;
     overlay.querySelector(".modal").appendChild(box);
     box.addEventListener("click", async (e) => {
+      if (e.target === box) return box.remove(); // мимо вопроса – отмена
       const action = e.target.dataset && e.target.dataset.a;
       if (!action) return;
-      if (action === "cancel") return box.remove();
       if (action === "save") await this.guard.save();
       this.close();
     });
@@ -1000,11 +1003,11 @@ const Pages = {
         ${v.audio_only ? '<div class="muted">Аудио</div>' : ""}
         ${v.state === "processing" ? processingBar(v) : ""}
         <label class="check"><input type="checkbox" class="agent-search" ${v.agent === "search" ? "checked" : ""}> Поиск достоверных источников с помощью агента <span class="muted small">(ссылки не нужны)</span></label>
-        <div class="sources-box">
+        <div class="sources-box"><div class="sources-inner">
           <label class="muted small">Текст для сверки (ссылки, по одной в строке)</label>
           <textarea class="sources grow" rows="1" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
           <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></label>
-        </div>
+        </div></div>
       </div>
       ${disk ? `<h2>Место на диске</h2><table class="stats">
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
@@ -1023,7 +1026,7 @@ const Pages = {
     const syncModes = (changed) => {
       if (changed === deep && deep.checked) search.checked = false;
       if (changed === search && search.checked) deep.checked = false;
-      sourcesBox.classList.toggle("hidden", search.checked);
+      sourcesBox.classList.toggle("collapsed", search.checked);
     };
     deep.addEventListener("change", () => syncModes(deep));
     search.addEventListener("change", () => syncModes(search));

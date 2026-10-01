@@ -24,9 +24,12 @@
 import html
 import json
 import re
+import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
+
+from common.progress import report
 
 from . import notion
 
@@ -127,8 +130,6 @@ def fetch_lines(url: str, log=print) -> list[str]:
     if wiki:
         # Вики на MediaWiki (Fandom и т.п.) закрывают обычное скачивание страниц
         # (403), но отдают тот же текст через api.php (action=parse).
-        import urllib.parse
-
         api = wiki.group(1) + "/api.php?" + urllib.parse.urlencode(
             {"action": "parse", "page": urllib.parse.unquote(wiki.group(2)), "prop": "text", "format": "json",
              "formatversion": 2})
@@ -266,7 +267,10 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
     if mode in ("deep", "search"):
         log(f"Агент ищет источники ({'глубокий поиск' if mode == 'deep' else 'самостоятельно'})…")
         try:
+            # В "Сейчас идёт" видно, что работает агент (поиск – минута-другая).
+            report(project_dir, "agent_search", None, force=True)
             answer = ask_agent(data_dir, project_dir, mode, links, whisper_transcript)
+            report(project_dir, "search", None, force=True)
             note = answer.get("note", "")
             log(f"Агент: {note} (${answer.get('cost', 0):.4f})")
             known = {c["url"] for c in candidates}
