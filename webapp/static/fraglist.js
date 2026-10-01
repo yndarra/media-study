@@ -165,7 +165,7 @@ const FragList = {
         }));
       }
     }
-    document.getElementById("fraglist-count").textContent = `${shownRows.length} из ${fragments.length}`;
+    document.getElementById("fraglist-count").textContent = String(shownRows.length);
     // Текущий фрагмент держим в поле зрения, но только когда он сменился —
     // иначе список дёргался бы при любой правке.
     if (this.lastCurrent !== State.fragmentIndex) {

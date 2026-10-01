@@ -619,9 +619,28 @@ function sortWithin(groups, cmp) {
   return groups.map(([group, list]) => [group, [...list].sort(cmp)]);
 }
 
-// "Видео" внутри группы: выше – где больше осталось правки, при равенстве – по алфавиту.
+// "Видео" внутри группы, по этапу:
+//   1) с фиолетовым (вернулись из Anki / флаг "обрезка/текст"),
+//   2) начатые (хоть что-то отредактировано, но не всё),
+//   3) не начатые,
+//   4) отредактированные полностью.
+// Внутри 1–3 – где больше осталось править; внутри 4 – где больше не передано
+// в Anki, затем – где больше не переведено. При равенстве – по алфавиту.
+function videoStage(v) {
+  if ((v.flagged || 0) + (v.flag_interval || 0) > 0) return 0;
+  if (!v.awaiting) return 3;
+  return (v.reviewed || 0) > 0 ? 1 : 2;
+}
 function byVideoWork(a, b) {
-  return (b.awaiting || 0) - (a.awaiting || 0) || String(a.title).localeCompare(String(b.title));
+  const sa = videoStage(a);
+  const sb = videoStage(b);
+  if (sa !== sb) return sa - sb;
+  const notSent = (v) => (v.active_total || 0) - (v.exported || 0);
+  const notTranslated = (v) => (v.cards_total || 0) - (v.translated || 0) - (v.translated_waiting || 0);
+  const diff = sa === 3
+    ? notSent(b) - notSent(a) || notTranslated(b) - notTranslated(a)
+    : (b.awaiting || 0) - (a.awaiting || 0);
+  return diff || String(a.title).localeCompare(String(b.title));
 }
 
 // "Обработка": группы – где больше видео в работе, при равенстве – где больше

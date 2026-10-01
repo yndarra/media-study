@@ -1155,3 +1155,19 @@ a.card:not(.complete):not(.to-send):not(.to-translate):hover { border-color: rgb
 /* ---- Кнопка сворачивания панели: шеврон по центру ---- */
 .panel-close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
 .panel-close { color: var(--text); }
+
+/* Правая панель при скрытии остаётся на своём месте (колонка уже нулевая,
+   отрицательный отступ возвращает её туда же) и уезжает вправо – без рывка. */
+body.right-closed #fraglist:not(.hidden), body.right-closing #fraglist:not(.hidden) {
+  margin-left: calc(-1 * (var(--side-width) + var(--side-gap)));
+}
+
+/* Кнопки открытия панелей: одинаковый значок, по центру кнопки, чуть крупнее. */
+.panel-open { width: 34px; height: 34px; padding: 0; align-items: center; justify-content: center; color: var(--text); }
+.panel-open svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; display: block; }
+#open-left { top: 18px; }
+#open-right { top: 14px; }
+
+/* Шапка списка фрагментов: кнопка сворачивания такая же, как у меню. */
+.fraglist-head .panel-close { flex: none; }
+#fraglist-count { white-space: nowrap; margin-left: auto; }
