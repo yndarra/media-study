@@ -30,6 +30,41 @@ const Panels = {
   },
 };
 
+// Вопрос о несохранённых изменениях – поверх всего (и окон, и страниц).
+// Возвращает "save", "drop" ("Нет") или null (клик мимо / Esc – остаться).
+function askSave() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "ask-overlay";
+    overlay.innerHTML = `<div class="ask" role="dialog">
+        <div class="ask-icon"><svg viewBox="0 0 20 20"><path d="M4 14.5V16h1.5l8.6-8.6-1.5-1.5L4 14.5z"/><path d="M13.6 4.9l1.5 1.5 1.2-1.2a1 1 0 0 0 0-1.4l-.1-.1a1 1 0 0 0-1.4 0l-1.2 1.2z"/></svg></div>
+        <div class="ask-title">Несохранённые изменения</div>
+        <div class="ask-text">Сохранить их?</div>
+        <div class="ask-actions"><button class="step-btn danger" data-a="drop">Нет</button><button class="step-btn primary" data-a="save">Сохранить</button></div>
+      </div>`;
+    const finish = (answer) => {
+      document.removeEventListener("keydown", onKey, true);
+      overlay.classList.add("closing");
+      setTimeout(() => overlay.remove(), 150);
+      resolve(answer);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        finish(null);
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) return finish(null);
+      const action = e.target.closest("[data-a]");
+      if (action) finish(action.dataset.a);
+    });
+    document.body.appendChild(overlay);
+    overlay.querySelector("[data-a=save]").focus();
+  });
+}
+
 const Router = {
   start() {
     Panels.init();
@@ -41,6 +76,18 @@ const Router = {
   async route() {
     const parts = (location.hash.replace(/^#\/?/, "") || "videos").split("/");
     const [page, id] = [parts[0], decodeURIComponent(parts[1] || "")];
+    // Уходим из настроек, а там несохранённое – спросить; "остаться" – вернуть адрес.
+    if (State.view === "settings" && page !== "settings" && Pages.settingsGuard && Pages.settingsGuard.isDirty()) {
+      const target = location.hash;
+      history.replaceState(null, "", "#/settings");
+      const answer = await askSave();
+      if (!answer) return;
+      if (answer === "save") await Pages.settingsGuard.save();
+      else Pages.settingsGuard.restore();
+      Pages.settingsGuard = null;
+      location.hash = target;
+      return;
+    }
     // Открыть / закрыть окно поверх уже показанного списка – список не
     // перерисовывается заново (иначе страница на миг пустеет) и продолжает обновляться.
     const listShown = (view, box) => State.view === view && document.querySelector(`#${box} a.card`);
@@ -167,7 +214,7 @@ function cardAction(v) {
 // name – подпись слева, done / total – справа. Стыки цветов – под наклоном
 // (классы sl / sr: скошенный левый / правый край, см. styles.css).
 // Ширины и число плавно анимируются – см. animateBars.
-function segmentBar(segments, total, name, done) {
+function segmentBar(segments, total, name, done, rightText = "") {
   const pct = (n) => (total ? Math.max(0, Math.min(100, (n / total) * 100)) : 0);
   const left = segments.filter((s) => !s.right && s.n > 0);
   const right = segments.filter((s) => s.right && s.n > 0);
@@ -187,7 +234,8 @@ function segmentBar(segments, total, name, done) {
     `<div class="seg-left">${left.map((s, k) => html(s, k, left, "left")).join("")}</div>` +
     `<div class="seg-right">${right.map((s, k) => html(s, k, right, "right")).join("")}</div>` +
     `<span class="progress-label"><span>${escapeHtml(name)}</span>` +
-    (done === null ? "" : `<span class="progress-count" data-done="${done}" data-total="${total || 0}">${done} / ${total || 0}</span>`) +
+    (done === null ? (rightText ? `<span class="progress-count">${escapeHtml(rightText)}</span>` : "")
+      : `<span class="progress-count" data-done="${done}" data-total="${total || 0}">${done} / ${total || 0}</span>`) +
     "</span></div>";
 }
 
@@ -495,23 +543,17 @@ const Modal = {
   requestClose() {
     const overlay = document.getElementById("modal-overlay");
     if (!overlay) return;
-    if (overlay.querySelector(".confirm-box")) return; // вопрос уже задан
+    if (this.asking) return; // вопрос уже задан
     if (!this.guard || !this.guard.isDirty()) {
       this.close();
       return;
     }
-    const box = document.createElement("div");
-    box.className = "confirm-box";
     // "Нет" – закрыть без сохранения; клик мимо вопроса – отмена (окно остаётся).
-    box.innerHTML = `<div class="confirm"><div class="confirm-text">Сохранить изменения?</div>
-      <div class="confirm-actions"><button class="step-btn danger" data-a="drop">Нет</button>
-      <button class="step-btn primary" data-a="save">Сохранить</button></div></div>`;
-    overlay.querySelector(".modal").appendChild(box);
-    box.addEventListener("click", async (e) => {
-      if (e.target === box) return box.remove(); // мимо вопроса – отмена
-      const action = e.target.dataset && e.target.dataset.a;
-      if (!action) return;
-      if (action === "save") await this.guard.save();
+    this.asking = true;
+    askSave().then(async (answer) => {
+      this.asking = false;
+      if (!answer) return;
+      if (answer === "save") await this.guard.save();
       this.close();
     });
   },
@@ -542,7 +584,7 @@ function processingBar(v) {
     return `<div class="card-status">${escapeHtml(cap(v.status || "Обрабатывается"))}…</div>`;
   }
   const cls = v.step === "download" ? "downloading" : "accepted";
-  return segmentBar([{ n: v.percent, cls, title: `${Math.floor(v.percent)}%` }], 100, cap(v.status), null);
+  return segmentBar([{ n: v.percent, cls, title: `${Math.floor(v.percent)}%` }], 100, cap(v.status), null, `${Math.floor(v.percent)}%`);
 }
 
 // Форма слова по числу: plural(n, "фрагмент", "фрагмента", "фрагментов").
@@ -570,6 +612,29 @@ function groupByAuthor(items, order = null) {
     groups.get(item.group).push(item);
   }
   return [...groups.entries()].sort(order || ((a, b) => a[0].localeCompare(b[0])));
+}
+
+// Внутри каждой группы – своим сравнением.
+function sortWithin(groups, cmp) {
+  return groups.map(([group, list]) => [group, [...list].sort(cmp)]);
+}
+
+// "Видео" внутри группы: выше – где больше осталось правки, при равенстве – по алфавиту.
+function byVideoWork(a, b) {
+  return (b.awaiting || 0) - (a.awaiting || 0) || String(a.title).localeCompare(String(b.title));
+}
+
+// "Обработка": группы – где больше видео в работе, при равенстве – где больше
+// сумма процентов; внутри группы – по проценту (больше – выше), при равенстве –
+// новые выше (список и так приходит новыми первыми, сортировка устойчивая).
+const percentOf = (v) => (v.state === "processing" ? Number(v.percent) || 0 : -1);
+function byProcessing(a, b) {
+  const busy = (list) => list.filter((v) => v.state === "processing").length;
+  const sum = (list) => list.reduce((s, v) => s + Math.max(0, percentOf(v)), 0);
+  return busy(b[1]) - busy(a[1]) || sum(b[1]) - sum(a[1]) || a[0].localeCompare(b[0]);
+}
+function byPercent(a, b) {
+  return percentOf(b) - percentOf(a);
 }
 
 // Группы в "Видео": выше – где больше ждёт правки (сумма по видео группы:
@@ -614,12 +679,8 @@ const PanelMotion = {
   toggle(side, close) {
     const body = document.body;
     if (close) {
-      // Сначала панель уезжает (место под ней пока остаётся), потом – раскладка.
-      body.classList.add(`${side}-closing`);
-      setTimeout(() => this._flip(() => {
-        body.classList.add(`${side}-closed`);
-        body.classList.remove(`${side}-closing`);
-      }), this.DURATION);
+      // Панель уезжает, и одновременно содержимое переезжает на новые места.
+      this._flip(() => body.classList.add(`${side}-closed`));
     } else {
       // Сразу раскладка (место под панелью), содержимое переезжает; панель въезжает.
       this._flip(() => {
@@ -678,7 +739,7 @@ const Pages = {
         return;
       }
       const first = !box.querySelector("a.card");
-      renderSmooth(box, groupByAuthor(items, byPendingWork).map(([group, list]) =>
+      renderSmooth(box, sortWithin(groupByAuthor(items, byPendingWork), byVideoWork).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card${cardState(v)}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
           videoBars(v) + videoNotes(v) + cardAction(v) +
@@ -1055,7 +1116,7 @@ const Pages = {
         return;
       }
       const first = !box.querySelector("a.card");
-      renderSmooth(box, groupByAuthor(items).map(([group, list]) =>
+      renderSmooth(box, sortWithin(groupByAuthor(items, byProcessing), byPercent).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card" href="#/process/${encodeURIComponent(v.id)}">` +
           cardTitle(v) +
@@ -1255,8 +1316,7 @@ const Pages = {
           <h2>Добавление видео</h2>
           ${field("set-quality", "Качество скачивания", `<select id="set-quality">${quality}</select>`,
             "Для видео, добавленных по ссылке; клипы для Anki режутся из скачанного")}
-          <div class="field"><label class="check"><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> Сразу обрабатывать</label>
-            <div class="field-hint">Добавленное видео сразу уходит в распознавание и нарезку</div></div>
+          <div class="field"><label class="check"><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> Сразу обрабатывать</label></div>
         </section>
         <section class="set-card wide-card">
           <h2>Агенты (OpenRouter)</h2>
@@ -1322,7 +1382,7 @@ const Pages = {
     modelPicker("set-model-pick", "model-list", "set-model");
     modelPicker("set-search-pick", "search-model-list", "set-search-model");
     cancelButton.addEventListener("click", () => watcher.restore());
-    saveButton.addEventListener("click", async () => {
+    const saveSettings = async () => {
       const saved = await Api.saveSettings({
         anki_deck_root: document.getElementById("set-deck").value.trim(),
         context_padding_seconds: Number(document.getElementById("set-padding").value),
@@ -1334,7 +1394,10 @@ const Pages = {
       });
       watcher.snapshot();
       watchDeckSync(saved.deck_sync);
-    });
+    };
+    saveButton.addEventListener("click", saveSettings);
+    // Для вопроса при уходе со страницы (Router.route).
+    this.settingsGuard = { isDirty: () => watcher.isDirty(), save: saveSettings, restore: () => watcher.restore() };
   },
 };
 
@@ -1367,7 +1430,7 @@ const Activity = {
       const cls = a.kind === "translate" ? "translated" : a.kind === "phase1" ? (a.step === "download" ? "downloading" : "accepted") : "ok";
       const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ${cls}" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
       return `<div class="activity-item" data-key="${escapeHtml(`${a.kind}:${a.id}`)}"><div class="activity-name">${escapeHtml(a.title)}</div>` +
-        `<div>${escapeHtml(cap(a.label))}${has ? ` (${Math.floor(a.percent)}%)` : ""}</div>${bar}</div>`;
+        `<div class="activity-line"><span>${escapeHtml(cap(a.label))}</span>${has ? `<span>${Math.floor(a.percent)}%</span>` : ""}</div>${bar}</div>`;
     }).join("");
     animateBars(box, snap);
   },

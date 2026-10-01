@@ -865,7 +865,7 @@ label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=c
 a.card.complete, .modal.complete {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.13), transparent 55%),
-    linear-gradient(160deg, #19121a, #141418 70%);
+    linear-gradient(160deg, #19121a, #111115 70%);
   border-color: rgba(244, 114, 182, 0.17);
 }
 a.card.complete:hover { border-color: rgba(244, 114, 182, 0.34); }
@@ -904,7 +904,7 @@ a.card.complete:hover { border-color: rgba(244, 114, 182, 0.34); }
 a.card.to-translate, .modal.to-translate {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.07), transparent 55%),
-    linear-gradient(160deg, #161216, #141418 70%);
+    linear-gradient(160deg, #161216, #111115 70%);
   border-color: rgba(244, 114, 182, 0.12);
 }
 a.card.to-translate:hover { border-color: rgba(244, 114, 182, 0.28); }
@@ -912,7 +912,7 @@ a.card.to-translate:hover { border-color: rgba(244, 114, 182, 0.28); }
 a.card.to-send, .modal.to-send {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.11), transparent 55%),
-    linear-gradient(160deg, #11141b, #141418 70%);
+    linear-gradient(160deg, #11141b, #111115 70%);
   border-color: rgba(96, 165, 250, 0.17);
 }
 a.card.to-send:hover { border-color: rgba(96, 165, 250, 0.34); }
@@ -1080,3 +1080,44 @@ body.right-closed #fraglist:not(.hidden), body.right-closing #fraglist:not(.hidd
 
 /* Поле "Автор" – такой же белый текст, как "Название" (и в "Видео", и в "Обработке"). */
 .modal .modal-head input:not([type=checkbox]), .modal .modal-head textarea { color: var(--text); }
+
+/* ---- Вопрос "Несохранённые изменения" ---- */
+.ask-overlay {
+  position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(2px); animation: modal-in 0.15s ease-out;
+}
+.ask-overlay.closing { opacity: 0; transition: opacity 0.15s ease-in; }
+.ask {
+  width: 320px; padding: 22px 22px 18px; text-align: center;
+  background: #16161b; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55); animation: modal-pop 0.18s ease-out;
+}
+.ask-icon {
+  width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: rgba(255, 200, 87, 0.12);
+}
+.ask-icon svg { width: 20px; height: 20px; fill: #ffc857; }
+.ask-title { font-size: 15px; font-weight: 600; }
+.ask-text { font-size: 13px; color: var(--dim); margin-top: 4px; }
+.ask-actions { display: flex; gap: 8px; margin-top: 18px; }
+.ask-actions .step-btn { flex: 1; }
+
+/* ---- Левое меню: пункты чуть мельче; кнопка сворачивания крупнее, по центру названия ---- */
+#menu a[data-menu] { font-size: 14px; padding: 6px 10px; }
+.panel-head { align-items: center; min-height: 32px; }
+#menu .brand { font-size: 15px; line-height: 32px; }
+.panel-close, .panel-open { width: 32px; height: 32px; font-size: 19px; display: inline-flex; align-items: center; justify-content: center; }
+#open-left { top: 19px; }
+
+/* ---- Фон блоков (карточки видео, настройки) и сайдбаров – одинаковый,
+   чуть темнее прежнего, но светлее фона страницы. ---- */
+.card, .set-card { background-color: #111115; }
+.sidebar { background: rgba(17, 17, 21, 0.97); }
+
+/* Сайдбар: строка процесса – подпись слева, процент справа. */
+.activity-line { display: flex; justify-content: space-between; gap: 8px; }
+.activity-line span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Кнопки открытия панелей видны, только когда панель скрыта. */
+.panel-open { display: none; }
+body.left-closed #open-left { display: inline-flex; }
+body.right-closed:not(.no-fraglist) #open-right { display: inline-flex; }
