@@ -54,6 +54,13 @@ def group_of(project_dir: Path) -> str:
     return project_settings(project_dir).get("group") or info.get("channel") or info.get("uploader") or "Без автора"
 
 
+def agent_mode(value) -> str:
+    """Режим помощи агента: "", "deep" или "search" (старое True — "search")."""
+    if value is True:
+        return "search"
+    return value if value in ("deep", "search") else ""
+
+
 def title_of(project_dir: Path) -> str:
     """Название видео: заданное вручную, иначе с YouTube / имя файла."""
     info = video_info(project_dir)
@@ -191,7 +198,7 @@ def summary(project_dir: Path) -> dict:
             "status": progress["label"] if not added else "добавлено, ждёт обработки",
             "percent": progress["percent"] if not added else None,
             "sources": settings.get("sources", []),
-            "agent": settings.get("agent", False),
+            "agent": agent_mode(settings.get("agent")),
             "audio_only": bool(info.get("audio_only")),
         }
     manifest = Manifest.load(manifest_path)

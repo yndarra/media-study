@@ -156,7 +156,9 @@ function videoBars(v) {
 function videoNotes(v) {
   const q = v.stage3 || {};
   const queue = q.state === "waiting_anki" ? "ждёт Anki" : q.notes_left ? `в очереди Anki ${q.notes_left}, ≈ ${Math.max(1, Math.ceil(q.eta_seconds / 60))} мин` : "";
+  const all = v.notes_in_anki > 0 && v.translated >= v.notes_in_anki;
   const parts = [
+    v.exported ? `<span class="${all ? "translated-all" : ""}">${all ? '<span class="tick">✓</span> ' : ""}Из них переведено: ${v.translated || 0}</span>` : "",
     v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
     v.flag_translation ? `<span class="translation-text">Перевод: ${v.flag_translation}</span>` : "",
     queue ? escapeHtml(queue) : "",
@@ -170,35 +172,116 @@ function cardTitle(v) {
     `${v.audio_only ? ' <span class="muted small">· аудио</span>' : ""}</div>`;
 }
 
-// Всплывающее окно поверх страницы (подробности видео и т.п.).
+// Поле, которое растёт по содержимому (название видео, ссылки): высота —
+// по тексту; Enter в однострочном поле (data-single) не переносит строку.
+function autoGrow(el) {
+  const fit = () => {
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 2}px`;
+  };
+  el.addEventListener("input", fit);
+  if (el.dataset.single !== undefined) {
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") e.preventDefault();
+    });
+  }
+  requestAnimationFrame(fit);
+}
+
+// Следит за полями формы: кнопки "Сохранить"/"Отменить" активны, только когда
+// что-то изменено. snapshot() — запомнить текущее как сохранённое.
+function formWatch(root, buttons) {
+  const fields = () => [...root.querySelectorAll("input, textarea, select")].filter((el) => el.dataset.watch !== "no");
+  const value = (el) => (el.type === "checkbox" ? String(el.checked) : el.value);
+  let saved = [];
+  const watcher = {
+    snapshot() {
+      saved = fields().map(value);
+      watcher.update();
+    },
+    isDirty() {
+      const now = fields().map(value);
+      return now.length !== saved.length || now.some((v, i) => v !== saved[i]);
+    },
+    restore() {
+      fields().forEach((el, i) => {
+        if (el.type === "checkbox") el.checked = saved[i] === "true";
+        else el.value = saved[i];
+        el.dispatchEvent(new Event("input"));
+        el.dispatchEvent(new Event("change"));
+      });
+      watcher.update();
+    },
+    update() {
+      const dirty = watcher.isDirty();
+      buttons.forEach((button) => button && (button.disabled = !dirty));
+    },
+  };
+  root.addEventListener("input", () => watcher.update());
+  root.addEventListener("change", () => watcher.update());
+  watcher.snapshot();
+  return watcher;
+}
+
+// Всплывающее окно поверх страницы (подробности видео и т.п.). guard —
+// {isDirty(), save()}: если при закрытии есть несохранённые правки, окно
+// спрашивает, сохранять ли их.
 const Modal = {
   onClose: null,
+  guard: null,
 
-  show(html, onClose) {
+  show(html, onClose, guard = null) {
     this.close(false);
     const overlay = document.createElement("div");
     overlay.id = "modal-overlay";
     overlay.innerHTML = `<div class="modal"><button class="modal-close" title="Закрыть (Esc)">×</button><div class="modal-body">${html}</div></div>`;
     overlay.addEventListener("mousedown", (e) => {
-      if (e.target === overlay) this.close();
+      if (e.target === overlay) this.requestClose();
     });
-    overlay.querySelector(".modal-close").addEventListener("click", () => this.close());
+    overlay.querySelector(".modal-close").addEventListener("click", () => this.requestClose());
     document.body.appendChild(overlay);
     this.onClose = onClose || null;
+    this.guard = guard;
     return overlay.querySelector(".modal-body");
+  },
+
+  // Закрыть по крестику / клику мимо / Esc: с вопросом, если есть несохранённое.
+  requestClose() {
+    const overlay = document.getElementById("modal-overlay");
+    if (!overlay) return;
+    if (overlay.querySelector(".confirm-box")) return; // вопрос уже задан
+    if (!this.guard || !this.guard.isDirty()) {
+      this.close();
+      return;
+    }
+    const box = document.createElement("div");
+    box.className = "confirm-box";
+    box.innerHTML = `<div class="confirm"><div>Сохранить изменения?</div>
+      <div class="confirm-actions"><button class="step-btn" data-a="cancel">Отмена</button>
+      <button class="step-btn" data-a="drop">Не сохранять</button>
+      <button class="big-btn" data-a="save">Сохранить</button></div></div>`;
+    overlay.querySelector(".modal").appendChild(box);
+    box.addEventListener("click", async (e) => {
+      const action = e.target.dataset && e.target.dataset.a;
+      if (!action) return;
+      if (action === "cancel") return box.remove();
+      if (action === "save") await this.guard.save();
+      this.close();
+    });
   },
 
   close(runCallback = true) {
     const overlay = document.getElementById("modal-overlay");
     if (!overlay) return;
     overlay.remove();
+    this.guard = null;
     const callback = this.onClose;
     this.onClose = null;
     if (runCallback && callback) callback();
   },
 };
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && document.getElementById("modal-overlay")) Modal.close();
+  if (e.key === "Escape" && document.getElementById("modal-overlay")) Modal.requestClose();
 });
 
 // Ход этапа 1: шаг и процент (если шаг умеет его считать).
@@ -241,7 +324,7 @@ const Pages = {
           <button id="open-flags" class="step-btn">Проверка флагов</button>
           <button id="open-translate" class="step-btn">Перевод</button>
         </div></div>
-      <p class="muted small">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
+      <p class="muted small page-note">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
       <div id="videos-list"><p class="muted">Загрузка…</p></div>`;
     el.querySelector("#open-flags").addEventListener("click", () => this.flagsModal());
     el.querySelector("#open-translate").addEventListener("click", () => this.translateModal());
@@ -265,7 +348,7 @@ const Pages = {
       }
       box.innerHTML = groupByAuthor(items).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
-          `<a class="card" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
+          `<a class="card${v.complete ? " complete" : ""}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
           videoBars(v) + videoNotes(v) + "</a>").join("") + "</div>",
       ).join("");
     };
@@ -410,11 +493,13 @@ const Pages = {
   },
 
   // Подробности видео – окно поверх списка (#/video/<код>): статистика, место
-  // на диске, правка названия и автора.
+  // на диске, правка названия и автора (колода Anki переименуется вслед).
   async videoModal(id) {
+    let watcher = null;
+    let save = async () => {};
     const body = Modal.show('<p class="muted">Загрузка…</p>', () => {
       if (location.hash.startsWith("#/video/")) location.hash = "#/videos";
-    });
+    }, { isDirty: () => !!watcher && watcher.isDirty(), save: () => save() });
     let data;
     try {
       data = await Api.projectStats(id);
@@ -430,7 +515,7 @@ const Pages = {
     const lines = Object.entries(s.lines_per_card).map(([n, c]) => `${n} стр. – ${c}`).join(", ");
     body.innerHTML = `
       <div class="modal-head">
-        <label>Название <input id="title-input" class="wide" value="${escapeHtml(v.title)}"></label>
+        <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
         <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
       </div>
       ${videoBars({ ...v, flag_interval: 0 })}
@@ -461,23 +546,27 @@ const Pages = {
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn">Сохранить</button>
       </div>`;
-    body.querySelector("#info-save").addEventListener("click", async () => {
+    autoGrow(body.querySelector("#title-input"));
+    const saveButton = body.querySelector("#info-save");
+    watcher = formWatch(body.querySelector(".modal-head"), [saveButton]);
+    save = async () => {
       const title = body.querySelector("#title-input").value.trim();
       const group = body.querySelector("#group-input").value.trim();
       if (!title || !group) return;
       const saved = await Api.saveProjectInfo(id, { title, group });
+      watcher.snapshot();
       const sync = saved.deck_sync || {};
-      body.querySelector("#info-note").textContent = !v.anki_deck ? "сохранено"
-        : sync.pending ? "сохранено; колода Anki переименуется, когда Anki откроется"
-        : "сохранено; колода Anki переименована";
-    });
+      body.querySelector("#info-note").textContent = !v.anki_deck ? ""
+        : sync.pending ? "колода Anki переименуется, когда Anki откроется" : "колода Anki переименована";
+    };
+    saveButton.addEventListener("click", save);
   },
 
   // -- обработка (этап 1) --------------------------------------------------------------
   async process() {
     const el = document.getElementById("view-process");
     el.innerHTML = `<h1>Обработка</h1>
-      <p class="muted small">Добавленные видео: копия для редактора, распознавание речи, сверка с текстом и нарезка на фразы. Нажмите на видео, чтобы прикрепить ссылки на текст для сверки (например, страницу Notion) и запустить обработку.</p>
+      <p class="muted small page-note">Добавленные видео: копия для редактора, распознавание речи, сверка с текстом и нарезка на фразы. Нажмите на видео, чтобы прикрепить ссылки на текст для сверки (например, страницу Notion) и запустить обработку.</p>
       <div id="process-list"><p class="muted">Загрузка…</p></div>`;
     const render = async () => {
       const box = document.getElementById("process-list");
@@ -492,7 +581,7 @@ const Pages = {
           `<a class="card" href="#/process/${encodeURIComponent(v.id)}">` +
           cardTitle(v) +
           ((v.sources || []).length ? `<div class="muted small">ссылок на текст: ${v.sources.length}</div>` : "") +
-          (v.state === "processing" ? processingBar(v) : `<div class="card-status">добавлено, ждёт обработки</div>`) +
+          (v.state === "processing" ? processingBar(v) : `<div class="card-status">Добавлено, ждёт обработки</div>`) +
           "</a>").join("") + "</div>",
       ).join("");
     };
@@ -500,11 +589,14 @@ const Pages = {
     this.refreshEvery(3000, render);
   },
 
-  // Окно видео из "Обработки": ссылки на текст для сверки, агент, запуск, место на диске.
+  // Окно видео из "Обработки": название и автор, ссылки на текст для сверки,
+  // помощь агента, запуск, место на диске.
   async processModal(id) {
+    let watcher = null;
+    let save = async () => {};
     const body = Modal.show('<p class="muted">Загрузка…</p>', () => {
       if (location.hash.startsWith("#/process/")) location.hash = "#/process";
-    });
+    }, { isDirty: () => !!watcher && watcher.isDirty(), save: () => save() });
     const v = (await Api.projects()).find((item) => item.id === id);
     if (!v) {
       body.innerHTML = '<p class="muted">Видео не найдено.</p>';
@@ -516,35 +608,52 @@ const Pages = {
     } catch (_) {}
     const row = (name, value) => `<tr><td>${name}</td><td>${value}</td></tr>`;
     body.innerHTML = `
-      <div class="modal-head">
-        <label>Название <input id="title-input" class="wide" value="${escapeHtml(v.title)}"></label>
-        <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
+      <div class="process-form">
+        <div class="modal-head">
+          <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
+          <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
+        </div>
+        <div class="muted">${formatDuration(v.duration)}${v.audio_only ? " · аудио" : ""}</div>
+        ${v.state === "processing" ? processingBar(v) : ""}
+        <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></label>
+        <label class="check"><input type="checkbox" class="agent-search" ${v.agent === "search" ? "checked" : ""}> Поиск достоверных источников с помощью агента <span class="muted small">(ссылки не нужны)</span></label>
+        <div class="sources-box">
+          <label class="muted small">Текст для сверки (ссылки, по одной в строке)</label>
+          <textarea class="sources grow" rows="1" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
+        </div>
       </div>
-      <div class="muted">${formatDuration(v.duration)}${v.audio_only ? " · аудио" : ""}</div>
-      ${v.state === "processing" ? processingBar(v) : ""}
-      <label class="muted small">Текст для сверки (ссылки, по одной в строке)</label>
-      <textarea class="sources" rows="4" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
-      <label class="small"><input type="checkbox" class="agent" ${v.agent ? "checked" : ""}> агент сам найдёт достоверный источник (глубокий поиск)</label>
-      <div class="muted small">Агента пока нет – пока по ссылкам разбирается Claude в чате.</div>
-      ${disk ? `<h2>Место на диске</h2><div class="disk-grid">
-        <table class="stats">${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}</table>
-        <table class="stats">${row("Всего", `<b>${formatSize(disk.total)}</b>`)}</table>
-      </div>` : ""}
+      ${disk ? `<h2>Место на диске</h2><table class="stats">
+        ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
+      </table>` : ""}
       <div class="modal-actions">
         ${v.state === "processing" ? "" : '<button class="big-btn process-go">Обработать</button>'}
         <span class="muted small note"></span>
         <button class="step-btn info-save">Сохранить</button>
       </div>`;
-    const save = async () => {
+    body.querySelectorAll("textarea.grow").forEach(autoGrow);
+    const deep = body.querySelector(".agent-deep");
+    const search = body.querySelector(".agent-search");
+    const sourcesBox = body.querySelector(".sources-box");
+    // Режимы взаимоисключающие; в режиме "агент сам ищет" ссылки не нужны — поле прячется.
+    const syncModes = (changed) => {
+      if (changed === deep && deep.checked) search.checked = false;
+      if (changed === search && search.checked) deep.checked = false;
+      sourcesBox.classList.toggle("hidden", search.checked);
+    };
+    deep.addEventListener("change", () => syncModes(deep));
+    search.addEventListener("change", () => syncModes(search));
+    syncModes(null);
+    const saveButton = body.querySelector(".info-save");
+    watcher = formWatch(body.querySelector(".process-form"), [saveButton]);
+    save = async () => {
       const title = body.querySelector("#title-input").value.trim();
       const group = body.querySelector("#group-input").value.trim();
       if (title && group) await Api.saveProjectInfo(id, { title, group });
-      await Api.saveSources(id, body.querySelector(".sources").value.split("\n"), body.querySelector(".agent").checked);
+      const mode = deep.checked ? "deep" : search.checked ? "search" : "";
+      await Api.saveSources(id, body.querySelector(".sources").value.split("\n"), mode);
+      watcher.snapshot();
     };
-    body.querySelector(".info-save").addEventListener("click", async () => {
-      await save();
-      body.querySelector(".note").textContent = "сохранено";
-    });
+    saveButton.addEventListener("click", save);
     const go = body.querySelector(".process-go");
     if (go) go.addEventListener("click", async () => {
       await save();
@@ -563,12 +672,25 @@ const Pages = {
     el.innerHTML = `<h1>Добавить</h1>
       <h2>По ссылке</h2>
       <p class="muted small">YouTube и всё, что умеет yt-dlp. Видео скачается в качестве, заданном в «Настройках».</p>
-      <div class="author-row"><input id="download-url" class="wide" placeholder="https://youtu.be/…"><button id="download-go" class="step-btn">Скачать</button></div>
+      <div class="author-row"><input id="download-url" class="wide" placeholder="https://youtu.be/…"><button id="download-go" class="step-btn" disabled>Скачать</button></div>
       <h2>Свой файл</h2>
       <p class="muted small">Видео или аудио любого распространённого формата (mp4, mkv, webm, mov, mp3, m4a, wav, flac, ogg…).</p>
-      <div class="author-row"><input id="file-input" type="file" accept="video/*,audio/*"><button id="file-go" class="step-btn">Добавить</button></div>
+      <div class="author-row">
+        <label class="step-btn file-pick">Выбрать файл<input id="file-input" type="file" accept="video/*,audio/*" hidden></label>
+        <span id="file-name" class="muted small">файл не выбран</span>
+        <button id="file-go" class="step-btn" disabled>Добавить</button>
+      </div>
       <div id="add-note" class="muted small"></div>`;
     const note = document.getElementById("add-note");
+    const urlInput = document.getElementById("download-url");
+    const fileInput = document.getElementById("file-input");
+    // Кнопки активны, только когда есть что добавлять.
+    urlInput.addEventListener("input", () => (document.getElementById("download-go").disabled = !urlInput.value.trim()));
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      document.getElementById("file-name").textContent = file ? file.name : "файл не выбран";
+      document.getElementById("file-go").disabled = !file;
+    });
     const done = (id) => {
       note.innerHTML = `Добавлено: ${escapeHtml(id)}. Дальше – <a href="#/process">Обработка</a>.`;
     };
@@ -580,7 +702,7 @@ const Pages = {
       note.textContent = `Не получилось: ${message}`;
     };
     document.getElementById("download-go").addEventListener("click", async () => {
-      const url = document.getElementById("download-url").value.trim();
+      const url = urlInput.value.trim();
       if (!url) return;
       try {
         done((await Api.download(url)).id);
@@ -589,7 +711,7 @@ const Pages = {
       }
     });
     document.getElementById("file-go").addEventListener("click", async () => {
-      const file = document.getElementById("file-input").files[0];
+      const file = fileInput.files[0];
       if (!file) return;
       try {
         done((await Api.importFile(file, (share) => (note.textContent = `Отправляю файл: ${Math.floor(share * 100)}%`))).id);
@@ -604,35 +726,40 @@ const Pages = {
     const el = document.getElementById("view-settings");
     const s = await Api.settings();
     el.innerHTML = `<h1>Настройки</h1>
-      <table class="stats">
+      <table class="stats" id="settings-form">
         <tr><td>Колода Anki</td><td><input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}">
           <div class="muted small">карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются</div>
           <div id="deck-sync" class="small"></div></td></tr>
-        <tr><td>Запас до и после отрезка</td><td><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"> сек <div class="muted small">по умолчанию для всех видео; уже просмотренные фрагменты (синие, жёлтые, красные) и запас, заданный вручную, не меняются</div></td></tr>
+        <tr><td>Запас до и после отрезка</td><td><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"> сек <div class="muted small">по умолчанию для всех видео; уже отредактированные фрагменты не меняются</div></td></tr>
         <tr><td>Качество скачивания</td><td><select id="set-quality">
           ${[[0, "лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
             .map(([h, name]) => `<option value="${h}" ${Number(s.download_max_height) === h ? "selected" : ""}>${name}</option>`).join("")}
           </select><div class="muted small">по умолчанию для видео, добавленных по ссылке; клипы для Anki режутся из скачанного</div></td></tr>
-        <tr><td>После добавления</td><td><label><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> сразу обрабатывать (без прикрепления источников)</label></td></tr>
+        <tr><td>После добавления</td><td><label class="check"><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> Сразу обрабатывать</label>
+          <div class="muted small">видео, добавленное по ссылке или файлом, сразу уходит в обработку (распознавание и нарезка) – без захода в «Обработку» и без ссылок на текст для сверки</div></td></tr>
         <tr><td>Ключ OpenRouter</td><td><div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div><div class="muted small">для агента перевода</div></td></tr>
         <tr><td>Модель перевода</td><td><div class="secret-row picker"><input id="set-model" class="wide" value="${escapeHtml(s.openrouter_model || "")}" placeholder="anthropic/claude-sonnet-5.5"><button id="set-model-pick" class="icon-btn" title="Выбрать из списка">▾</button>
           <div id="model-list" class="model-list hidden"></div></div>
-          <div class="muted small">можно вписать свою (идентификатор на OpenRouter) или выбрать из списка; цена — $ за миллион токенов (вход / выход)</div></td></tr>
+          <div class="muted small">можно вписать свою (идентификатор на OpenRouter) или выбрать из списка; цена – $ за миллион токенов (вход / выход)</div></td></tr>
       </table>
-      <div class="actions"><button id="settings-save" class="step-btn">Сохранить</button><span id="settings-note" class="muted small"></span></div>`;
+      <div class="actions"><button id="settings-save" class="step-btn">Сохранить</button><button id="settings-cancel" class="step-btn">Отменить</button></div>`;
     const showDeckSync = (state) => {
       const box = document.getElementById("deck-sync");
       if (!box || !state) return;
       const moved = (state.moved || []).map((m) => `${escapeHtml(m.to)} (${m.cards})`).join("; ");
       box.innerHTML = state.pending
-        ? `<span class="flagged-text">${escapeHtml(state.message)} — жду подключения…</span>`
+        ? `<span class="flagged-text">${escapeHtml(state.message)} – жду подключения…</span>`
         : moved ? `<span class="muted">переименовано: ${moved}</span>` : "";
     };
-    showDeckSync(s.deck_sync);
-    // Пока колоды ждут Anki — проверяем, не получилось ли уже.
-    if (s.deck_sync && s.deck_sync.pending) {
-      this.refreshEvery(5000, async () => showDeckSync((await Api.settings()).deck_sync));
-    }
+    const watchDeckSync = (state) => {
+      showDeckSync(state);
+      // Пока колоды ждут Anki – проверяем, не получилось ли уже.
+      if (state && state.pending) this.refreshEvery(5000, async () => showDeckSync((await Api.settings()).deck_sync));
+    };
+    watchDeckSync(s.deck_sync);
+    const saveButton = document.getElementById("settings-save");
+    const cancelButton = document.getElementById("settings-cancel");
+    const watcher = formWatch(document.getElementById("settings-form"), [saveButton, cancelButton]);
     document.getElementById("set-key-eye").addEventListener("click", () => {
       const input = document.getElementById("set-key");
       input.type = input.type === "password" ? "text" : "password";
@@ -650,14 +777,17 @@ const Pages = {
         list.innerHTML = models.map((m) =>
           `<div class="model-item" data-id="${escapeHtml(m.id)}"><span>${escapeHtml(m.id)}</span><span class="muted small">$${m.prompt} / $${m.completion}</span></div>`).join("");
         list.querySelectorAll(".model-item").forEach((item) => item.addEventListener("click", () => {
-          document.getElementById("set-model").value = item.dataset.id;
+          const input = document.getElementById("set-model");
+          input.value = item.dataset.id;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
           list.classList.add("hidden");
         }));
       } catch (err) {
         list.innerHTML = `<div class="muted small">не удалось загрузить список: ${escapeHtml(err.message)}</div>`;
       }
     });
-    document.getElementById("settings-save").addEventListener("click", async () => {
+    cancelButton.addEventListener("click", () => watcher.restore());
+    saveButton.addEventListener("click", async () => {
       const saved = await Api.saveSettings({
         anki_deck_root: document.getElementById("set-deck").value.trim(),
         context_padding_seconds: Number(document.getElementById("set-padding").value),
@@ -666,11 +796,8 @@ const Pages = {
         openrouter_key: document.getElementById("set-key").value.trim(),
         openrouter_model: document.getElementById("set-model").value.trim(),
       });
-      document.getElementById("settings-note").textContent = "сохранено";
-      showDeckSync(saved.deck_sync);
-      if (saved.deck_sync && saved.deck_sync.pending) {
-        this.refreshEvery(5000, async () => showDeckSync((await Api.settings()).deck_sync));
-      }
+      watcher.snapshot();
+      watchDeckSync(saved.deck_sync);
     });
   },
 };

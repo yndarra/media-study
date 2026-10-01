@@ -184,7 +184,10 @@ def project_summary(project_id: str):
 @app.get("/api/p/{project_id}/stats")
 def project_stats(project_id: str):
     p = project(project_id)
-    return {"summary": library.summary(p.dir), "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir),
+    summary = library.summary(p.dir)
+    _anki_flag_counts()  # обновить кэш переведённых, если устарел
+    summary["translated"] = _anki_flags_cache.get("translated", {}).get(project_id, 0)
+    return {"summary": summary, "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir),
             "deck_sync": _deck_sync_state()}
 
 
@@ -292,18 +295,20 @@ async def import_file(request: Request, name: str):
 
 class SourcesRequest(BaseModel):
     sources: list[str]
-    agent: bool = False
+    # Помощь агента: "" — нет; "deep" — глубокий поиск (агент + ссылки);
+    # "search" — агент сам ищет достоверные источники (ссылки не нужны).
+    agent: str | bool = ""
 
 
 @app.patch("/api/p/{project_id}/sources")
 def update_sources(project_id: str, body: SourcesRequest):
-    """Ссылки на текст для сверки и галочка "агент ищет достоверный источник"."""
+    """Ссылки на текст для сверки и режим помощи агента (см. SourcesRequest)."""
     project_dir = DATA_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="видео не найдено")
     settings = library.project_settings(project_dir)
     settings["sources"] = [s.strip() for s in body.sources if s.strip()]
-    settings["agent"] = body.agent
+    settings["agent"] = library.agent_mode(body.agent)
     library.save_project_settings(project_dir, settings)
     return library.summary(project_dir)
 
@@ -577,14 +582,20 @@ def _anki_flag_counts() -> dict:
     if _time.time() - _anki_flags_cache["at"] < ANKI_FLAGS_TTL:
         return _anki_flags_cache["counts"]
     counts: dict = {}
+    translated: dict = {}
     try:
         for item in anki.flagged_notes():
             per = counts.setdefault(item["project"], {})
             per[item["flag"]] = per.get(item["flag"], 0) + 1
+        # Переведённые карточки — с заполненным оборотом.
+        for project_dir in DATA_DIR.iterdir():
+            if (project_dir / "export" / "index.json").exists():
+                query = f'"tag:{anki.TAG}::{project_dir.name}::*" -{anki.BACK_FIELD}:'
+                translated[project_dir.name] = len(anki.invoke("findNotes", query=query))
     except (anki.AnkiUnavailable, RuntimeError):
         _anki_flags_cache["at"] = _time.time()
         return _anki_flags_cache["counts"]
-    _anki_flags_cache.update(at=_time.time(), counts=counts)
+    _anki_flags_cache.update(at=_time.time(), counts=counts, translated=translated)
     return counts
 
 
@@ -601,6 +612,13 @@ def anki_overview():
         item["anki_flags"] = per
         item["flag_interval"] = sum(per.get(f, 0) for f in INTERVAL_FLAGS)
         item["flag_translation"] = sum(per.get(f, 0) for f in TRANSLATION_FLAGS)
+        item["translated"] = _anki_flags_cache.get("translated", {}).get(item["id"], 0)
+        # Видео готово целиком: всё отредактировано и передано в Anki, ничего
+        # не вернулось на правку и все карточки переведены.
+        item["complete"] = bool(
+            item["active_total"] and item["exported"] == item["active_total"] and item["reviewed"] >= item["fragments_total"]
+            and not item["flagged"] and not item["flag_interval"] and item["translated"] >= item["notes_in_anki"] > 0
+        )
         result.append(item)
     return result
 

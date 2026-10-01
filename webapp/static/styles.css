@@ -156,7 +156,7 @@ body.left-closed #main { padding-left: 60px; }
 .anki-row { margin-bottom: 10px; max-width: 900px; }
 a.card:hover { border-color: #5a5a66; }
 .card-title { font-weight: 600; font-size: 14px; line-height: 1.35; margin-bottom: 6px; }
-.card-time { color: var(--dim); font-weight: 400; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.card-time { color: var(--dim); font-weight: 600; font-variant-numeric: tabular-nums; margin-right: 1px; }
 .card-status { font-family: Consolas, monospace; font-size: 12px; color: var(--dim); margin-top: 6px; word-break: break-all; }
 
 .progress {
@@ -700,3 +700,75 @@ table.stats tr:last-child td { border-bottom: none; }
 }
 .model-item { display: flex; justify-content: space-between; gap: 12px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 .model-item:hover { background: #1f1f25; }
+
+/* Описание раздела (Видео, Обработка) — чуть мельче. */
+.page-note { font-size: 12px; }
+
+/* Видео готово целиком (отредактировано, передано, ничего не вернулось, всё переведено). */
+a.card.complete { background: #0f1a12; border-color: #24452c; }
+.translated-all { color: #7ee787; }
+.translated-all .tick { font-weight: 700; }
+
+/* Флажки: квадрат с закруглёнными углами; подпись — по центру флажка. */
+input[type=checkbox] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+  border: 1px solid #4a4a55;
+  border-radius: 4px;
+  background: #16161b;
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  cursor: pointer;
+}
+input[type=checkbox]::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border: solid #fff;
+  border-width: 0 0 2px 2px;
+  transform: translateY(-1px) rotate(-45deg);
+  opacity: 0;
+}
+input[type=checkbox]:checked { background: #2f5f9e; border-color: #2f5f9e; }
+input[type=checkbox]:checked::after { opacity: 1; }
+input[type=checkbox]:disabled { opacity: 0.4; cursor: default; }
+label.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; }
+
+/* Поля, растущие по тексту (название, ссылки). */
+textarea.grow {
+  box-sizing: border-box;
+  resize: none;
+  overflow: hidden;
+  min-height: 32px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 5px 10px 4px;
+  background: #18181d;
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.modal-head textarea.grow { width: 100%; }
+.sources-box textarea.grow { width: 100%; }
+
+/* Вопрос "Сохранить изменения?" поверх окна. */
+.confirm-box {
+  position: absolute; inset: 0; border-radius: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm { background: #16161b; border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.confirm-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+
+/* "Выбрать файл" — обычная тёмная кнопка вместо светлой системной. */
+.file-pick {
+  display: inline-flex; align-items: center; box-sizing: border-box; cursor: pointer;
+  background: #1f1f25; color: var(--text); border: 1px solid #45454e; border-radius: 5px;
+}
+.file-pick:hover { background: #28282f; }
