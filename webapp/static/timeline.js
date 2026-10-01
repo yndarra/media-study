@@ -131,6 +131,13 @@ const Timeline = {
       this._triangle(mx, this.HEAD_ROW[0], this.HEAD_ROW[1], "#ffc857", "down");
     }
 
+    // Куда "прилепили" бы границы кнопки у кнопок запаса: серые палки цвета
+    // волны (если не совпадают с границей отрезка).
+    const snapStart = App.snapTarget(f, "start");
+    const snapEnd = App.snapTarget(f, "end");
+    if (snapStart !== null && snapStart !== start) this._drawGhost(x(snapStart));
+    if (snapEnd !== null && snapEnd - 1 !== last) this._drawGhost(x(snapEnd - 1));
+
     this._drawBound(sx, s.selected === "start");
     this._drawBound(endMarkX, s.selected === "end");
 
@@ -162,6 +169,13 @@ const Timeline = {
       ctx.fillStyle = inside ? (f.needs_review ? "rgba(205, 170, 255, 0.9)" : "rgba(150, 205, 255, 0.9)") : "rgba(150, 150, 170, 0.55)";
       ctx.fillRect(x, mid - h, 1, Math.max(1, 2 * h));
     }
+  },
+
+  _drawGhost(x) {
+    const [tt] = this.TRACK;
+    const [bt] = this.BOUND_ROW;
+    this.ctx.fillStyle = "rgba(150, 150, 170, 0.55)"; // как волна вне отрезка
+    this.ctx.fillRect(x - 0.75, tt, 1.5, bt - tt);
   },
 
   _drawBound(x, selected) {

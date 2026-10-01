@@ -306,6 +306,47 @@ const App = {
     $("time-readout").textContent = `${formatClock(frame / fps())} · ${frame}`;
   },
 
+  // Ближайший живой (не удалённый) фрагмент слева (-1) или справа (+1).
+  _liveNeighbor(direction) {
+    const fragments = State.manifest.fragments;
+    for (let i = State.fragmentIndex + direction; i >= 0 && i < fragments.length; i += direction) {
+      if (fragments[i].status === "active") return fragments[i];
+    }
+    return null;
+  },
+
+  // Куда кнопки "прилепить" перенесли бы границу отрезка (null — некуда):
+  //   "start" — на кадр после конца отрезка предыдущего фрагмента;
+  //   "end"   — на кадр перед началом отрезка следующего (конец — полуинтервал,
+  //             поэтому algo_end_frame = начало следующего).
+  // Только если границу соседа меняли (иначе отрезки и так стоят, где
+  // нарезал алгоритм) и новое место — внутри фрагмента, отрезок не пустой.
+  snapTarget(f, side) {
+    if (!f || !State.manifest) return null;
+    const neighbor = this._liveNeighbor(side === "start" ? -1 : 1);
+    if (!neighbor) return null;
+    if (side === "start") {
+      if (neighbor.algo_end_frame === neighbor.original_algo_end_frame) return null;
+      const target = neighbor.algo_end_frame;
+      return target >= f.context_start_frame && target < f.algo_end_frame ? target : null;
+    }
+    if (neighbor.algo_start_frame === neighbor.original_algo_start_frame) return null;
+    const target = neighbor.algo_start_frame;
+    return target > f.algo_start_frame && target <= f.context_end_frame ? target : null;
+  },
+
+  async snapBound(side) {
+    const f = currentFragment();
+    const target = this.snapTarget(f, side);
+    if (target === null || isLocked(f)) return;
+    await this.flushSaves();
+    if (side === "start") f.algo_start_frame = target;
+    else f.algo_end_frame = target;
+    await this.saveBounds(f);
+    // Текущий кадр – на новую границу (последний кадр отрезка для конца).
+    App.jumpToBound(side);
+  },
+
   _hasLiveNeighbor(direction) {
     const fragments = State.manifest.fragments;
     for (let i = State.fragmentIndex + direction; i >= 0 && i < fragments.length; i += direction) {
@@ -333,10 +374,19 @@ const App = {
     $("pad-left-plus").disabled = !this.canChangePadding(f, "left", 1);
     $("pad-right-minus").disabled = !this.canChangePadding(f, "right", -1);
     $("pad-right-plus").disabled = !this.canChangePadding(f, "right", 1);
+    // "Прилепить" к соседу: серые, если некуда или граница уже там.
+    const snapStart = this.snapTarget(f, "start");
+    const snapEnd = this.snapTarget(f, "end");
+    $("snap-start").disabled = snapStart === null || snapStart === f.algo_start_frame;
+    $("snap-end").disabled = snapEnd === null || snapEnd === f.algo_end_frame;
+    $("snap-start").title = "Начало отрезка – сразу после конца отрезка предыдущего фрагмента" +
+      (snapStart === null ? " (границу соседа не меняли)" : snapStart === f.algo_start_frame ? " (уже там)" : "");
+    $("snap-end").title = "Конец отрезка – сразу перед началом отрезка следующего фрагмента" +
+      (snapEnd === null ? " (границу соседа не меняли)" : snapEnd === f.algo_end_frame ? " (уже там)" : "");
     // Переданный в Anki фрагмент — только просмотр: все кнопки правки серые.
     if (isLocked(f)) {
       for (const id of ["set-start", "set-end", "merge-prev", "merge-next", "split-btn", "delete-soft", "delete-hard",
-        "pad-left-minus", "pad-left-plus", "pad-right-minus", "pad-right-plus", "undo-btn", "redo-btn"]) {
+        "pad-left-minus", "pad-left-plus", "pad-right-minus", "pad-right-plus", "snap-start", "snap-end", "undo-btn", "redo-btn"]) {
         $(id).disabled = true;
       }
     }
@@ -791,6 +841,8 @@ $("step-fwd-1").addEventListener("click", () => App.step(1));
 $("step-fwd-10").addEventListener("click", () => App.step(10));
 
 $("set-start").addEventListener("click", () => App.setStart());
+$("snap-start").addEventListener("click", () => App.snapBound("start"));
+$("snap-end").addEventListener("click", () => App.snapBound("end"));
 $("set-end").addEventListener("click", () => App.setEnd());
 $("merge-prev").addEventListener("click", () => App.merge("prev"));
 $("merge-next").addEventListener("click", () => App.merge("next"));
