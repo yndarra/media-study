@@ -1,8 +1,8 @@
 :root {
-  --bg: #1b1b1f;
+  --bg: #101013;
   --bg-deleted: #2e1518;
-  --panel: #141418;
-  --border: #3a3a42;
+  --panel: #0b0b0e;
+  --border: #2a2a31;
   --text: #ececf0;
   --dim: #8a8a94;
   --accent-edit: #e0b416;
@@ -50,7 +50,7 @@ body.right-closed #fraglist { display: none; }
   margin: var(--side-gap);
   height: calc(100vh - 2 * var(--side-gap));
   box-sizing: border-box;
-  background: rgba(24, 24, 30, 0.72);
+  background: rgba(14, 14, 18, 0.9);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -91,7 +91,7 @@ body.right-closed #fraglist { display: none; }
   z-index: 20;
   display: none;
   backdrop-filter: blur(10px);
-  background: rgba(24, 24, 30, 0.72);
+  background: rgba(14, 14, 18, 0.9);
 }
 
 #open-left { left: 14px; }
@@ -112,8 +112,8 @@ body.right-closed:not(.no-fraglist) #open-right { display: block; }
   border-radius: 6px;
 }
 
-#menu a[data-menu]:hover { background: #24242b; }
-#menu a[data-menu].active { background: #2c2c33; }
+#menu a[data-menu]:hover { background: #1a1a20; }
+#menu a[data-menu].active { background: #1f1f25; }
 
 .menu-editing {
   margin-top: 16px;
@@ -161,7 +161,7 @@ a.card:hover { border-color: #5a5a66; }
 .progress {
   position: relative;
   height: 20px;
-  background: #23232a;
+  background: #18181d;
   border-radius: 5px;
   overflow: hidden;
   margin: 8px 0 6px;
@@ -213,7 +213,7 @@ table.stats td:first-child { color: var(--dim); white-space: nowrap; }
 }
 
 #fraglist-filter {
-  background: #2c2c33;
+  background: #1f1f25;
   color: var(--text);
   border: 1px solid #45454e;
   border-radius: 5px;
@@ -233,7 +233,7 @@ table.stats td:first-child { color: var(--dim); white-space: nowrap; }
   white-space: nowrap;
 }
 
-.frag-row:hover { background: #22222a; }
+.frag-row:hover { background: #17171c; }
 .frag-row.current { background: rgba(255, 255, 255, 0.08); color: var(--text); }
 .frag-num { min-width: 30px; text-align: right; opacity: 0.7; }
 .frag-text { overflow: hidden; text-overflow: ellipsis; }
@@ -315,7 +315,7 @@ body.frag-deleted {
 
 button {
   font-family: var(--font);
-  background: #2c2c33;
+  background: #1f1f25;
   color: var(--text);
   border: 1px solid #45454e;
   border-radius: 5px;
@@ -323,7 +323,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: #3a3a43;
+  background: #28282f;
 }
 
 button:disabled {
@@ -372,7 +372,7 @@ button:disabled {
   width: 100%;
   height: 72px;
   display: block;
-  background: #101014;
+  background: #0a0a0d;
   border-radius: 5px;
   touch-action: none;
   cursor: pointer;
@@ -548,11 +548,11 @@ textarea.sources {
 /* Полосы прокрутки под тёмную тему (иначе браузер рисует белый ползунок —
    особенно заметно в списке фрагментов справа). */
 :root { color-scheme: dark; }
-* { scrollbar-width: thin; scrollbar-color: #3a3a44 transparent; }
+* { scrollbar-width: thin; scrollbar-color: #2a2a32 transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #3a3a44; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #50505c; }
+::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3c3c46; }
 
 /* Скорость воспроизведения рядом с Reset. */
 .speed-btn { font-size: 16px; line-height: 1; }
@@ -597,7 +597,7 @@ textarea.sources {
   width: min(820px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
-  background: rgba(24, 24, 30, 0.96);
+  background: #121216;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
@@ -629,7 +629,7 @@ textarea.sources {
 .modal label.small { display: block; margin: 6px 0 2px; }
 .modal textarea.sources { display: block; width: 100% !important; margin: 4px 0 8px; }
 .modal input:not([type=checkbox]) {
-  background: #23232a;
+  background: #18181d;
   color: inherit;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -652,6 +652,13 @@ textarea.sources {
 .agent-en { margin: 6px 0; }
 .agent-comments { color: #ffc857; font-size: 13px; margin-bottom: 6px; }
 .agent-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.agent-back { background: #202027; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.agent-back { background: #16161b; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
 .agent-back.old { opacity: 0.75; }
 .agent-back ul { margin: 4px 0 0 18px; padding: 0; }
+
+/* Полоса "Отредактировано": просмотрено и принято без правок — светло-серое. */
+.seg.accepted { background: #8b8b95; }
+
+/* Заголовок раздела с кнопками справа (Видео: Проверка флагов, Перевод). */
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.page-head .head-actions { display: flex; gap: 8px; }

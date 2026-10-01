@@ -531,7 +531,7 @@ def agent_state():
 
     return {
         "status": agent.load_json(DATA_DIR / agent.STATUS_FILE, {"state": "idle"}),
-        "proposals": agent.load_json(DATA_DIR / agent.PROPOSALS_FILE, []),
+        "proposals": agent.prune_stale(DATA_DIR),
     }
 
 

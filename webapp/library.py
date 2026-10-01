@@ -200,11 +200,19 @@ def summary(project_dir: Path) -> dict:
     reviewed = last_touched_index(manifest) + 1
     returned = [f for f in active if f.anki_flagged and not f.exported]  # вернулись из Anki на правку
     head = fragments[:reviewed]
+    # Полоса "Отредактировано" (слева направо): передано в Anki, вернулись из
+    # Anki на правку, просмотрено и принято без правок (до скрытой метки),
+    # изменено, удалено; остальное — ещё не тронуто.
+    # Удалён пользователем (а не исходник объединения/разделения — те
+    # заменены своим результатом и в полосе не считаются).
+    removed = lambda f: f.status != STATUS_ACTIVE and not f.absorbed_into and not f.split_into
+    waiting = lambda f: f.status == STATUS_ACTIVE and not f.exported and not (f.anki_flagged and not f.exported)
     edit_bar = {
-        "unchanged": sum(f.status == STATUS_ACTIVE and not is_edited(f) and not (f.anki_flagged and not f.exported) for f in head),
-        "changed": sum(f.status == STATUS_ACTIVE and is_edited(f) and not (f.anki_flagged and not f.exported) for f in head),
-        "deleted": sum(f.status != STATUS_ACTIVE for f in head),
+        "exported": sum(f.exported for f in active),
         "returned": len(returned),
+        "accepted": sum(waiting(f) and not is_edited(f) for f in head),
+        "changed": sum(waiting(f) and is_edited(f) for f in head),
+        "deleted": sum(removed(f) for f in head),
     }
     return {
         **base,
@@ -219,6 +227,9 @@ def summary(project_dir: Path) -> dict:
         # Ждут правки: ещё не просмотренные + вернувшиеся из Anki.
         "awaiting": sum(f.status == STATUS_ACTIVE for f in fragments[reviewed:]) + sum(
             1 for f in returned if fragments.index(f) < reviewed),
+        "deleted_total": sum(removed(f) for f in fragments),
+        # Всего в полосе "Отредактировано": живые + удалённые пользователем.
+        "bar_total": len(active) + sum(removed(f) for f in fragments),
         "cards_total": len(cards),
         "clips_done": len(index),
         "notes_in_anki": sum(bool(e.get("anki_note_id")) for e in index),

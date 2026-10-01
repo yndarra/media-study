@@ -143,7 +143,9 @@ def flagged_notes() -> list[dict]:
             note = notes.get(card["note"], {})
             project, fragment_id = parse_tags(note.get("tags", []))
             front = card["fields"].get(FRONT_FIELD, {}).get("value", "")
-            sound, _, text = front.partition("<br>")
+            # Клип с лица могли удалить (реплика без озвучки) — это не ошибка.
+            match = re.match(r"\s*(\[sound:[^\]]*\])(?:<br>)?", front)
+            sound, text = (match.group(1), front[match.end():]) if match else ("", front)
             result.append({
                 "project": project,
                 "fragment_id": fragment_id,

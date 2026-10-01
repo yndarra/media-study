@@ -296,6 +296,28 @@ def run(data_dir: Path, limit: int | None = None) -> None:
                             "model": model, "updated": time.time()})
 
 
+def prune_stale(data_dir: Path) -> list[dict]:
+    """
+    Предложения по карточкам, с которых флаг "перевод" уже сняли (или которых
+    уже нет), не нужны — убираются. Если Anki закрыт — список как есть.
+    """
+    proposals_path = data_dir / PROPOSALS_FILE
+    proposals = load_json(proposals_path, [])
+    if not proposals:
+        return proposals
+    try:
+        flagged = set()
+        for flag in TRANSLATION_FLAGS:
+            card_ids = anki.invoke("findCards", query=f"tag:{anki.TAG} flag:{flag}")
+            flagged |= {c["note"] for c in anki.invoke("cardsInfo", cards=card_ids)} if card_ids else set()
+    except (anki.AnkiUnavailable, RuntimeError):
+        return proposals
+    kept = [p for p in proposals if p["note_id"] in flagged]
+    if len(kept) != len(proposals):
+        save_json(proposals_path, kept)
+    return kept
+
+
 def apply(data_dir: Path, approve: list[int], reject: list[int]) -> dict:
     """
     Одобренные предложения — в Anki (лицо без комментариев, новый оборот,
