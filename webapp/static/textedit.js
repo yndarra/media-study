@@ -92,8 +92,103 @@ const TextEditor = {
     return tokens;
   },
 
-  load(original, text, heardRanges) {
-    this.tokens = this.build(original, text, heardRanges);
+  // marks – сохранённая разметка (Fragment.text_marks): если она сходится с
+  // исходным и текущим текстом, берём её как есть (красное остаётся красным,
+  // зелёное – зелёным, даже если набранное совпало с удалённым); иначе –
+  // посимвольное сравнение.
+  load(original, text, heardRanges, marks = "") {
+    this.tokens = this.fromMarks(original || "", text || "", heardRanges, marks) || this.build(original, text, heardRanges);
+  },
+
+  fromMarks(original, text, heardRanges, marks) {
+    if (!marks) return null;
+    const heard = new Uint8Array(original.length);
+    for (const [start, end] of heardRanges || []) {
+      for (let k = Math.max(0, start); k < Math.min(original.length, end); k++) heard[k] = 1;
+    }
+    const tokens = [];
+    let i = 0; // позиция в исходном
+    let j = 0; // позиция в текущем
+    for (const kind of marks) {
+      if (kind === "o") {
+        if (i >= original.length || j >= text.length || original[i] !== text[j]) return null;
+        tokens.push({ ch: original[i], kind: ORIG, heard: !!heard[i] });
+        i++;
+        j++;
+      } else if (kind === "d") {
+        if (i >= original.length) return null;
+        tokens.push({ ch: original[i], kind: DEL, heard: !!heard[i] });
+        i++;
+      } else if (kind === "i") {
+        if (j >= text.length) return null;
+        tokens.push({ ch: text[j], kind: INS });
+        j++;
+      } else {
+        return null;
+      }
+    }
+    return i === original.length && j === text.length ? tokens : null;
+  },
+
+  // Разметка для сохранения (см. fromMarks).
+  marks() {
+    return this.tokens.map((t) => (t.kind === ORIG ? "o" : t.kind === INS ? "i" : "d")).join("");
+  },
+
+  // Текст поменяли не набором (очистка пробелов при выходе из поля, составной
+  // ввод): разметка подстраивается под новый текст, а не строится заново –
+  // пропавшие символы исчезают (зелёные) или краснеют (белые), новые –
+  // зелёные; остальное и порядок символов не меняются.
+  retarget(newText) {
+    const visible = [];
+    this.tokens.forEach((t, k) => t.kind !== DEL && visible.push(k));
+    const a = visible.map((k) => this.tokens[k].ch);
+    const b = [...newText];
+    const A = a.length;
+    const B = b.length;
+    if (A * B > 4000000) return false;
+    const dp = [];
+    for (let i = 0; i <= A; i++) dp.push(new Uint16Array(B + 1));
+    for (let i = A - 1; i >= 0; i--) {
+      for (let j = B - 1; j >= 0; j--) {
+        dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    // Для каждого видимого токена: остался ли он; вставки – перед каким токеном.
+    const keep = new Uint8Array(A);
+    const insertBefore = new Map(); // индекс видимого токена (A – в конце) -> строка
+    let i = 0;
+    let j = 0;
+    // Лишний символ, который можно убрать и набранный, и исходный (двойной
+    // пробел), – убирается набранный: исходный не должен краснеть зря.
+    const ins = visible.map((k) => this.tokens[k].kind === INS);
+    while (i < A || j < B) {
+      if (i < A && j < B && a[i] === b[j] && !(ins[i] && dp[i + 1][j] === dp[i][j])) {
+        keep[i] = 1;
+        i++;
+        j++;
+      } else if (i < A && (j >= B || dp[i + 1][j] >= dp[i][j + 1])) {
+        i++;
+      } else {
+        insertBefore.set(i, (insertBefore.get(i) || "") + b[j]);
+        j++;
+      }
+    }
+    const result = [];
+    let v = 0;
+    this.tokens.forEach((t) => {
+      if (t.kind === DEL) {
+        result.push(t);
+        return;
+      }
+      for (const ch of insertBefore.get(v) || "") result.push({ ch, kind: INS });
+      if (keep[v]) result.push(t);
+      else if (t.kind === ORIG) result.push({ ch: t.ch, kind: DEL, heard: !!t.heard });
+      v++;
+    });
+    for (const ch of insertBefore.get(A) || "") result.push({ ch, kind: INS });
+    this.tokens = result;
+    return true;
   },
 
   // Текст фрагмента — всё, кроме красного.

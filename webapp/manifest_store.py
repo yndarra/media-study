@@ -359,6 +359,7 @@ class ManifestStore:
         text: str | None = None,
         needs_review: bool | None = None,
         review_note: str | None = None,
+        text_marks: str | None = None,
     ) -> Manifest:
         manifest, before = self._begin()
         fragment = self._editable(manifest, fragment_id)
@@ -378,6 +379,9 @@ class ManifestStore:
             raise ValueError("границы отрезка должны лежать внутри фрагмента и start < end")
         if text is not None:
             fragment.text = clean_text(text)
+            # Разметка правки приходит вместе с текстом; без неё — старая
+            # уже не про этот текст.
+            fragment.text_marks = text_marks or ""
         if needs_review is not None:
             fragment.needs_review = needs_review
         if review_note is not None:
@@ -398,6 +402,7 @@ class ManifestStore:
         fragment = self._editable(manifest, fragment_id)
         if rebase:
             fragment.original_text = fragment.text
+            fragment.text_marks = ""
         limit = len(fragment.original_text)
         fragment.heard_ranges = [[max(0, a), min(limit, b)] for a, b in heard_ranges if a < b and a < limit]
         self._commit(manifest, before, fragment_id)
@@ -417,6 +422,7 @@ class ManifestStore:
         fragment.algo_start_frame = fragment.original_algo_start_frame
         fragment.algo_end_frame = fragment.original_algo_end_frame
         fragment.text = fragment.original_text
+        fragment.text_marks = ""  # исходный текст — без зелёного и красного
         # Запас слева и справа — тоже к общему значению из settings.
         fragment.context_start_frame, fragment.context_end_frame = self._default_context(manifest, fragment)
         fragment.context_custom = False

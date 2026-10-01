@@ -311,6 +311,9 @@ class SourcesRequest(BaseModel):
     # Помощь агента: "" — нет; "deep" — глубокий поиск (агент + ссылки);
     # "search" — агент сам ищет достоверные источники (ссылки не нужны).
     agent: str | bool = ""
+    # Без пустых фрагментов: при нарезке фрагменты без текста (музыка, шумы)
+    # не создаются.
+    no_gaps: bool = False
 
 
 @app.patch("/api/p/{project_id}/sources")
@@ -322,6 +325,7 @@ def update_sources(project_id: str, body: SourcesRequest):
     settings = library.project_settings(project_dir)
     settings["sources"] = [s.strip() for s in body.sources if s.strip()]
     settings["agent"] = library.agent_mode(body.agent)
+    settings["no_gaps"] = bool(body.no_gaps)
     library.save_project_settings(project_dir, settings)
     return library.summary(project_dir)
 
@@ -898,6 +902,7 @@ class UpdateFragmentRequest(BaseModel):
     algo_start_frame: int | None = None
     algo_end_frame: int | None = None
     text: str | None = None
+    text_marks: str | None = None  # разметка правки (см. Fragment.text_marks)
     needs_review: bool | None = None
     review_note: str | None = None
 

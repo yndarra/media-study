@@ -169,7 +169,7 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
         master_file=master.name,
         subtitle_source=subtitle_source,
     )
-    from webapp.library import app_settings
+    from webapp.library import app_settings, project_settings
 
     manifest = assemble_manifest(
         whisper_transcript, source_words, fps, total_frames, video_info,
@@ -177,6 +177,12 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
         boundary_cache=raw_dir / "sat_boundary_probs.json",
         unvoiced=unvoiced_speakers(project_dir),
     )
+    # Флажок "Без пустых фрагментов" (окно видео в "Обработке"): фрагменты без
+    # текста — музыка, шумы, звуки природы — в нарезку не попадают.
+    if project_settings(project_dir).get("no_gaps"):
+        before = len(manifest.fragments)
+        manifest.fragments = [f for f in manifest.fragments if f.text.strip()]
+        print(f"Без пустых фрагментов: убрано {before - len(manifest.fragments)}", flush=True)
     report(project_dir, "assets", None, force=True)
     build_waveform(proxy_path, project_dir / "waveform.bin", fps, total_frames)
     build_audio_track(master, project_dir / "audio.pcm")

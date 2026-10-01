@@ -984,3 +984,13 @@ label.check > input[type=checkbox] { align-self: center; }
 /* Появление карточек при открытии раздела. */
 @keyframes card-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
 .enter { animation: card-in 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both; animation-delay: calc(var(--i) * 35ms); }
+
+/* Поля названия и автора в окнах – текст белее. */
+.modal-head input, .modal-head textarea { color: var(--text); }
+
+/* Поле, растущее по тексту: одна строка – ровно 32 px, у многострочного
+   те же отступы сверху и снизу (раньше снизу было меньше). */
+textarea.grow { line-height: 20px; padding-top: 5px; padding-bottom: 5px; min-height: 32px; }
+
+/* "Загрузка…" в окне – на месте: отступы абзаца входят в высоту содержимого. */
+.modal-body { display: flow-root; }

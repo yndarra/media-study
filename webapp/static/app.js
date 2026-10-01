@@ -406,7 +406,7 @@ const App = {
     const cur = $("cur-text");
     if (force) TextEditor.resetHistory();
     if (force || document.activeElement !== cur) {
-      TextEditor.load(f.original_text, f.text, f.heard_ranges);
+      TextEditor.load(f.original_text, f.text, f.heard_ranges, f.text_marks);
       TextEditor.render(cur);
     }
     cur.contentEditable = isLocked(f) ? "false" : "plaintext-only";
@@ -536,6 +536,7 @@ const App = {
     const f = currentFragment();
     const el = $("cur-text");
     f.text = TextEditor.text();
+    f.text_marks = TextEditor.marks();
     TextEditor.render(el);
     TextEditor.setCaret(el, caret);
     this._scheduleTextSave(f);
@@ -549,8 +550,9 @@ const App = {
     const copy = el.cloneNode(true);
     copy.querySelectorAll(".del, br[data-sentinel]").forEach((node) => node.remove());
     const text = copy.textContent;
-    TextEditor.load(f.original_text, text, f.heard_ranges);
+    if (!TextEditor.retarget(text)) TextEditor.load(f.original_text, text, f.heard_ranges);
     f.text = TextEditor.text();
+    f.text_marks = TextEditor.marks();
     TextEditor.render(el);
     TextEditor.setCaret(el, TextEditor.tokens.length);
     this._scheduleTextSave(f);
@@ -583,7 +585,9 @@ const App = {
     const cleaned = cleanText(f.text);
     if (cleaned !== f.text) {
       f.text = cleaned;
-      TextEditor.load(f.original_text, cleaned, f.heard_ranges);
+      // Красное и зелёное остаются как были – убираются только лишние пробелы.
+      if (!TextEditor.retarget(cleaned)) TextEditor.load(f.original_text, cleaned, f.heard_ranges);
+      f.text_marks = TextEditor.marks();
       TextEditor.render($("cur-text"));
       this.textFragment = f;
       clearTimeout(this.textTimer);
@@ -598,11 +602,14 @@ const App = {
     const f = this.textFragment;
     if (!f) return;
     const text = f.text;
-    const updated = await this._call(Api.updateFragment(f.id, { text }));
+    // Вместе с текстом – разметка правки (красное/зелёное), см. textedit.js.
+    const updated = await this._call(Api.updateFragment(f.id, { text, text_marks: f.text_marks || "" }));
     if (updated) {
       const latest = f.text;
+      const latestMarks = f.text_marks;
       Object.assign(f, updated);
       f.text = latest;
+      f.text_marks = latestMarks;
     }
     if (f === currentFragment()) this.renderStatus(f);
   },

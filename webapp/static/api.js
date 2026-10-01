@@ -79,11 +79,11 @@ const Api = {
     });
   },
 
-  saveSources(id, sources, agent) {
+  saveSources(id, sources, agent, noGaps = false) {
     return this.json(`/api/p/${encodeURIComponent(id)}/sources`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sources, agent }),
+      body: JSON.stringify({ sources, agent, no_gaps: noGaps }),
     });
   },
 

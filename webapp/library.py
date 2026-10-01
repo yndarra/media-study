@@ -241,6 +241,7 @@ def summary(project_dir: Path) -> dict:
             "percent": progress["percent"] if not added else None,
             "sources": settings.get("sources", []),
             "agent": agent_mode(settings.get("agent")),
+            "no_gaps": bool(settings.get("no_gaps")),
             "audio_only": bool(info.get("audio_only")),
         }
     manifest = Manifest.load(manifest_path)

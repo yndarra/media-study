@@ -257,6 +257,16 @@ function countUp(el, from, to) {
 }
 const BAR_ANIMATION_MS = 900;
 
+// Раздел открыли: заголовок, описание и остальное содержимое страницы
+// появляются по очереди (так же, как карточки).
+function viewEnter(el) {
+  [...el.children].forEach((child, i) => {
+    child.style.setProperty("--i", i);
+    child.classList.add("enter");
+    child.addEventListener("animationend", () => child.classList.remove("enter"), { once: true });
+  });
+}
+
 // Раздел открыли: карточки появляются по очереди (лёгкий подъём и проявление).
 function cardsEnter(box) {
   box.querySelectorAll("a.card, .group-title").forEach((el, i) => {
@@ -530,6 +540,16 @@ function processingBar(v) {
   return progressBar(v.percent, 100, cap(v.status), "processing");
 }
 
+// Форма слова по числу: plural(n, "фрагмент", "фрагмента", "фрагментов").
+function plural(n, one, few, many) {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a >= 11 && a <= 14) return many;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+}
+
 // Первая буква – заглавная (статусы и подсказки всегда с большой буквы).
 function cap(text) {
   const s = String(text || "");
@@ -579,6 +599,7 @@ const Pages = {
         </div></div>
       <p class="muted small page-note">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
       <div id="videos-list"><p class="muted">Загрузка…</p></div>`;
+    viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     el.querySelector("#open-flags").addEventListener("click", () => this.checkFlags());
     el.querySelector("#open-translate").addEventListener("click", () => this.translateModal());
     const render = async () => {
@@ -664,10 +685,10 @@ const Pages = {
         <div class="muted small">Карточек с флагом «перевод» в Anki: ${flagged}${statusLine ? ` · ${statusLine}` : ""}${st.model ? ` · модель ${escapeHtml(st.model)}` : ""}</div>
         <div class="actions"><button id="agent-run" class="step-btn" ${running || !flagged ? "disabled" : ""}>Подготовить переводы</button></div>
         ${(state.batches || []).length ? `<div class="muted small">Пакетные заявки: ${state.batches.map((j) =>
-          `${escapeHtml(j.project)} – ${j.cards} карточек (${escapeHtml(j.state)})`).join("; ")}</div>` : ""}
+          `${escapeHtml(j.project)} – ${j.cards} ${plural(j.cards, "карточка", "карточки", "карточек")} (${escapeHtml(j.state)})`).join("; ")}</div>` : ""}
         <div class="agent-list">${proposals.length ? groupBatches(proposals).map(([batch, list]) => `
           <div class="agent-batch" data-batch="${escapeHtml(batch)}">
-            <div class="agent-batch-head"><b>${escapeHtml(batch || "Без пачки")}</b> <span class="muted small">· ${list.length} карточек</span>
+            <div class="agent-batch-head"><b>${escapeHtml(batch || "Без пачки")}</b> <span class="muted small">· ${list.length} ${plural(list.length, "карточка", "карточки", "карточек")}</span>
               <span class="spacer"></span>
               <button class="step-btn batch-reject">Отклонить пачку</button>
               <button class="step-btn primary batch-approve">Одобрить пачку</button></div>
@@ -819,7 +840,7 @@ const Pages = {
     // Источники текста для сверки: ссылки, по одной в строке.
     const sources = (v.sources_display || []).map((src) =>
       `<a href="${escapeHtml(src.url)}" target="_blank" rel="noopener">${escapeHtml(src.title || src.url)}</a>` +
-      (src.used ? "" : ' <span class="muted small">(найден, не использован)</span>'));
+      (src.used ? "" : ' <span class="muted small">(не использован)</span>'));
     const pct = (n) => (s.cards ? `${Math.round((n / s.cards) * 100)}%` : "0%");
     const shift = s.bound_shift_frames;
     // Фрагментов без перевода (переданные в Anki и ещё нет); null — Anki закрыт, неизвестно.
@@ -834,11 +855,12 @@ const Pages = {
       <h2>Статистика</h2>
       <table class="stats">
         ${row("Ролик", `${formatDuration(s.video_seconds)}, карточек ${s.cards}`)}
-        ${row("В клипах", `${formatDuration(s.kept_seconds)} – ${(s.kept_share * 100).toFixed(1)}% ролика, удалено ${s.deleted} фрагментов (${Math.round(s.deleted_seconds)} сек)`)}
+        ${row("В клипах", `${formatDuration(s.kept_seconds)} – ${(s.kept_share * 100).toFixed(1)}% ролика, удалено ${s.deleted} ${plural(s.deleted, "фрагмент", "фрагмента", "фрагментов")} (${Math.round(s.deleted_seconds)} сек)`)}
         ${row("Длина клипа, сек", s.clip_seconds ? `${s.clip_seconds.mean} в среднем, ${s.clip_seconds.median} медиана, ${s.clip_seconds.min} мин., ${s.clip_seconds.max} макс.` : "")}
         ${row("Строк в карточке", lines)}
         ${row(sources.length > 1 ? "Источники" : "Источник", sources.length ? sources : "Нет")}
-        ${row("Правка текста и границ", `${s.text_edited} фрагментов (${pct(s.text_edited)}), ${s.bounds_edited} фрагментов (${pct(s.bounds_edited)})`)}
+        ${row("Правка текста и границ", `${s.text_edited} ${plural(s.text_edited, "фрагмент", "фрагмента", "фрагментов")} (${pct(s.text_edited)}), ` +
+          `${s.bounds_edited} ${plural(s.bounds_edited, "фрагмент", "фрагмента", "фрагментов")} (${pct(s.bounds_edited)})`)}
         ${row("Сдвиг границ, кадр", shift ? `${shift.mean} в среднем, ${shift.median} медиана, ${shift.min} мин., ${shift.max} макс.` : "")}
         ${row("Колода Anki", v.anki_deck ? escapeHtml(v.anki_deck) : "Нет")}
       </table>
@@ -964,6 +986,7 @@ const Pages = {
     el.innerHTML = `<h1>Обработка</h1>
       <p class="muted small page-note">Добавленные видео: копия для редактора, распознавание речи, сверка с текстом и нарезка на фразы. Нажмите на видео, чтобы прикрепить ссылки на текст для сверки (например, страницу Notion) и запустить обработку.</p>
       <div id="process-list"><p class="muted">Загрузка…</p></div>`;
+    viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     const render = async () => {
       const box = document.getElementById("process-list");
       if (!box) return;
@@ -1020,6 +1043,7 @@ const Pages = {
           <textarea class="sources grow" rows="1" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
           <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></label>
         </div></div>
+        <label class="check"><input type="checkbox" class="no-gaps" ${v.no_gaps ? "checked" : ""}> Без пустых фрагментов <span class="muted small">(без музыки, шумов и других фрагментов без текста)</span></label>
       </div>
       ${disk ? `<h2>Место на диске</h2><table class="stats">
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
@@ -1050,7 +1074,7 @@ const Pages = {
       const group = body.querySelector("#group-input").value.trim();
       if (title && group) await Api.saveProjectInfo(id, { title, group });
       const mode = deep.checked ? "deep" : search.checked ? "search" : "";
-      await Api.saveSources(id, body.querySelector(".sources").value.split("\n"), mode);
+      await Api.saveSources(id, body.querySelector(".sources").value.split("\n"), mode, body.querySelector(".no-gaps").checked);
       watcher.snapshot();
     };
     saveButton.addEventListener("click", save);
@@ -1081,6 +1105,7 @@ const Pages = {
         <button id="file-go" class="step-btn" disabled>Добавить</button>
       </div>
       <div id="add-note" class="muted small"></div>`;
+    viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     const note = document.getElementById("add-note");
     const urlInput = document.getElementById("download-url");
     const fileInput = document.getElementById("file-input");
@@ -1154,6 +1179,7 @@ const Pages = {
           <div class="muted small">Агент поиска источников текста для сверки (с веб-поиском OpenRouter); лучше брать сильную модель – запросов мало</div></td></tr>
       </table>
       <div class="actions"><button id="settings-save" class="step-btn">Сохранить</button><button id="settings-cancel" class="step-btn">Отменить</button></div>`;
+    viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     const showDeckSync = (state) => {
       const box = document.getElementById("deck-sync");
       if (!box || !state) return;

@@ -320,5 +320,26 @@ class TestStage3Queue(ManifestStoreTestCase):
         self.assertTrue(self.store.load().by_id("frag_0002").exported)
 
 
+
+class TestTextMarks(ManifestStoreTestCase):
+    """Разметка правки текста (красное/зелёное) хранится вместе с текстом."""
+
+    def test_marks_saved_with_text(self):
+        # Удалили "hello" и набрали его же: текст тот же, но разметка – красное + зелёное.
+        manifest = self.store.update_fragment("frag_0001", text="hello", text_marks="dddddiiiii")
+        self.assertEqual(manifest.by_id("frag_0001").text_marks, "dddddiiiii")
+        self.assertEqual(self.store.load().by_id("frag_0001").text_marks, "dddddiiiii")
+
+    def test_text_without_marks_clears_them(self):
+        self.store.update_fragment("frag_0001", text="hello", text_marks="dddddiiiii")
+        manifest = self.store.update_fragment("frag_0001", text="hello!")
+        self.assertEqual(manifest.by_id("frag_0001").text_marks, "")
+
+    def test_reset_clears_marks(self):
+        self.store.update_fragment("frag_0001", text="hello", text_marks="dddddiiiii")
+        manifest = self.store.reset("frag_0001")
+        self.assertEqual(manifest.by_id("frag_0001").text_marks, "")
+
+
 if __name__ == "__main__":
     unittest.main()
