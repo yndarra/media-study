@@ -858,7 +858,6 @@ a.card.complete {
     radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.13), transparent 55%),
     linear-gradient(160deg, #19121a, #141418 70%);
   border-color: rgba(244, 114, 182, 0.28);
-  box-shadow: -10px 0 26px -18px rgba(244, 114, 182, 0.85), 0 -10px 26px -20px rgba(244, 114, 182, 0.6);
 }
 a.card.complete:hover { border-color: rgba(244, 114, 182, 0.5); }
 
@@ -877,3 +876,12 @@ a.card.complete:hover { border-color: rgba(244, 114, 182, 0.5); }
 /* Текст в строках таблиц окна — оптически посередине между разделителями
    (как в кнопках: строка Segoe UI сидит ниже центра, приподнимаем на 1.5 px). */
 .modal table.stats td { padding-top: 2.5px; padding-bottom: 5.5px; }
+/* Обе группы отрезков — на всю ширину полосы, чтобы проценты считались от
+   всей полосы (раньше у правой группы не было своей ширины и фиолетовый
+   отрезок схлопывался, а левая группа укорачивалась на его ширину). Правая
+   группа лежит поверх и прижата к правому краю. */
+.progress.segmented .seg-left { flex: 0 0 100%; }
+.progress.segmented .seg-right {
+  position: absolute; inset: 0; justify-content: flex-end; pointer-events: none;
+}
+.progress.segmented .seg-right .seg { pointer-events: auto; }

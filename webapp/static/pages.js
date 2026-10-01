@@ -65,10 +65,10 @@ const Router = {
     // Окно подробностей живёт только на своём адресе (#/video/..., #/processing/...).
     if (!(page === "video" || (page === "process" && id))) Modal.close(false);
     if (page === "edit" && id) {
-      this.show("editor", "videos");
+      this.show("editor", null); // в редакторе ни один раздел меню не выделен
       await App.openProject(id);
       FragList.reset();
-      this.show("editor", "videos"); // обновить ссылку «сейчас правится» уже с названием видео
+      this.show("editor", null); // обновить ссылку «сейчас правится» уже с названием видео
       return;
     }
     Player.pauseIfPlaying();
@@ -144,10 +144,12 @@ function segmentBar(segments, total, name, done) {
   const leftEnd = left.reduce((sum, s) => sum + pct(s.n), 0);
   const html = (s, k, list, side) => {
     const w = pct(s.n);
-    // Скос слева – у всех, кроме первого слева (у правой группы – и у первого);
-    // скос справа – у последнего левого, если дальше есть серое.
+    // Каждый отрезок – параллелограмм: соседи стыкуются ровно по одной
+    // наклонной линии (вертикальных концов нет нигде, и узкий отрезок не
+    // показывает под собой конец предыдущего). Не скошены только края
+    // полосы: левый край первого отрезка и правый – у дошедшего до 100%.
     const sl = side === "right" || k > 0;
-    const sr = side === "left" && k === list.length - 1 && leftEnd < 99.9;
+    const sr = side === "left" ? !(k === list.length - 1 && leftEnd >= 99.9) : k < list.length - 1;
     return `<div class="seg ${s.cls}${sl ? " sl" : ""}${sr ? " sr" : ""}" data-w="${w.toFixed(2)}" ` +
       `style="width:${segWidth(w, sl)}" title="${escapeHtml(s.title || "")}"></div>`;
   };
