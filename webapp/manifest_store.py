@@ -390,6 +390,15 @@ class ManifestStore:
         return manifest
 
     @_locked
+    def set_unvoiced(self, fragment_id: str, value: bool) -> Manifest:
+        """Кнопка "не озвучено" в редакторе (отменяется Ctrl+Z, как любая правка)."""
+        manifest, before = self._begin()
+        fragment = self._editable(manifest, fragment_id)
+        fragment.unvoiced = bool(value)
+        self._commit(manifest, before, fragment_id)
+        return manifest
+
+    @_locked
     def mark_heard(self, fragment_id: str, heard_ranges: list[list[int]], rebase: bool = False) -> Manifest:
         """
         Отметить участки текста, записанные на слух (голубые в редакторе).

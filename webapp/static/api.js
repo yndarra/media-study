@@ -169,6 +169,17 @@ const Api = {
     return res.json();
   },
 
+  // Отметка "не озвучено" (карточка без видео, с подписью Rover:).
+  async setUnvoiced(id, value) {
+    const res = await fetch(`${Api.base()}/fragments/${id}/unvoiced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
   async resetFragment(id) {
     const res = await fetch(`${Api.base()}/fragments/${id}/reset`, { method: "POST" });
     if (!res.ok) throw new Error(await res.text());

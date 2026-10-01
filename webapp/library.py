@@ -263,8 +263,11 @@ def summary(project_dir: Path) -> dict:
     # Удалён пользователем (а не исходник объединения/разделения — те
     # заменены своим результатом и в полосе не считаются).
     removed = lambda f: f.status != STATUS_ACTIVE and not f.absorbed_into and not f.split_into
+    # Не озвученные (бирюзовые) — после синих, перед жёлтыми; изменённые —
+    # жёлтые, даже если не озвучены.
     edit_bar = {
-        "accepted": sum(f.status == STATUS_ACTIVE and not is_edited(f) for f in head),
+        "accepted": sum(f.status == STATUS_ACTIVE and not is_edited(f) and not f.is_unvoiced for f in head),
+        "unvoiced": sum(f.status == STATUS_ACTIVE and not is_edited(f) and f.is_unvoiced for f in head),
         "changed": sum(f.status == STATUS_ACTIVE and is_edited(f) for f in head),
         "deleted": sum(removed(f) for f in head),
     }

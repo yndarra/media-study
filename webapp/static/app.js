@@ -58,6 +58,14 @@ function isTouched(f) {
   return !!(f.exported || f.status !== "active" || isTextEdited(f) || isBoundsEdited(f) || f.context_custom || f.merged_from || f.split_from);
 }
 
+// Отметка "не озвучено": заданная кнопкой или по умолчанию — есть реплика Rover
+// (то же правило, что Fragment.is_unvoiced в common/manifest_schema.py).
+function isUnvoiced(f) {
+  if (!f) return false;
+  if (f.unvoiced === true || f.unvoiced === false) return f.unvoiced;
+  return /^\s*Rover\s*:/m.test(f.text || "");
+}
+
 // Фрагмент передан в Anki (этап 3): его можно только просматривать.
 function isLocked(f) {
   return !!(f && f.exported);
@@ -289,6 +297,7 @@ const App = {
     for (const cls of ["bg-anki", "bg-pending", "bg-translated", "bg-returned"]) {
       document.body.classList.toggle(`frag-${cls}`, inEditor && stage === cls);
     }
+    document.body.classList.toggle("frag-unvoiced", inEditor && !locked && !deleted && stage !== "bg-returned" && isUnvoiced(f));
     if (locked) $("reset-btn").disabled = true;
   },
 
@@ -387,6 +396,12 @@ const App = {
     $("pad-left-plus").disabled = !this.canChangePadding(f, "left", 1);
     $("pad-right-minus").disabled = !this.canChangePadding(f, "right", -1);
     $("pad-right-plus").disabled = !this.canChangePadding(f, "right", 1);
+    const unvoiced = isUnvoiced(f);
+    $("unvoiced-btn").classList.toggle("on", unvoiced);
+    $("unvoiced-btn").disabled = isLocked(f);
+    $("unvoiced-btn").title = unvoiced
+      ? "Отмечено: реплика не озвучена – в Anki без видео, только текст (нажмите, чтобы снять)"
+      : "Отметить: реплика не озвучена – в Anki без видео, только текст";
     // "Прилепить" к соседу: серые, если некуда или граница уже там.
     const snapStart = this.snapTarget(f, "start");
     const snapEnd = this.snapTarget(f, "end");
@@ -753,6 +768,18 @@ const App = {
     this.renderStatus(f);
   },
 
+  // Кнопка "Не озвучено": переключить отметку (отменяется Ctrl+Z).
+  async toggleUnvoiced() {
+    const f = currentFragment();
+    if (!f || isLocked(f)) return;
+    await this.flushSaves();
+    const updated = await this._call(Api.setUnvoiced(f.id, !isUnvoiced(f)));
+    if (!updated) return;
+    this._applyServer(f, updated);
+    this.refreshHistory();
+    this.renderAll();
+  },
+
   async deleteSoft() {
     await this.flushSaves();
     // Остаёмся на этом же фрагменте — он просто получает пометку «удалено»
@@ -862,6 +889,7 @@ $("merge-prev").addEventListener("click", () => App.merge("prev"));
 $("merge-next").addEventListener("click", () => App.merge("next"));
 $("split-btn").addEventListener("click", () => App.split());
 $("delete-soft").addEventListener("click", () => App.deleteSoft());
+$("unvoiced-btn").addEventListener("click", () => App.toggleUnvoiced());
 $("delete-hard").addEventListener("click", () => App.deleteHard());
 
 // Скорость: шаг 0.1× от 0.5× до 2× (округление убирает накопление 0.30000000000000004).

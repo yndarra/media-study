@@ -1237,3 +1237,12 @@ input.picker-field { display: block; line-height: 30px; }
    уже 50 px и не шире места; длиннее – перенос по словам. */
 #cur-text { width: fit-content; min-width: 50px; max-width: 100%; margin: 0 auto; padding: 0 10px; box-sizing: border-box; }
 .nav-grid { column-gap: 0; }
+
+/* ---- "Не озвучено" (бирюзовый) ---- */
+.seg.unvoiced { background: #1f7f7a; }
+.frag-row.unvoiced .frag-num, .frag-row.unvoiced .frag-text { color: #5fd3c8; opacity: 1; }
+body.frag-unvoiced { background: #0f1f1f; }
+.unvoiced-btn { display: inline-flex; align-items: center; gap: 6px; }
+.unvoiced-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.unvoiced-btn.on { background: #17504c; border-color: #2a8a83; color: #e6fffc; }
+.unvoiced-btn.on:hover:not(:disabled) { background: #1c5f5a; }

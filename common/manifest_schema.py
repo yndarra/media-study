@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,11 @@ STATUS_DELETED = "deleted"
 
 KIND_PHRASE = "phrase"
 KIND_FILLER = "filler"
+
+
+# Реплика молчащего героя (в игре не озвучена): "Rover: ..." в начале строки.
+UNVOICED_SPEAKERS = ("Rover",)
+UNVOICED_LINE = re.compile(rf"^\s*(?:{'|'.join(UNVOICED_SPEAKERS)})\s*:", re.M)
 
 
 @dataclass
@@ -71,6 +77,10 @@ class Fragment:
     # Пусто — разметка выводится сравнением (редактор проверяет, что она
     # сходится с original_text и text, иначе тоже сравнивает заново).
     text_marks: str = ""
+    # Реплика не озвучена (Rover в игре молчит — выбор ответа): в карточку Anki
+    # не идёт видео, только текст с подписью "Rover:". None — по умолчанию:
+    # отмечены фрагменты с репликой Rover; True/False — задано кнопкой.
+    unvoiced: bool | None = None
 
     def __post_init__(self) -> None:
         # Любой текст фрагмента хранится очищенным от лишних и невидимых
@@ -79,6 +89,13 @@ class Fragment:
         self.text = clean_text(self.text)
         self.source_text = clean_text(self.source_text)
         self.original_text = self.text if self.original_text is None else clean_text(self.original_text)
+
+    @property
+    def is_unvoiced(self) -> bool:
+        """Отметка "не озвучено": заданная кнопкой или по умолчанию (есть реплика Rover)."""
+        if self.unvoiced is not None:
+            return self.unvoiced
+        return bool(UNVOICED_LINE.search(self.text or ""))
 
     @property
     def kind(self) -> str:
@@ -111,6 +128,7 @@ class Fragment:
     def to_dict(self) -> dict:
         data = asdict(self)
         data["kind"] = self.kind
+        data["is_unvoiced"] = self.is_unvoiced
         data["edited"] = self.edited
         data["hard_deletable"] = self.hard_deletable
         data["restorable"] = self.restorable

@@ -72,8 +72,13 @@ def text_to_html(text: str) -> str:
     return "<br>".join(html.escape(line, quote=False) for line in text.split("\n"))
 
 
-def front_html(media_name: str, text: str) -> str:
-    """Лицо: клип, под ним — текст фрагмента (у пустого фрагмента — только клип)."""
+def front_html(media_name: str, text: str, with_clip: bool = True) -> str:
+    """
+    Лицо: клип, под ним — текст фрагмента (у пустого фрагмента — только клип).
+    with_clip=False — не озвученная реплика: только текст.
+    """
+    if not with_clip:
+        return text_to_html(text)
     return f"[sound:{media_name}]<br>{text_to_html(text)}" if text.strip() else f"[sound:{media_name}]"
 
 
@@ -88,12 +93,17 @@ def note_tags(project: str, fragment_id: str, speakers: list[str] | None = None,
     return tags
 
 
-def card_content(text: str, known_speakers: set[str] | None) -> tuple[str, list[str], dict]:
+def card_content(text: str, known_speakers: set[str] | None, unvoiced: bool = False) -> tuple[str, list[str], dict]:
     """
     Текст лица (без имён говорящих), говорящие и метки-признаки карточки
     (без_текста / без_автора) — общее для создания и обновления карточки.
+    unvoiced — не озвученная реплика: над репликой молчащего героя остаётся
+    подпись "Rover:" (видео нет — иначе непонятно, чья это реплика).
     """
-    clean, speakers, anonymous = split_speakers_ex(text, known_speakers or set())
+    from common.manifest_schema import UNVOICED_SPEAKERS
+
+    labeled = set(UNVOICED_SPEAKERS) if unvoiced else set()
+    clean, speakers, anonymous = split_speakers_ex(text, known_speakers or set(), labeled)
     flags = {"no_text": not text.strip(), "no_speaker": bool(known_speakers) and anonymous}
     return clean, speakers, flags
 
@@ -108,19 +118,22 @@ def parse_tags(tags: list[str]) -> tuple[str, str]:
 
 
 def add_clip_note(deck: str, clip_path, media_name: str, text: str, project: str, fragment_id: str, clip: str,
-                  known_speakers: set[str] | None = None, back: str = "", extra_tags: list[str] | None = None) -> int:
+                  known_speakers: set[str] | None = None, back: str = "", extra_tags: list[str] | None = None,
+                  unvoiced: bool = False) -> int:
     """
     Кладёт клип в медиа Anki и создаёт заметку. Имена говорящих из текста
-    уходят в метки (split_speakers). Возвращает id заметки.
+    уходят в метки (split_speakers). unvoiced — карточка без клипа (только
+    текст, с подписью "Rover:"). Возвращает id заметки.
     """
-    text, speakers, flags = card_content(text, known_speakers)
-    invoke("storeMediaFile", filename=media_name, path=str(clip_path))
+    text, speakers, flags = card_content(text, known_speakers, unvoiced)
+    if not unvoiced:
+        invoke("storeMediaFile", filename=media_name, path=str(clip_path))
     return invoke(
         "addNote",
         note={
             "deckName": deck,
             "modelName": MODEL_NAME,
-            "fields": {FRONT_FIELD: front_html(media_name, text), BACK_FIELD: back},
+            "fields": {FRONT_FIELD: front_html(media_name, text, with_clip=not unvoiced), BACK_FIELD: back},
             "tags": note_tags(project, fragment_id, speakers, **flags) + list(extra_tags or []),
             "options": {"allowDuplicate": False},
         },
@@ -162,14 +175,16 @@ def flagged_notes() -> list[dict]:
 
 
 def update_clip_note(note_id: int, clip_path, media_name: str, text: str,
-                     project: str = "", fragment_id: str = "", known_speakers: set[str] | None = None) -> None:
+                     project: str = "", fragment_id: str = "", known_speakers: set[str] | None = None,
+                     unvoiced: bool = False) -> None:
     """
     Переделанный фрагмент: клип заменяется под тем же именем, текст карточки
     обновляется, флаг с её карточек снимается. История повторений сохраняется.
     """
-    text, speakers, flags = card_content(text, known_speakers)
-    invoke("storeMediaFile", filename=media_name, path=str(clip_path), deleteExisting=True)
-    invoke("updateNoteFields", note={"id": note_id, "fields": {FRONT_FIELD: front_html(media_name, text)}})
+    text, speakers, flags = card_content(text, known_speakers, unvoiced)
+    if not unvoiced:
+        invoke("storeMediaFile", filename=media_name, path=str(clip_path), deleteExisting=True)
+    invoke("updateNoteFields", note={"id": note_id, "fields": {FRONT_FIELD: front_html(media_name, text, with_clip=not unvoiced)}})
     if project and fragment_id:
         invoke("updateNoteTags", note=note_id, tags=note_tags(project, fragment_id, speakers, **flags))
     # Обрезка/текст поправлены: оранжевый флаг снимается, красный ("и
@@ -218,7 +233,7 @@ def split_speakers(text: str, known: set[str]) -> tuple[str, list[str]]:
     return clean, speakers
 
 
-def split_speakers_ex(text: str, known: set[str]) -> tuple[str, list[str], bool]:
+def split_speakers_ex(text: str, known: set[str], labeled: set[str] | None = None) -> tuple[str, list[str], bool]:
     """
     Текст карточки без имён говорящих и сами говорящие (для меток).
 
@@ -255,7 +270,8 @@ def split_speakers_ex(text: str, known: set[str]) -> tuple[str, list[str], bool]
             if not groups:
                 groups.append([None, []])
             groups[-1][1].append(rest)
-    lines = [" ".join(parts) for _, parts in groups if parts]
+    # labeled — у этих говорящих имя остаётся отдельной строкой над репликой.
+    lines = [(f"{name}:\n" if name in (labeled or ()) else "") + " ".join(parts) for name, parts in groups if parts]
     anonymous = any(name is None and parts for name, parts in groups)
     return "\n".join(lines), speakers, anonymous
 

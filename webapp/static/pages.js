@@ -152,7 +152,7 @@ const Router = {
     // Фон "удалено"/"в Anki" относится к фрагменту в редакторе, не к другим страницам.
     if (view !== "editor") {
       document.body.classList.remove("frag-deleted", "frag-locked", "frag-bg-anki", "frag-bg-pending",
-        "frag-bg-translated", "frag-bg-returned");
+        "frag-bg-translated", "frag-bg-returned", "frag-unvoiced");
     }
     // Ссылка "сейчас правится" в меню – чтобы вернуться в редактор одним кликом.
     const editing = document.getElementById("menu-editing");
@@ -348,10 +348,11 @@ function formatSize(bytes) {
 //   карточки с флагом "обрезка/текст" (оранжевый, красный).
 function videoBars(v) {
   const e = v.edit_bar || { accepted: 0, changed: 0, deleted: 0 };
-  const edited = e.accepted + e.changed + e.deleted;
+  const edited = e.accepted + (e.unvoiced || 0) + e.changed + e.deleted;
   const total = v.bar_total || v.fragments_total;
   return segmentBar([
     { n: e.accepted, cls: "accepted", title: `Приняты без правок: ${e.accepted}` },
+    { n: e.unvoiced || 0, cls: "unvoiced", title: `Не озвучены: ${e.unvoiced || 0}` },
     { n: e.changed, cls: "changed", title: `Изменены: ${e.changed}` },
     { n: e.deleted, cls: "deleted", title: `удалены: ${e.deleted}` },
   ], total, "Отредактировано", edited) +

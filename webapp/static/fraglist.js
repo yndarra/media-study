@@ -72,6 +72,7 @@ const FragList = {
   editClass(f, i, reviewed) {
     if (f.status !== "active") return "deleted";
     if (isTextEdited(f) || isBoundsEdited(f) || f.context_custom || f.merged_from || f.split_from) return "changed";
+    if (isUnvoiced(f)) return "unvoiced";
     return i <= reviewed ? "accepted" : "";
   },
 

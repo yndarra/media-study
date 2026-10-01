@@ -39,7 +39,7 @@ from pathlib import Path
 
 from common.manifest_schema import Manifest, STATUS_ACTIVE, replace_file, retry_windows_lock
 
-from . import anki, rover_flags
+from . import anki
 from .export_clips import render_clip
 
 DEFAULT_SECONDS_PER_FRAME = 0.16  # ~13 с на 3-секундный клип 4K (замер на RTX 5070 + CPU libx265)
@@ -180,6 +180,7 @@ class Worker:
                     self.speakers.get(project.name, set()),
                     back=back,
                     extra_tags=["агент_перевод"] if back else None,
+                    unvoiced=bool(entry.get("unvoiced")),
                 )
             except RuntimeError as error:
                 # Карточка уже создана прошлым запуском, который упал, не успев
@@ -276,6 +277,7 @@ class Worker:
             anki.update_clip_note(
                 entry["anki_note_id"], project / "export" / entry["clip"], f"{project.name}_{entry['clip']}", entry["text"],
                 project.name, entry["fragment_id"], self.speakers.get(project.name, set()),
+                unvoiced=bool(entry.get("unvoiced")),
             )
             entry.pop("anki_update_pending", None)
             return True
@@ -319,6 +321,7 @@ class Worker:
                 "clip": f"{name}{ext}",
                 "text_file": f"{name}.txt",
                 "text": fragment.text,
+                "unvoiced": fragment.is_unvoiced,
                 "fragment_id": fragment.id,
                 "start_frame": fragment.algo_start_frame,
                 "end_frame": fragment.algo_end_frame,
@@ -374,10 +377,6 @@ class Worker:
             did = True
             self.reorder_needed = True
         waiting = any((not e.get("anki_note_id") and not e.get("orphan")) or e.get("anki_update_pending") for e in index)
-        if did and not waiting:
-            # Последние карточки переданы (с готовым переводом из хранилища) —
-            # может, закончен этап 4: синие флаги Rover, один раз на видео.
-            rover_flags.mark_if_finished(project, log=lambda m: print(m, flush=True))
         self.status(project, "waiting_anki" if waiting else "idle",
                     "Жду Anki, чтобы создать карточки" if waiting else "", seconds_per_frame=spf)
         return did, waiting

@@ -961,6 +961,17 @@ class UpdateFragmentRequest(BaseModel):
     review_note: str | None = None
 
 
+class UnvoicedRequest(BaseModel):
+    value: bool
+
+
+@app.post("/api/p/{project_id}/fragments/{fragment_id}/unvoiced")
+def set_unvoiced(project_id: str, fragment_id: str, body: UnvoicedRequest):
+    """Отметка "не озвучено" (карточка без видео, с подписью Rover:)."""
+    manifest = _call(lambda: project(project_id).store.set_unvoiced(fragment_id, body.value))
+    return manifest.by_id(fragment_id).to_dict()
+
+
 class HeardRequest(BaseModel):
     ranges: list[list[int]]
     rebase: bool = False
