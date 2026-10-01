@@ -803,3 +803,15 @@ label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=c
 .agent-batch-head { display: flex; align-items: center; gap: 8px; }
 .agent-batch-head .spacer { flex: 1; }
 .agent-back.new[contenteditable]:focus { outline: 1px solid #2f5f9e; }
+
+/* Многострочные значения в таблицах окон: первая строка + стрелка, остальное раскрывается. */
+.multi-first { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.multi-toggle {
+  width: 22px; height: 22px; padding: 0; border: none; background: transparent; color: var(--dim);
+  font-size: 13px; transition: transform 0.2s ease;
+}
+.multi-toggle.open { transform: rotate(180deg); }
+.multi-toggle:hover:not(:disabled) { background: #1f1f25; color: var(--text); }
+.multi-rest { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; padding-right: 28px; }
+.modal table.stats a { color: #79c0ff; text-decoration: none; }
+.modal table.stats a:hover { text-decoration: underline; }

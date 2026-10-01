@@ -61,6 +61,31 @@ def agent_mode(value) -> str:
     return value if value in ("deep", "search") else ""
 
 
+def sources_display(project_dir: Path) -> list[dict]:
+    """
+    Источники текста для сверки (окно видео): сначала те, по которым сверялся
+    текст, потом найденные агентом, но не использованные; если агент не
+    запускался — прикреплённые пользователем ссылки.
+    """
+    settings = project_settings(project_dir)
+    found = settings.get("found_sources") or []
+    if found:
+        return sorted(({"url": f["url"], "title": f.get("title", ""), "used": bool(f.get("used"))} for f in found),
+                      key=lambda f: not f["used"])
+    attached = [{"url": url, "title": "", "used": True} for url in settings.get("sources", []) if url]
+    if attached:
+        return attached
+    # Текст сверялся с субтитрами YouTube (ссылки и агента не было).
+    manifest_path = Path(project_dir) / "manifest.json"
+    if manifest_path.exists():
+        kind = Manifest.load(manifest_path).video.subtitle_source or ""
+        url = video_info(project_dir).get("webpage_url") or ""
+        if kind.startswith("youtube") and url:
+            title = "Субтитры YouTube" + (" (ручные)" if kind == "youtube_manual" else " (автоматические)")
+            return [{"url": url, "title": title, "used": True}]
+    return []
+
+
 def title_of(project_dir: Path) -> str:
     """Название видео: заданное вручную, иначе с YouTube / имя файла."""
     info = video_info(project_dir)
@@ -248,6 +273,7 @@ def summary(project_dir: Path) -> dict:
         "notes_in_anki": sum(bool(e.get("anki_note_id")) for e in index),
         "flagged": len(returned),
         "anki_deck": manifest.settings.get("anki_deck"),
+        "sources_display": sources_display(project_dir),
     }
 
 

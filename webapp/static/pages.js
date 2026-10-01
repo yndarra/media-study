@@ -154,6 +154,29 @@ function videoBars(v) {
   ], v.notes_in_anki, `Переведено ${v.translated || 0} / ${v.notes_in_anki || 0}`);
 }
 
+// Строка таблицы в окнах. value — текст или список строк: из нескольких строк
+// видна первая, остальные свёрнуты и плавно раскрываются стрелкой ▾ справа.
+function tableRow(name, value) {
+  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) return "";
+  if (!Array.isArray(value) || value.length === 1) {
+    return `<tr><td>${name}</td><td>${Array.isArray(value) ? value[0] : value}</td></tr>`;
+  }
+  return `<tr class="multi"><td>${name}</td><td><div class="multi-first">${value[0]}` +
+    `<button class="multi-toggle" title="Показать все (${value.length})">▾</button></div>` +
+    `<div class="multi-rest">${value.slice(1).map((line) => `<div>${line}</div>`).join("")}</div></td></tr>`;
+}
+
+// Раскрыть / свернуть многострочное значение (плавно, по высоте содержимого).
+document.addEventListener("click", (e) => {
+  const button = e.target.closest(".multi-toggle");
+  if (!button) return;
+  const rest = button.closest("td").querySelector(".multi-rest");
+  const open = !rest.classList.contains("open");
+  rest.style.maxHeight = open ? `${rest.scrollHeight}px` : "0px";
+  rest.classList.toggle("open", open);
+  button.classList.toggle("open", open);
+});
+
 // Предложения агента по пачкам (в порядке поступления).
 function groupBatches(proposals) {
   const groups = new Map();
@@ -560,10 +583,15 @@ const Pages = {
     const v = data.summary;
     const s = data.stats;
     const d = data.disk;
-    const row = (name, value) => (value === null || value === undefined || value === "" ? "" : `<tr><td>${name}</td><td>${value}</td></tr>`);
-    // Строк в карточке: по 6 записей в строке таблицы, дальше — перенос.
+    const row = tableRow;
+    // Строк в карточке: по 6 записей в строке, дальше — следующие строки (свёрнуты).
     const lineItems = Object.entries(s.lines_per_card).map(([n, c]) => `${n} стр. – ${c}`);
-    const lines = lineItems.reduce((acc, item, i) => acc + (i === 0 ? "" : i % 6 === 0 ? ",<br>" : ", ") + item, "");
+    const lines = [];
+    for (let i = 0; i < lineItems.length; i += 6) lines.push(lineItems.slice(i, i + 6).join(", "));
+    // Источники текста для сверки: ссылки, по одной в строке.
+    const sources = (v.sources_display || []).map((src) =>
+      `<a href="${escapeHtml(src.url)}" target="_blank" rel="noopener">${escapeHtml(src.title || src.url)}</a>` +
+      (src.used ? "" : ' <span class="muted small">(найден, не использован)</span>'));
     const pct = (n) => (s.cards ? `${Math.round((n / s.cards) * 100)}%` : "0%");
     const shift = s.bound_shift_frames;
     // Фрагментов без перевода (переданные в Anki и ещё нет); null — Anki закрыт, неизвестно.
@@ -581,6 +609,7 @@ const Pages = {
         ${row("В клипах", `${formatDuration(s.kept_seconds)} – ${(s.kept_share * 100).toFixed(1)}% ролика, удалено ${s.deleted} фрагментов (${Math.round(s.deleted_seconds)} сек)`)}
         ${row("Длина клипа, сек", s.clip_seconds ? `${s.clip_seconds.mean} в среднем, ${s.clip_seconds.median} медиана, ${s.clip_seconds.min} мин., ${s.clip_seconds.max} макс.` : "")}
         ${row("Строк в карточке", lines)}
+        ${row(sources.length > 1 ? "Источники" : "Источник", sources.length ? sources : "Нет")}
         ${row("Правка текста и границ", `${s.text_edited} фрагментов (${pct(s.text_edited)}), ${s.bounds_edited} фрагментов (${pct(s.bounds_edited)})`)}
         ${row("Сдвиг границ, кадр", shift ? `${shift.mean} в среднем, ${shift.median} медиана, ${shift.min} мин., ${shift.max} макс.` : "")}
         ${row("Колода Anki", v.anki_deck ? escapeHtml(v.anki_deck) : "Нет")}
