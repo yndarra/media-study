@@ -1285,3 +1285,39 @@ a.card.has-returned:hover { border-color: rgba(163, 113, 247, 0.26); }
 .modal-actions { gap: 8px; }
 .modal-actions label.check { margin-left: 4px; }
 .modal-head input:disabled, .modal-head textarea:disabled { opacity: 0.6; }
+
+/* ---- Фон редактора: цвет правки (важнее фона этапа Anki) ---- */
+body.frag-edit-accepted { background: #101a28; }
+body.frag-edit-changed { background: #262111; }
+body.frag-edit-unvoiced { background: #0f1f1f; }
+
+/* ---- Окно видео: пока идёт процесс – статус справа вместо "Сохранить" ---- */
+#info-note.busy { margin-left: auto; flex: none; text-align: right; }
+.batch-check .muted.hidden { display: none; }
+
+/* ---- Окно "Обработки": флажки и подписи мельче ---- */
+.process-form label.check { font-size: 13px; }
+.process-form label.check input[type=checkbox] { width: 14px; height: 14px; }
+.process-form label.check input[type=checkbox]::after { width: 7px; height: 4px; }
+
+/* ---- Кнопка шага на карточке: зебра на сером фоне (как пустая часть
+   полосы), плавно бежит (сдвиг псевдоэлемента, без перерисовки фона). ---- */
+.card-action {
+  position: relative; overflow: hidden; border: none !important; background: #1b1b21 !important;
+  animation: none; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --period: 36px;      /* шаг полос по горизонтали */
+  --stripe: 14px;      /* ширина цветной полосы (по нормали) */
+}
+.card-action.busy { --period: 72px; --stripe: 30px; cursor: default; opacity: 1; }
+.card-action::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: calc(-1 * var(--period)); right: 0;
+  background: repeating-linear-gradient(112deg, var(--zebra) 0 var(--stripe), transparent var(--stripe) calc(var(--period) * 0.927));
+  animation: zebra-slide 1.2s linear infinite; will-change: transform;
+}
+.card-action.busy::before { animation-duration: 1.8s; }
+.card-action > span { position: relative; }
+.card-action.send { --zebra: #1f6b3b; }
+.card-action.translate { --zebra: #a3407a; }
+@keyframes zebra-slide { from { transform: translateX(0); } to { transform: translateX(var(--period)); } }
+.card-action.grow-in { animation: grow-in 0.3s ease-out; }
+.step-btn, a.step-btn { white-space: nowrap; }

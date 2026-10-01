@@ -152,7 +152,8 @@ const Router = {
     // Фон "удалено"/"в Anki" относится к фрагменту в редакторе, не к другим страницам.
     if (view !== "editor") {
       document.body.classList.remove("frag-deleted", "frag-locked", "frag-bg-anki", "frag-bg-pending",
-        "frag-bg-translated", "frag-bg-returned", "frag-unvoiced");
+        "frag-bg-translated", "frag-bg-returned", "frag-unvoiced", "frag-edit-accepted", "frag-edit-changed",
+        "frag-edit-unvoiced");
     }
     // Ссылка "сейчас правится" в меню – чтобы вернуться в редактор одним кликом.
     const editing = document.getElementById("menu-editing");
@@ -196,15 +197,23 @@ function cardState(v) {
 
 // Кнопка следующего шага на карточке: зелёная "Передать в Anki" или розовая
 // "Перевести". Пока шаг идёт (или его только что нажали) – кнопки нет.
+// Пока шаг идёт – кнопка остаётся, текст другой, полосы зебры крупнее; шаг
+// закончился – кнопка уходит, возвращается строка "Место на диске".
 function cardAction(v) {
   const pressed = Pages.pressedActions.get(v.id);
-  if (pressed && Date.now() - pressed < 20000) return "";
-  if (v.translating || v.sending) return "";
+  const just = pressed && Date.now() - pressed.at < 8000 ? pressed.action : null; // нажали, сервер ещё не успел
+  const id = escapeHtml(v.id);
+  if (v.sending || just === "send") {
+    return `<button class="card-action send busy" data-action="none" data-id="${id}" disabled><span>Передаётся в Anki…</span></button>`;
+  }
+  if (v.translating || just === "translate") {
+    return `<button class="card-action translate busy" data-action="none" data-id="${id}" disabled><span>Переводится…</span></button>`;
+  }
   if (v.ready_to_send) {
-    return `<button class="card-action send" data-action="send" data-id="${escapeHtml(v.id)}">Передать в Anki</button>`;
+    return `<button class="card-action send" data-action="send" data-id="${id}"><span>Передать в Anki</span></button>`;
   }
   if (v.ready_to_translate) {
-    return `<button class="card-action translate" data-action="translate" data-id="${escapeHtml(v.id)}">Перевести</button>`;
+    return `<button class="card-action translate" data-action="translate" data-id="${id}"><span>Перевести</span></button>`;
   }
   return "";
 }
@@ -316,6 +325,17 @@ function viewEnter(el, items = null) {
     child.classList.add("enter");
     child.addEventListener("animationend", () => child.classList.remove("enter"), { once: true });
   });
+}
+
+// Карточку только что сохранённого видео коротко подсветить (окно закрылось).
+function flashCard(box) {
+  if (!Pages.flashId) return;
+  const card = [...box.querySelectorAll("a.card")].find((a) => a.getAttribute("href").endsWith(`/${encodeURIComponent(Pages.flashId)}`));
+  Pages.flashId = null;
+  if (card) card.animate([
+    { boxShadow: "0 0 0 2px rgba(121, 184, 255, 0.75)", transform: "scale(1.015)" },
+    { boxShadow: "0 0 0 2px rgba(121, 184, 255, 0)", transform: "none" },
+  ], { duration: 700, easing: "ease-out" });
 }
 
 // Раздел открыли: карточки появляются по очереди (лёгкий подъём и проявление).
@@ -784,6 +804,7 @@ const Pages = {
         }
       }
       this.lastActions = now;
+      flashCard(box);
     };
     // Кнопки на карточке ("Передать в Anki", "Перевести"): действие сразу, окно
     // не открывается; кнопка плавно сворачивается, карточка уменьшается.
@@ -796,11 +817,12 @@ const Pages = {
         e.preventDefault();
         e.stopPropagation();
         const id = button.dataset.id;
-        Pages.pressedActions.set(id, Date.now());
+        if (button.dataset.action === "none") return;
+        Pages.pressedActions.set(id, { at: Date.now(), action: button.dataset.action });
+        // Сразу – вид "идёт": другой текст, крупные полосы.
         button.disabled = true;
-        button.style.height = `${button.offsetHeight}px`;
-        button.getBoundingClientRect();
-        button.classList.add("gone");
+        button.classList.add("busy");
+        button.querySelector("span").textContent = button.dataset.action === "send" ? "Передаётся в Anki…" : "Переводится…";
         try {
           if (button.dataset.action === "send") await Api.queueProject(id);
           else await Api.agentRun({ project: id, batch: false });
@@ -813,7 +835,7 @@ const Pages = {
     }
     this.videosRender = render;
     await render();
-    this.refreshEvery(5000, render);
+    this.refreshEvery(3000, render); // чаще – кнопки шагов появляются без задержки
   },
 
   // Окно "Перевод": агент готовит перевод для карточек с зелёным/красным
@@ -1036,21 +1058,19 @@ const Pages = {
       <div class="modal-actions">
         <a class="step-btn primary${v.sending ? " disabled" : ""}" href="#/edit/${encodeURIComponent(v.id)}"
           ${v.sending ? 'aria-disabled="true" tabindex="-1" title="Идёт передача в Anki – править можно после неё или остановив её"' : ""}>Править</a>
-        <button id="info-anki" class="step-btn">Anki</button>
+        <button id="info-anki" class="step-btn">Передать в Anki</button>
         <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
         <label class="check small batch-check${untranslated > 0 ? "" : " hidden"}" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом <span class="muted">(вдвое дешевле, но дольше)</span></label>
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn">Сохранить</button>
       </div>`;
     autoGrow(body.querySelector("#title-input"));
-    // Над видео идёт процесс (передача в Anki, перевод, пакетная заявка) –
-    // название и автора не меняем.
-    if (v.sending || v.translating) {
-      body.querySelectorAll(".modal-head input, .modal-head textarea").forEach((field) => (field.disabled = true));
-      body.querySelector("#info-save").classList.add("hidden");
-    }
     animateBars(body.querySelector(".modal-bars"));
     const saveButton = body.querySelector("#info-save");
+    const closeAndFlash = () => {
+      Pages.flashId = id;
+      Modal.close();
+    };
     watcher = formWatch(body.querySelector(".modal-head"), [saveButton]);
     save = async () => {
       const title = body.querySelector("#title-input").value.trim();
@@ -1069,8 +1089,24 @@ const Pages = {
       savedNote.textContent = !v.anki_deck ? "" : sync.pending ? "Колода – при запуске Anki" : "Колода переименована";
       savedNote.title = !v.anki_deck ? "" : sync.pending ? "Колода Anki переименуется, когда Anki откроется" : "Колода Anki переименована";
     };
-    saveButton.addEventListener("click", save);
-    // Передача в Anki: "Anki" (передать всё видео) <-> "Остановить" (пока
+    saveButton.addEventListener("click", async () => {
+      await save();
+      closeAndFlash();
+    });
+    // Пока над видео идёт процесс (передача в Anki, перевод, пакетная заявка):
+    // название и автора не меняем, пояснения к "Пакетом" и кнопки "Сохранить"
+    // нет – справа ход процесса. Остановили всё – снова как обычно.
+    let busyAnki = !!v.sending;
+    let busyTranslate = !!v.translating;
+    const applyBusy = () => {
+      const busy = busyAnki || busyTranslate;
+      body.querySelectorAll(".modal-head input, .modal-head textarea").forEach((field) => (field.disabled = busy));
+      body.querySelector("#info-save").classList.toggle("hidden", busy);
+      body.querySelector(".batch-check .muted").classList.toggle("hidden", busy);
+      body.querySelector("#info-note").classList.toggle("busy", busy);
+    };
+    applyBusy();
+    // Передача в Anki: "Передать в Anki" (всё видео) <-> "Остановить" (пока
     // передаётся). Ход – в той же строке, что ход перевода.
     const ankiButton = body.querySelector("#info-anki");
     let sending = !!v.sending;
@@ -1083,7 +1119,9 @@ const Pages = {
         return;
       }
       sending = !!s.sending;
-      ankiButton.textContent = sending ? "Остановить" : "Anki";
+      busyAnki = sending;
+      applyBusy();
+      ankiButton.textContent = sending ? "Остановить" : "Передать в Anki";
       ankiButton.disabled = !sending && (s.exported || 0) >= (s.active_total || 0);
       const edit = body.querySelector(".modal-actions a.step-btn.primary");
       if (edit) edit.classList.toggle("disabled", sending);
@@ -1144,6 +1182,8 @@ const Pages = {
       else if (waitingBatch) setNote("Ждём ответ пакета");
       if (running || wasRunning) refreshBars();
       wasRunning = running;
+      busyTranslate = running;
+      applyBusy();
       if (running) setTimeout(refreshTranslate, 3000);
     };
     // Пока идёт перевод – полосы окна обновляются (плавно), и ещё раз после конца.
@@ -1217,6 +1257,7 @@ const Pages = {
           "</a>").join("") + "</div>",
       ).join(""), first);
       if (first) cardsEnter(box);
+      flashCard(box);
     };
     this.processRender = render;
     await render();
@@ -1296,7 +1337,11 @@ const Pages = {
       await Api.saveSources(id, body.querySelector(".sources").value.split("\n"), mode, body.querySelector(".no-gaps").checked);
       watcher.snapshot();
     };
-    saveButton.addEventListener("click", save);
+    saveButton.addEventListener("click", async () => {
+      await save();
+      Pages.flashId = id;
+      Modal.close();
+    });
     const go = body.querySelector(".process-go");
     if (go) go.addEventListener("click", async () => {
       await save();

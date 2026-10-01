@@ -114,7 +114,7 @@ const FragList = {
     const count = (filter) => fragments.filter((f) => this.visible(f, filter)).length;
     return [
       { value: "all", label: "Все фрагменты", count: count("all") },
-      { value: "todo", label: "Требуют доработки", count: count("todo") },
+      { value: "todo", label: "Не отредактировано", count: count("todo") },
       { value: "flagged", label: "Вернулись из Anki", count: count("flagged") },
     ];
   },

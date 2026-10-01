@@ -297,7 +297,14 @@ const App = {
     for (const cls of ["bg-anki", "bg-pending", "bg-translated", "bg-returned"]) {
       document.body.classList.toggle(`frag-${cls}`, inEditor && stage === cls);
     }
-    document.body.classList.toggle("frag-unvoiced", inEditor && !locked && !deleted && stage !== "bg-returned" && isUnvoiced(f));
+    // Цвет правки (удалён – красный, изменён – жёлтый, не озвучен – бирюзовый,
+    // принят без правок – синий) важнее фона этапа Anki (зелёный/розовый);
+    // вернувшийся из Anki – фиолетовый.
+    const editKind = stage === "bg-returned" ? "" : FragList.editClass(f, State.fragmentIndex, FragList._reviewed());
+    for (const kind of ["accepted", "changed", "unvoiced"]) {
+      document.body.classList.toggle(`frag-edit-${kind}`, inEditor && !deleted && editKind === kind);
+    }
+    document.body.classList.toggle("frag-unvoiced", false);
     if (locked) $("reset-btn").disabled = true;
   },
 
@@ -433,7 +440,7 @@ const App = {
     // продлевается до него).
     const running = State.stage3.pending_ids.length > 0 || State.stage3.notes_left > 0;
     const stop = running && isLocked(currentFragment());
-    $("stage3-btn").textContent = stop ? "Остановить" : "Anki";
+    $("stage3-btn").textContent = stop ? "Остановить" : "Передать в Anki";
     $("stage3-btn").dataset.action = stop ? "stop" : "queue";
     $("stage3-btn").disabled = !stop && !hasNew;
     const s = State.stage3;
