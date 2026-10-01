@@ -1246,3 +1246,9 @@ body.frag-unvoiced { background: #0f1f1f; }
 .unvoiced-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .unvoiced-btn.on { background: #17504c; border-color: #2a8a83; color: #e6fffc; }
 .unvoiced-btn.on:hover:not(:disabled) { background: #1c5f5a; }
+
+/* В очереди в Anki (ещё не карточка) – жёлтый отрезок полосы "Передано в Anki". */
+.seg.queued { background: #7a6420; }
+/* "Править" во время передачи в Anki – серая, не нажимается. */
+a.step-btn.disabled { opacity: 0.35; pointer-events: none; }
+#info-note.sending { color: #3fb950; }

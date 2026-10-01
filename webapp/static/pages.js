@@ -356,10 +356,15 @@ function videoBars(v) {
     { n: e.changed, cls: "changed", title: `Изменены: ${e.changed}` },
     { n: e.deleted, cls: "deleted", title: `удалены: ${e.deleted}` },
   ], total, "Отредактировано", edited) +
-  segmentBar([
-    { n: v.exported - (v.flag_interval || 0), cls: "ok", title: `Передано: ${v.exported}` },
-    { n: v.flag_interval || 0, cls: "returned", right: true, title: `флаг «обрезка/текст» в Anki: ${v.flag_interval || 0}` },
-  ], v.active_total, "Передано в Anki", v.exported) +
+  (() => {
+    const inAnki = v.in_anki ?? v.exported;
+    const queued = Math.max(0, v.exported - inAnki);
+    return segmentBar([
+      { n: inAnki - (v.flag_interval || 0), cls: "ok", title: `В Anki: ${inAnki}` },
+      { n: queued, cls: "queued", title: `В очереди: ${queued}` },
+      { n: v.flag_interval || 0, cls: "returned", right: true, title: `Флаг «обрезка/текст» в Anki: ${v.flag_interval || 0}` },
+    ], v.active_total, "Передано в Anki", inAnki);
+  })() +
   // Переведено: в Anki (оборот заполнен) + переведённые заранее, ждущие передачи в Anki;
   // из всех фрагментов с текстом.
   (() => {
@@ -1016,7 +1021,9 @@ const Pages = {
         </table>
       </div>
       <div class="modal-actions">
-        <a class="step-btn primary" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
+        <a class="step-btn primary${v.sending ? " disabled" : ""}" href="#/edit/${encodeURIComponent(v.id)}"
+          ${v.sending ? 'aria-disabled="true" tabindex="-1" title="Идёт передача в Anki – править можно после неё или остановив её"' : ""}>Править</a>
+        <button id="info-anki" class="step-btn">Anki</button>
         <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
         <label class="check small batch-check${untranslated > 0 ? "" : " hidden"}" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом <span class="muted">(вдвое дешевле, но дольше)</span></label>
         <span id="info-note" class="muted small"></span>
@@ -1044,6 +1051,44 @@ const Pages = {
       savedNote.title = !v.anki_deck ? "" : sync.pending ? "Колода Anki переименуется, когда Anki откроется" : "Колода Anki переименована";
     };
     saveButton.addEventListener("click", save);
+    // Передача в Anki: "Anki" (передать всё видео) <-> "Остановить" (пока
+    // передаётся). Ход – в той же строке, что ход перевода.
+    const ankiButton = body.querySelector("#info-anki");
+    let sending = !!v.sending;
+    const refreshAnki = async () => {
+      if (!body.isConnected) return;
+      let s;
+      try {
+        s = (await Api.projectStats(id)).summary;
+      } catch (_) {
+        return;
+      }
+      sending = !!s.sending;
+      ankiButton.textContent = sending ? "Остановить" : "Anki";
+      ankiButton.disabled = !sending && (s.exported || 0) >= (s.active_total || 0);
+      const edit = body.querySelector(".modal-actions a.step-btn.primary");
+      if (edit) edit.classList.toggle("disabled", sending);
+      if (sending) {
+        const note = body.querySelector("#info-note");
+        note.classList.add("sending");
+        note.textContent = `Передача в Anki: ${s.in_anki}/${s.active_total}`;
+        setTimeout(refreshAnki, 3000);
+      } else {
+        body.querySelector("#info-note").classList.remove("sending");
+      }
+    };
+    ankiButton.addEventListener("click", async () => {
+      ankiButton.disabled = true;
+      try {
+        if (sending) await Api.stopStage3(id);
+        else await Api.queueProject(id);
+      } catch (err) {
+        body.querySelector("#info-note").textContent = "Ошибка";
+        body.querySelector("#info-note").title = err.message;
+      }
+      setTimeout(refreshAnki, 500);
+    });
+    refreshAnki();
     // Перевод видео: "Перевести" <-> "Остановить" (пока идёт перевод этого
     // видео или ждёт его пакетная заявка). Снять "Пакетом", пока заявка ждёт,
     // – отменить заявку и перевести сразу.

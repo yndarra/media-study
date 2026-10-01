@@ -638,6 +638,23 @@ class QueueRequest(BaseModel):
     through_fragment_id: str | None = None
 
 
+@app.post("/api/p/{project_id}/stage3/stop")
+def stop_stage3(project_id: str):
+    """
+    Остановить передачу в Anki: то, что ещё не стало клипом (и не кодируется
+    прямо сейчас), возвращается в правку; уже закодированное доделывается.
+    """
+    from phase3_export.worker import STATUS_FILE
+
+    p = project(project_id)
+    keep = {e["fragment_id"] for e in library.export_index(p.dir)}
+    status = library.read_json(p.export_dir / STATUS_FILE, {})
+    if status.get("state") == "encoding":
+        keep.update(word for word in (status.get("message") or "").split() if word.startswith("frag_"))
+    manifest, returned = p.store.unqueue_stage3(keep)
+    return {"manifest": _public(manifest), "returned": returned, "stage3": _stage3_status(p, fresh=True)}
+
+
 @app.post("/api/p/{project_id}/finish")
 def finish_project(project_id: str):
     """Кнопка "Финиш" в редакторе: всё видео считается отредактированным."""

@@ -660,6 +660,22 @@ class ManifestStore:
         return manifest, queued
 
     @_locked
+    def unqueue_stage3(self, keep_ids: set[str]) -> tuple[Manifest, list[str]]:
+        """
+        Остановить передачу в Anki: фрагменты, переданные, но ещё не ставшие
+        клипом/карточкой, снова редактируются. keep_ids — уже обработанные (или
+        обрабатываемые прямо сейчас) — остаются переданными.
+        """
+        manifest = self.load()
+        returned = []
+        for fragment in manifest.fragments:
+            if fragment.exported and fragment.id not in keep_ids:
+                fragment.exported = False
+                returned.append(fragment.id)
+        self.save(manifest)
+        return manifest, returned
+
+    @_locked
     def return_from_stage3(self, fragment_ids: list[str]) -> Manifest:
         """
         Возвращает фрагменты из Anki на доработку (их карточки помечены

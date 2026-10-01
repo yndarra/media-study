@@ -151,6 +151,14 @@ class Worker:
             "updated": time.time(),
         })
 
+    def _still_queued(self, project: Path, fragment_id: str) -> bool:
+        """Фрагмент всё ещё передан в Anki (манифест перечитывается — его меняет редактор)."""
+        try:
+            current = Manifest.load(project / "manifest.json")
+            return bool(current.by_id(fragment_id).exported)
+        except (KeyError, OSError, ValueError):
+            return False
+
     def _anki_available(self) -> bool:
         return time.time() >= self.anki_down_until
 
@@ -304,6 +312,10 @@ class Worker:
         did = False
 
         for fragment in pending_fragments(manifest, index):
+            # Очередь могли остановить, пока кодировались предыдущие (кнопка
+            # "Остановить") — снятый с очереди фрагмент пропускается.
+            if not self._still_queued(project, fragment.id):
+                continue
             self.status(project, "encoding", f"Кодирую {fragment.id}", seconds_per_frame=spf)
             # Вернувшийся из Anki фрагмент переделывается под тем же именем клипа
             # (и обновляет ту же карточку), новый — получает следующий номер.

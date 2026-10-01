@@ -250,6 +250,7 @@ def summary(project_dir: Path) -> dict:
     manifest = Manifest.load(manifest_path)
     fragments = manifest.fragments
     index = export_index(project_dir)
+    with_note = {e["fragment_id"] for e in index if e.get("anki_note_id")}
     active = [f for f in fragments if f.status == STATUS_ACTIVE]
     cards = [f for f in active if f.text.strip()]
     # Скрытая метка: всё до последнего изменённого фрагмента просмотрено
@@ -277,6 +278,8 @@ def summary(project_dir: Path) -> dict:
         "fragments_total": len(fragments),
         "active_total": len(active),
         "exported": sum(f.exported for f in active),
+        # Уже в Anki по факту (карточка создана); exported − in_anki — ещё в очереди.
+        "in_anki": sum(1 for f in active if f.exported and f.id in with_note),
         "editable": sum(not f.exported for f in fragments),
         "last_touched": reviewed,
         "reviewed": reviewed,

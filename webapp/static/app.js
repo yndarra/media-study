@@ -428,7 +428,14 @@ const App = {
     if (!State.manifest || State.fragmentIndex < 0) return;
     const fragments = State.manifest.fragments;
     const hasNew = fragments.slice(0, State.fragmentIndex + 1).some((g) => !isLocked(g));
-    $("stage3-btn").disabled = !hasNew;
+    // Идёт передача, а текущий фрагмент уже передан (ждёт очереди или в Anki) —
+    // кнопка останавливает передачу; на ещё не переданном – "Anki" (очередь
+    // продлевается до него).
+    const running = State.stage3.pending_ids.length > 0 || State.stage3.notes_left > 0;
+    const stop = running && isLocked(currentFragment());
+    $("stage3-btn").textContent = stop ? "Остановить" : "Anki";
+    $("stage3-btn").dataset.action = stop ? "stop" : "queue";
+    $("stage3-btn").disabled = !stop && !hasNew;
     const s = State.stage3;
     const eta = $("stage3-eta");
     let label = "";
@@ -832,6 +839,16 @@ const App = {
     this.updateAutoButton();
   },
 
+  // Остановить передачу в Anki: ещё не закодированное снова правится.
+  async stopStage3() {
+    await this.flushSaves();
+    const result = await this._call(Api.stopStage3(State.project));
+    if (!result) return;
+    State.stage3 = result.stage3;
+    await this.showFragment(result.manifest, currentFragment().id);
+    if (result.returned.length) this.flash(`Передача остановлена: вернулось в правку ${result.returned.length}`);
+  },
+
   toggleMode() {
     State.stopAtSegmentEnd = !State.stopAtSegmentEnd;
     this.updateModeButton();
@@ -864,7 +881,8 @@ $("replay-marker-btn").addEventListener("click", () => Player.replayFromMarker()
 // Клик по самому видео — то же, что кнопка Play/пауза.
 $("video").addEventListener("click", () => Player.togglePlay());
 $("undo-btn").addEventListener("click", () => App.undo());
-$("stage3-btn").addEventListener("click", () => App.queueStage3());
+$("stage3-btn").addEventListener("click", () =>
+  ($("stage3-btn").dataset.action === "stop" ? App.stopStage3() : App.queueStage3()));
 $("redo-btn").addEventListener("click", () => App.redo());
 $("mode-toggle").addEventListener("click", () => App.toggleMode());
 $("auto-toggle").addEventListener("click", () => App.toggleAuto());

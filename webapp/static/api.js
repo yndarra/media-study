@@ -132,6 +132,11 @@ const Api = {
     return this.json(`/api/p/${encodeURIComponent(project)}/finish`, { method: "POST" });
   },
 
+  // Остановить передачу в Anki (непереданное возвращается в правку).
+  stopStage3(project) {
+    return this.json(`/api/p/${encodeURIComponent(project)}/stage3/stop`, { method: "POST" });
+  },
+
   // Передать в Anki всё видео (кнопка на карточке в списке видео).
   queueProject(project) {
     return this.json(`/api/p/${encodeURIComponent(project)}/stage3/queue`, {

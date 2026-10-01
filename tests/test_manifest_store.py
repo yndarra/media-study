@@ -341,5 +341,17 @@ class TestTextMarks(ManifestStoreTestCase):
         self.assertEqual(manifest.by_id("frag_0001").text_marks, "")
 
 
+
+class TestStage3Stop(ManifestStoreTestCase):
+    def test_unqueue_keeps_processed_and_returns_rest(self):
+        self.store.queue_for_stage3("frag_0004", "deck")
+        # frag_0001 уже стал клипом — остаётся переданным; остальные — снова в правку.
+        manifest, returned = self.store.unqueue_stage3({"frag_0001"})
+        self.assertTrue(manifest.by_id("frag_0001").exported)
+        self.assertFalse(manifest.by_id("frag_0002").exported)
+        self.assertIn("frag_0004", returned)
+        self.assertNotIn("frag_0001", returned)
+
+
 if __name__ == "__main__":
     unittest.main()
