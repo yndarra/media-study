@@ -866,9 +866,9 @@ a.card.complete, .modal.complete {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.13), transparent 55%),
     linear-gradient(160deg, #19121a, #111115 70%);
-  border-color: rgba(244, 114, 182, 0.17);
+  border-color: rgba(244, 114, 182, 0.11);
 }
-a.card.complete:hover { border-color: rgba(244, 114, 182, 0.34); }
+a.card.complete:hover { border-color: rgba(244, 114, 182, 0.24); }
 
 /* Таблицы в окнах: у всех строк одна высота строки, кнопка-стрелка её не
    раздвигает – раскрытые строки и одиночная выглядят одинаково. */
@@ -905,17 +905,17 @@ a.card.to-translate, .modal.to-translate {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.07), transparent 55%),
     linear-gradient(160deg, #161216, #111115 70%);
-  border-color: rgba(244, 114, 182, 0.12);
+  border-color: rgba(244, 114, 182, 0.08);
 }
-a.card.to-translate:hover { border-color: rgba(244, 114, 182, 0.28); }
+a.card.to-translate:hover { border-color: rgba(244, 114, 182, 0.2); }
 /* Всё отредактировано, но не всё передано в Anki: то же оформление, синее. */
 a.card.to-send, .modal.to-send {
   background:
     radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.11), transparent 55%),
     linear-gradient(160deg, #11141b, #111115 70%);
-  border-color: rgba(96, 165, 250, 0.17);
+  border-color: rgba(96, 165, 250, 0.11);
 }
-a.card.to-send:hover { border-color: rgba(96, 165, 250, 0.34); }
+a.card.to-send:hover { border-color: rgba(96, 165, 250, 0.24); }
 
 /* Карточки видео – серее фона страницы (как серая часть градиентов). */
 .card { background: #141418; }
@@ -1121,3 +1121,37 @@ body.right-closed #fraglist:not(.hidden), body.right-closing #fraglist:not(.hidd
 .panel-open { display: none; }
 body.left-closed #open-left { display: inline-flex; }
 body.right-closed:not(.no-fraglist) #open-right { display: inline-flex; }
+.card-status.failed { color: #ff7b72; }
+
+/* ---- Список фрагментов: значок этапа Anki слева от номера (своя колонка) ---- */
+.frag-row { padding-left: 4px; align-items: center; }
+.frag-row.bg-anki, .frag-row.bg-translated, .frag-row.bg-pending, .frag-row.bg-returned { background: none; }
+.frag-row.current { background: rgba(255, 255, 255, 0.08); }
+.frag-row:hover:not(.current) { background: #17171c; }
+.frag-icon { flex: none; width: 14px; height: 14px; margin-right: -4px; background: no-repeat center / 13px 13px;
+  opacity: 0; transition: opacity 0.5s ease; }
+.frag-row.bg-anki .frag-icon, .frag-row.bg-translated .frag-icon, .frag-row.bg-pending .frag-icon, .frag-row.bg-returned .frag-icon { opacity: 1; }
+/* Галочка (в Anki) – зелёная. */
+.frag-row.bg-anki .frag-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8' fill='none' stroke='%233fb950' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+/* Перевод (две "речи", А и я) – розовый. */
+.frag-row.bg-translated .frag-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 3.5h7M5.5 2v1.5M3.5 3.5c.6 2.4 2.2 4 4.5 5M7.5 3.5c-.6 2.4-2.2 4-4.5 5M8.5 14l2.5-6 2.5 6M9.4 12h3.2' fill='none' stroke='%23f472b6' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+/* Часы (ждёт очереди) – жёлтые. */
+.frag-row.bg-pending .frag-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5.8' fill='none' stroke='%23e3b341' stroke-width='1.5'/%3E%3Cpath d='M8 4.8V8l2.2 1.4' fill='none' stroke='%23e3b341' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); }
+/* Стрелка возврата (вернулся из Anki) – фиолетовая. */
+.frag-row.bg-returned .frag-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6 3.5L2.8 6.7 6 9.9M3 6.7h6.5a3.8 3.8 0 0 1 0 7.6H7' fill='none' stroke='%23a371f7' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+
+/* ---- Наклон стыков полос – параллельно "/" (0.406 по горизонтали на 1 по вертикали) ---- */
+.progress { --slant: 8px; }   /* полоса 20 px */
+.progress.thin { --slant: 2px; } /* полоса 5 px (сайдбар) */
+.seg.sl { margin-left: calc(-1 * var(--slant)); clip-path: polygon(var(--slant) 0, 100% 0, 100% 100%, 0 100%); }
+.seg.sr { clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); }
+.seg.sl.sr { clip-path: polygon(var(--slant) 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); }
+
+/* ---- Обводки блоков (карточки видео, настройки) – мягче ---- */
+.card { border-color: rgba(255, 255, 255, 0.06); }
+.set-card { border-color: rgba(255, 255, 255, 0.05); }
+a.card:not(.complete):not(.to-send):not(.to-translate):hover { border-color: rgba(255, 255, 255, 0.14); }
+
+/* ---- Кнопка сворачивания панели: шеврон по центру ---- */
+.panel-close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.panel-close { color: var(--text); }

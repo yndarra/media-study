@@ -365,7 +365,18 @@ def process(project_id: str):
         raise HTTPException(status_code=404, detail="видео не найдено")
     if library.phase1_running(project_dir):
         raise HTTPException(status_code=400, detail="уже обрабатывается")
-    _spawn_phase1(project_dir, ["--process"])
+    from phase1_ingest.acquire import master_path
+
+    url = library.video_info(project_dir).get("webpage_url")
+    if master_path(project_dir) is None and url:
+        # Скачивание оборвалось — докачать (с места обрыва) и обработать.
+        args = [url]
+        height = library.app_settings(DATA_DIR).get("download_max_height")
+        if height:
+            args += ["--max-height", str(int(height))]
+        _spawn_phase1(project_dir, args)
+    else:
+        _spawn_phase1(project_dir, ["--process"])
     return library.summary(project_dir)
 
 

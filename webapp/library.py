@@ -189,7 +189,7 @@ def phase1_running(project_dir: Path) -> bool:
     import time
 
     status = read_json(Path(project_dir) / "phase1_status.json", None)
-    if not status or status.get("step") in ("done", "downloaded"):
+    if not status or status.get("step") in ("done", "downloaded", "failed"):
         return False
     return time.time() - status.get("updated", 0) < PHASE1_STALE_SECONDS
 
@@ -205,7 +205,8 @@ def phase1_status(project_dir: Path) -> dict:
         # Подпись шага — по его коду (файлы, записанные раньше, могли быть со строчной буквы).
         from common.progress import STEPS
 
-        label = STEPS.get(status.get("step"), status.get("label") or "Обрабатывается")
+        label = (status.get("label") if status.get("step") == "failed" else None) or \
+            STEPS.get(status.get("step"), status.get("label") or "Обрабатывается")
         return {"label": label[:1].upper() + label[1:], "percent": status.get("percent"), "step": status.get("step")}
     if (project_dir / "source.tmp.mp4").exists():
         size = (project_dir / "source.tmp.mp4").stat().st_size / 2**30
@@ -234,11 +235,12 @@ def summary(project_dir: Path) -> dict:
         from phase1_ingest.acquire import master_path
 
         added = master_path(project_dir) is not None and not phase1_running(project_dir)
+        failed = (progress.get("step") == "failed") and not phase1_running(project_dir)
         return {
             **base,
-            "state": "added" if added else "processing",
-            "status": progress["label"] if not added else "Добавлено, ждёт обработки",
-            "percent": progress["percent"] if not added else None,
+            "state": "failed" if failed else "added" if added else "processing",
+            "status": progress["label"] if (failed or not added) else "Добавлено, ждёт обработки",
+            "percent": progress["percent"] if not (added or failed) else None,
             "step": progress.get("step") if not added else None,
             "sources": settings.get("sources", []),
             "agent": agent_mode(settings.get("agent")),

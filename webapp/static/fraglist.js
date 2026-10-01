@@ -3,10 +3,12 @@
 // Клик по строке — переход к фрагменту. Номер и текст строки — цвет правки
 // (как полоса "Отредактировано"): синий — просмотрен и принят без правок (до
 // скрытой метки), жёлтый — изменён, красный — удалён; серый — ещё не тронут.
-// Фон всей строки (как строка в git diff) — этап Anki: зеленоватый — в Anki,
-// розоватый — в Anki и переведён, желтоватый — передаётся (в очереди),
-// фиолетоватый — вернулся из Anki на доработку. Фон появляется плавно — и
-// при открытии списка, и когда фрагменты уходят в Anki / переводятся на глазах.
+// Значок слева от номера (в своей колонке — номера не сдвигаются) — этап Anki:
+// зелёная галочка — в Anki, розовый значок перевода — в Anki и переведён,
+// жёлтые часы — передан, ждёт своей очереди (править уже нельзя),
+// фиолетовая стрелка — вернулся из Anki на доработку. Значок появляется плавно.
+// Удалённые и пустые фрагменты (карточек у них нет) получают "в Anki" и
+// "переведён" по очереди — когда очередь передачи / перевод дошли до них.
 //
 // Фильтр: все / требуют доработки (ещё не в Anki) / вернулись из Anki. Кнопки
 // "вперёд"/"назад" и A/D при фильтре ходят по фрагментам фильтра.
@@ -69,12 +71,36 @@ const FragList = {
     return i <= reviewed ? "accepted" : "";
   },
 
-  // Фон строки — этап Anki.
-  stageClass(f) {
+  // Где сейчас очередь передачи в Anki и перевод (для удалённых и пустых
+  // фрагментов — у них своей карточки нет, статус идёт "по очереди").
+  _queue() {
+    const fragments = State.manifest.fragments;
+    const pending = new Set(State.stage3.pending_ids);
+    let firstPending = Infinity;
+    let firstUntranslated = Infinity;
+    let anyTranslated = false;
+    fragments.forEach((g, i) => {
+      if (!g.exported || g.status !== "active") return;
+      if (pending.has(g.id)) firstPending = Math.min(firstPending, i);
+      else if ((g.text || "").trim()) {
+        if (State.translatedIds.has(g.id)) anyTranslated = true;
+        else firstUntranslated = Math.min(firstUntranslated, i);
+      }
+    });
+    return { firstPending, firstUntranslated: Math.min(firstUntranslated, firstPending), anyTranslated };
+  },
+
+  // Этап Anki фрагмента (значок в списке, фон редактора).
+  stageClass(f, i = State.manifest.fragments.indexOf(f), queue = this._queue()) {
     if (f.anki_flagged && !f.exported) return "bg-returned";
     if (!f.exported) return "";
+    const ownCard = f.status === "active" && (f.text || "").trim();
     if (State.stage3.pending_ids.includes(f.id)) return "bg-pending";
-    return State.translatedIds.has(f.id) ? "bg-translated" : "bg-anki";
+    // Без своей карточки — ждёт, пока очередь передачи дойдёт до него.
+    if (!ownCard && i > queue.firstPending) return "bg-pending";
+    if (ownCard) return State.translatedIds.has(f.id) ? "bg-translated" : "bg-anki";
+    // ...и "переведён" — когда перевод прошёл дальше него.
+    return queue.anyTranslated && i < queue.firstUntranslated ? "bg-translated" : "bg-anki";
   },
 
   visible(f) {
@@ -102,12 +128,13 @@ const FragList = {
     if (!this.el || !State.manifest || State.view !== "editor") return;
     const fragments = State.manifest.fragments;
     const reviewed = this._reviewed();
+    const queue = this._queue();
     const shownRows = [];
     fragments.forEach((f, i) => {
       if (!this.visible(f)) return;
       const first = (f.text || "").split("\n")[0].trim() || "(без слов)";
       const flag = f.anki_flagged && !f.exported ? "⚑ " : "";
-      const classes = ["frag-row", this.editClass(f, i, reviewed), this.stageClass(f), i === State.fragmentIndex ? "current" : ""]
+      const classes = ["frag-row", this.editClass(f, i, reviewed), this.stageClass(f, i, queue), i === State.fragmentIndex ? "current" : ""]
         .filter(Boolean).join(" ");
       shownRows.push({ i, id: f.id, classes, text: flag + first });
     });
@@ -117,7 +144,7 @@ const FragList = {
       shownRows.forEach((r, k) => {
         const row = this.el.children[k];
         if (row.className !== r.classes) row.className = r.classes;
-        const num = row.firstChild;
+        const num = row.children[1];
         const text = row.lastChild;
         if (num.textContent !== String(r.i + 1)) num.textContent = String(r.i + 1);
         if (text.textContent !== r.text) text.textContent = r.text;
@@ -128,7 +155,7 @@ const FragList = {
       this.keys = keys;
       this.el.innerHTML = shownRows.map((r) =>
         `<div class="${r.classes.replace(/ bg-[a-z]+/, "")}" data-index="${r.i}">` +
-        `<span class="frag-num">${r.i + 1}</span><span class="frag-text">${escapeHtml(r.text)}</span></div>`).join("") ||
+        `<span class="frag-icon"></span><span class="frag-num">${r.i + 1}</span><span class="frag-text">${escapeHtml(r.text)}</span></div>`).join("") ||
         '<div class="frag-empty">Нет таких фрагментов</div>';
       if (shownRows.length) {
         this.el.getBoundingClientRect();

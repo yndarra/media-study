@@ -11,9 +11,14 @@
 from pathlib import Path
 from urllib.request import urlopen
 import json
+import time
 
 import yt_dlp
 from imageio_ffmpeg import get_ffmpeg_exe
+
+# Обрыв скачивания: сколько раз начинать заново (с места обрыва) и пауза между попытками.
+DOWNLOAD_ATTEMPTS = 8
+DOWNLOAD_PAUSE = 30
 
 
 PREFERRED_SUBTITLE_FORMATS = ("json3", "vtt")
@@ -63,8 +68,8 @@ def download_video(url: str, dest_dir: Path, max_height: int | None = None) -> d
         "progress_hooks": [on_progress],
         # Длинные видео качаются долго — сетевые обрывы повторяются, а
         # скачанное продолжается с места обрыва.
-        "retries": 20,
-        "fragment_retries": 20,
+        "retries": 50,
+        "fragment_retries": 50,
         "continuedl": True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -74,7 +79,18 @@ def download_video(url: str, dest_dir: Path, max_height: int | None = None) -> d
         info = ydl.extract_info(url, download=False)
         (dest_dir / "video_info.json").write_text(
             json.dumps(ydl.sanitize_info(info), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-        info = ydl.process_ie_result(info, download=True)
+        # YouTube иногда рвёт соединение надолго (yt-dlp сдаётся после своих
+        # повторов) — ждём и продолжаем с места обрыва (.part), несколько раз.
+        for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+            try:
+                info = ydl.process_ie_result(dict(info), download=True)
+                break
+            except yt_dlp.utils.DownloadError as error:
+                if attempt == DOWNLOAD_ATTEMPTS:
+                    raise
+                print(f"Скачивание оборвалось ({error}); повтор {attempt + 1}/{DOWNLOAD_ATTEMPTS} через {DOWNLOAD_PAUSE} с",
+                      flush=True)
+                time.sleep(DOWNLOAD_PAUSE)
 
     requested = info.get("requested_downloads") or []
     if requested and requested[0].get("filepath"):

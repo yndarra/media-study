@@ -10,6 +10,7 @@ CLI-точка входа Фазы 1.
 переделываются.
 """
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -70,5 +71,35 @@ def main() -> None:
         print(f"Помечено needs_review: {flagged}")
 
 
+def run() -> None:
+    """main() + отметка ошибки в phase1_status.json: приложение покажет, что
+    скачивание/обработка не получились, и их можно запустить снова."""
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException as error:
+        project_dir = _project_dir_from_args()
+        if project_dir is not None:
+            from common.progress import report
+
+            status_path = project_dir / "phase1_status.json"
+            step = (json.loads(status_path.read_text(encoding="utf-8")).get("step") if status_path.exists() else None) or ""
+            what = "Не скачалось" if step in ("download", "") else "Не обработалось"
+            report(project_dir, "failed", None, force=True)
+            data = json.loads(status_path.read_text(encoding="utf-8"))
+            data["label"] = f"{what} – запустите «Обработать» ещё раз"
+            data["error"] = str(error)[:300]
+            status_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        raise
+
+
+def _project_dir_from_args() -> Path | None:
+    args = sys.argv[1:]
+    if "--project-dir" in args and args.index("--project-dir") + 1 < len(args):
+        return Path(args[args.index("--project-dir") + 1])
+    return None
+
+
 if __name__ == "__main__":
-    main()
+    run()

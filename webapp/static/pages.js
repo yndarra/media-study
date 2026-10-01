@@ -241,7 +241,7 @@ function segmentBar(segments, total, name, done, rightText = "") {
 
 // Ширина отрезка: со скосом слева он заходит на 6 px под предыдущий.
 function segWidth(w, slanted) {
-  return slanted && w > 0 ? `calc(${w}% + 6px)` : `${w}%`;
+  return slanted && w > 0 ? `calc(${w}% + var(--slant))` : `${w}%`;
 }
 
 // Снимок полос перед перерисовкой: ширины отрезков и числа – чтобы новые
@@ -1121,7 +1121,9 @@ const Pages = {
           `<a class="card" href="#/process/${encodeURIComponent(v.id)}">` +
           cardTitle(v) +
           ((v.sources || []).length ? `<div class="muted small">Ссылок на текст: ${v.sources.length}</div>` : "") +
-          (v.state === "processing" ? processingBar(v) : `<div class="card-status">Добавлено, ждёт обработки</div>`) +
+          (v.state === "processing" ? processingBar(v)
+            : v.state === "failed" ? `<div class="card-status failed">${escapeHtml(v.status)}</div>`
+              : `<div class="card-status">Добавлено, ждёт обработки</div>`) +
           "</a>").join("") + "</div>",
       ).join(""), first);
       if (first) cardsEnter(box);
@@ -1430,7 +1432,7 @@ const Activity = {
       const cls = a.kind === "translate" ? "translated" : a.kind === "phase1" ? (a.step === "download" ? "downloading" : "accepted") : "ok";
       const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ${cls}" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
       return `<div class="activity-item" data-key="${escapeHtml(`${a.kind}:${a.id}`)}"><div class="activity-name">${escapeHtml(a.title)}</div>` +
-        `<div class="activity-line"><span>${escapeHtml(cap(a.label))}</span>${has ? `<span>${Math.floor(a.percent)}%</span>` : ""}</div>${bar}</div>`;
+        `<div class="activity-line">${escapeHtml(cap(a.label))}${has ? `: ${Math.floor(a.percent)}%` : ""}</div>${bar}</div>`;
     }).join("");
     animateBars(box, snap);
   },

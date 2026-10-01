@@ -23,6 +23,7 @@ STEPS = {
     "segment": "Режу на фразы",
     "assets": "Строю звуковую волну и дорожку",
     "done": "Готово",
+    "failed": "Не получилось",
 }
 
 _last_write: dict[tuple, float] = {}
