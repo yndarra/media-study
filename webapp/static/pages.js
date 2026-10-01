@@ -257,6 +257,15 @@ function countUp(el, from, to) {
 }
 const BAR_ANIMATION_MS = 900;
 
+// Раздел открыли: карточки появляются по очереди (лёгкий подъём и проявление).
+function cardsEnter(box) {
+  box.querySelectorAll("a.card, .group-title").forEach((el, i) => {
+    el.style.setProperty("--i", Math.min(i, 20));
+    el.classList.add("enter");
+    el.addEventListener("animationend", () => el.classList.remove("enter"), { once: true });
+  });
+}
+
 // Перерисовать список без мигания: полосы доезжают от прежних значений
 // (first – первый показ раздела: заполняются от нуля).
 function renderSmooth(box, html, first = false) {
@@ -597,6 +606,7 @@ const Pages = {
           videoBars(v) + videoNotes(v) + cardAction(v) +
           "</a>").join("") + "</div>",
       ).join(""), first);
+      if (first) cardsEnter(box);
     };
     // Кнопки на карточке ("Передать в Anki", "Перевести"): действие сразу, окно
     // не открывается; кнопка плавно сворачивается, карточка уменьшается.
@@ -846,7 +856,7 @@ const Pages = {
       <div class="modal-actions">
         <a class="step-btn primary" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
         <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
-        <label class="check small batch-check" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом <span class="muted">(вдвое дешевле, ответ до 24 ч)</span></label>
+        <label class="check small batch-check${untranslated > 0 ? "" : " hidden"}" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом <span class="muted">(вдвое дешевле, но дольше)</span></label>
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn">Сохранить</button>
       </div>`;
@@ -962,6 +972,7 @@ const Pages = {
         box.innerHTML = '<p class="muted">Нечего обрабатывать – добавьте видео или аудио в разделе «Добавить».</p>';
         return;
       }
+      const first = !box.querySelector("a.card");
       box.innerHTML = groupByAuthor(items).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           `<a class="card" href="#/process/${encodeURIComponent(v.id)}">` +
@@ -970,6 +981,7 @@ const Pages = {
           (v.state === "processing" ? processingBar(v) : `<div class="card-status">Добавлено, ждёт обработки</div>`) +
           "</a>").join("") + "</div>",
       ).join("");
+      if (first) cardsEnter(box);
     };
     this.processRender = render;
     await render();

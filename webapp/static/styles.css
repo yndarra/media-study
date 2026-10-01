@@ -968,3 +968,19 @@ label.check > input[type=checkbox] { align-self: center; }
 
 /* Название видео на карточках – не больше двух строк, дальше "…". */
 .card-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Окно: полосы прокрутки не видно (во время раскрытия она мелькала);
+   прокрутка колесом, если окно выше экрана, остаётся. */
+.modal { scrollbar-width: none; }
+.modal::-webkit-scrollbar { display: none; }
+
+/* Флажок "Пакетом" – по середине слова (замерено). */
+.modal-actions label.check input[type=checkbox] { transform: translateY(1px); }
+
+/* Раздел "Видео": название – одна строка, мельче; дальше "…".
+   ("Обработка" – две строки, как было.) */
+#videos-list .card-title { -webkit-line-clamp: 1; font-size: 13px; }
+
+/* Появление карточек при открытии раздела. */
+@keyframes card-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+.enter { animation: card-in 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both; animation-delay: calc(var(--i) * 35ms); }
