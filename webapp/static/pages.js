@@ -149,9 +149,14 @@ function videoBars(v) {
     { n: v.exported - (v.flag_interval || 0), cls: "ok", title: `передано: ${v.exported}` },
     { n: v.flag_interval || 0, cls: "returned", right: true, title: `флаг «обрезка/текст» в Anki: ${v.flag_interval || 0}` },
   ], v.active_total, `Передано в Anki ${v.exported} / ${v.active_total}`) +
-  segmentBar([
-    { n: v.translated || 0, cls: "translated", title: `переведено: ${v.translated || 0}` },
-  ], v.notes_in_anki, `Переведено ${v.translated || 0} / ${v.notes_in_anki || 0}`);
+  // Переведено: в Anki (оборот заполнен) + переведённые заранее, ждущие передачи в Anki;
+  // из всех фрагментов с текстом.
+  (() => {
+    const done = (v.translated || 0) + (v.translated_waiting || 0);
+    return segmentBar([
+      { n: done, cls: "translated", title: `переведено: ${done}` + (v.translated_waiting ? `, из них ждут передачи в Anki: ${v.translated_waiting}` : "") },
+    ], v.cards_total, `Переведено ${done} / ${v.cards_total || 0}`);
+  })();
 }
 
 // Строка таблицы в окнах. value — текст или список строк: из нескольких строк
@@ -628,7 +633,7 @@ const Pages = {
       <div class="modal-actions">
         <a class="step-btn primary" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
         <button id="info-translate" class="step-btn" ${untranslated > 0 ? "" : "disabled"} title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести${v.to_translate ? ` (${v.to_translate})` : ""}</button>
-        <label class="check small" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом</label>
+        <label class="check small batch-check" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом <span class="muted">(вдвое дешевле, ответ до 24 ч)</span></label>
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn">Сохранить</button>
       </div>`;
@@ -641,23 +646,68 @@ const Pages = {
       if (!title || !group) return;
       const saved = await Api.saveProjectInfo(id, { title, group });
       watcher.snapshot();
+      // Переименовали видео, которое открыто в редакторе, – обновить ссылку в меню.
+      if (State.project === id && State.manifest) {
+        State.manifest.video.title = title;
+        const link = document.getElementById("menu-editing-link");
+        if (link) link.textContent = title;
+      }
       const sync = saved.deck_sync || {};
       body.querySelector("#info-note").textContent = !v.anki_deck ? ""
         : sync.pending ? "колода Anki переименуется, когда Anki откроется" : "колода Anki переименована";
     };
     saveButton.addEventListener("click", save);
-    body.querySelector("#info-translate").addEventListener("click", async (e) => {
-      const batch = body.querySelector("#info-batch").checked;
+    // Перевод видео: "Перевести" <-> "Остановить" (пока идёт перевод этого
+    // видео или ждёт его пакетная заявка). Снять "Пакетом", пока заявка ждёт,
+    // – отменить заявку и перевести сразу.
+    const translateButton = body.querySelector("#info-translate");
+    const batchBox = body.querySelector("#info-batch");
+    const note = body.querySelector("#info-note");
+    const label = translateButton.textContent;
+    let running = false;
+    let waitingBatch = false;
+    const refreshTranslate = async () => {
+      if (!body.isConnected) return;
+      let state;
       try {
-        await Api.agentRun({ project: id, batch });
-        e.target.disabled = true;
-        body.querySelector("#info-note").textContent = batch
-          ? "Заявка отправлена – переводы запишутся, когда OpenRouter их вернёт"
-          : "Перевод запущен – переданные в Anki получат перевод сразу, остальные – когда их передадут";
+        state = await Api.agentState();
+      } catch (_) {
+        return;
+      }
+      const st = state.status || {};
+      waitingBatch = (state.batches || []).some((j) => j.project === id);
+      running = waitingBatch || (st.state === "running" && st.project === id && Date.now() / 1000 - st.updated < 300);
+      batchBox.checked = waitingBatch || (running ? false : batchBox.checked);
+      translateButton.textContent = running ? "Остановить" : label;
+      translateButton.disabled = !running && untranslated <= 0;
+      if (st.state === "running" && st.project === id && st.total) note.textContent = `Перевод: пачка ${Math.min((st.done || 0) + 1, st.total)} из ${st.total}`;
+      if (running) setTimeout(refreshTranslate, 3000);
+    };
+    translateButton.addEventListener("click", async () => {
+      try {
+        if (running) {
+          await Api.agentStop(id);
+          note.textContent = "Перевод остановлен – уже переведённое сохранено";
+        } else {
+          await Api.agentRun({ project: id, batch: batchBox.checked });
+          note.textContent = batchBox.checked
+            ? "Заявка отправлена – переводы запишутся, когда OpenRouter их вернёт"
+            : "Перевод запущен – переданные в Anki получат перевод сразу, остальные – когда их передадут";
+        }
       } catch (err) {
-        body.querySelector("#info-note").textContent = err.message;
+        note.textContent = err.message;
+      }
+      setTimeout(refreshTranslate, 800);
+    });
+    batchBox.addEventListener("change", async () => {
+      if (waitingBatch && !batchBox.checked) {
+        await Api.agentStop(id);
+        await Api.agentRun({ project: id, batch: false });
+        note.textContent = "Пакетная заявка отменена – перевожу сразу";
+        setTimeout(refreshTranslate, 800);
       }
     });
+    refreshTranslate();
   },
 
   // -- обработка (этап 1) --------------------------------------------------------------

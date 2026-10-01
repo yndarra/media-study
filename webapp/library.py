@@ -269,12 +269,27 @@ def summary(project_dir: Path) -> dict:
         # Всего в полосе "Отредактировано": живые + удалённые пользователем.
         "bar_total": len(active) + sum(removed(f) for f in fragments),
         "cards_total": len(cards),
+        # Переведены заранее и ждут передачи в Anki (перевод лежит в хранилище, текст не менялся).
+        "translated_waiting": _translated_waiting(project_dir, cards),
         "clips_done": len(index),
         "notes_in_anki": sum(bool(e.get("anki_note_id")) for e in index),
         "flagged": len(returned),
         "anki_deck": manifest.settings.get("anki_deck"),
         "sources_display": sources_display(project_dir),
     }
+
+
+def _translated_waiting(project_dir: Path, cards) -> int:
+    """Сколько ещё не переданных в Anki фрагментов уже переведено (export/translations.json)."""
+    path = Path(project_dir) / "export" / "translations.json"
+    if not path.exists():
+        return 0
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    return sum(1 for f in cards if not f.exported and f.id in stored
+               and stored[f.id].get("text", "").strip() == f.text.strip())
 
 
 def list_projects(data_dir: Path) -> list[dict]:

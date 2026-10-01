@@ -48,6 +48,15 @@ const Api = {
     });
   },
 
+  // Остановить перевод (идущий процесс и/или пакетную заявку) видео project.
+  agentStop(project = null) {
+    return this.json("/api/agent/stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project }),
+    });
+  },
+
   // edits: {id заметки: оборот, поправленный вручную}.
   agentApply(approve, reject, edits = {}) {
     return this.json("/api/agent/apply", {

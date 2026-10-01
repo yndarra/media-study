@@ -94,7 +94,7 @@ body.right-closed #fraglist { display: none; }
   background: rgba(14, 14, 18, 0.9);
 }
 
-#open-left { left: 14px; }
+#open-left { left: 14px; top: 22px; } /* центр кнопки — на уровне середины заголовка раздела */
 #open-right { right: 14px; }
 body.left-closed #open-left { display: block; }
 body.right-closed:not(.no-fraglist) #open-right { display: block; }
@@ -815,3 +815,13 @@ label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=c
 .multi-rest { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; padding-right: 28px; }
 .modal table.stats a { color: #79c0ff; text-decoration: none; }
 .modal table.stats a:hover { text-decoration: underline; }
+
+/* Окно подробностей видео — компактнее: заголовки и таблицы мельче, окно уже. */
+.modal { width: min(720px, 100%); }
+.modal h2 { font-size: 14px; margin: 16px 0 6px; }
+.modal table.stats td { font-size: 13px; padding-top: 4px; padding-bottom: 4px; }
+.modal .modal-actions { margin-top: 12px; }
+/* Флажок "Пакетом" в строке кнопок: без внешних отступов, по центру строки. */
+.modal-actions label.check { margin: 0; white-space: nowrap; }
+.modal-actions label.check input[type=checkbox] { transform: none; }
+.batch-check .muted { font-size: 12px; }

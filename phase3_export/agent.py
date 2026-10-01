@@ -153,8 +153,11 @@ BATCH_JOBS_FILE = "agent_batches.json"  # заявки OpenRouter Batch API, ж�
 
 
 def _status_writer(data_dir: Path, model: str, label: str):
+    import os
+
     def write(**fields):
-        save_json(data_dir / STATUS_FILE, {"state": "running", "label": label, "model": model,
+        # pid — чтобы перевод можно было остановить из приложения.
+        save_json(data_dir / STATUS_FILE, {"state": "running", "label": label, "model": model, "pid": os.getpid(),
                                            "updated": time.time(), **fields})
     return write
 
@@ -200,14 +203,17 @@ def run(data_dir: Path, project: str | None = None, batch: bool = False, only_fl
                 save_json(data_dir / BATCH_JOBS_FILE, jobs)
                 print(f"{project_dir.name}: заявка {job['id']} — {len(cards)} карточек", flush=True)
                 continue
-            new, cost = translator.translate_realtime(data_dir, project_dir, cards, model, status)
-            spent += cost
+            # Каждая пачка записывается сразу: целое видео — в Anki/хранилище,
+            # по флагам — в предложения.
             if direct:
-                done = translator.apply_direct(project_dir, new, cards)
-                print(f"{project_dir.name}: переведено {done} (${cost:.4f})", flush=True)
+                on_batch = lambda part, pd=project_dir, cs=cards: translator.apply_direct(pd, part, cs)
             else:
-                save_json(proposals_path, load_json(proposals_path, []) + new)
-                print(f"{project_dir.name}: {len(new)} предложений (${cost:.4f})", flush=True)
+                on_batch = lambda part: save_json(proposals_path, load_json(proposals_path, []) + part)
+            new, cost = translator.translate_realtime(data_dir, project_dir, cards, model,
+                                                      lambda **kw: status(project=project_dir.name, **kw),
+                                                      on_batch=on_batch)
+            spent += cost
+            print(f"{project_dir.name}: {len(new)} переводов (${cost:.4f})", flush=True)
     except Exception as error:  # сеть, баланс, модель — показать в окне "Перевод"
         save_json(data_dir / STATUS_FILE, {"state": "error", "message": str(error)[:300], "model": model,
                                            "spent": round(spent, 4), "updated": time.time()})

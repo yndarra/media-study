@@ -192,6 +192,9 @@ def project_stats(project_id: str):
 
     try:
         summary["to_translate"] = len(translator.project_cards(p.dir))
+        # Окно видео – точное число прямо из Anki, без кэша: перевод пишется пачками
+        # и должен быть виден сразу (в списке видео – кэш на минуту).
+        summary["translated"] = summary["cards_total"] - summary["to_translate"] - summary["translated_waiting"]
     except (anki.AnkiUnavailable, RuntimeError):
         summary["to_translate"] = None  # Anki закрыт — неизвестно
     return {"summary": summary, "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir),
@@ -488,6 +491,39 @@ def activity():
                     "label": "ждёт Anki (откройте Anki)" if q["state"] == "waiting_anki" else "выгрузка в Anki",
                     "percent": round(100 * done / total, 1) if total else None, "eta_seconds": q["eta_seconds"],
                 })
+    items += _translation_activity()
+    return items
+
+
+def _pid_alive(pid) -> bool:
+    import ctypes
+
+    if not pid:
+        return False
+    handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    code = ctypes.c_ulong()
+    ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+    ctypes.windll.kernel32.CloseHandle(handle)
+    return code.value == 259  # STILL_ACTIVE
+
+
+def _translation_activity() -> list[dict]:
+    """Перевод в "Сейчас идёт": идущий процесс агента (пачки) и заявки Batch API."""
+    from phase3_export import agent
+
+    items = []
+    st = agent.load_json(DATA_DIR / agent.STATUS_FILE, {})
+    if st.get("state") == "running" and _pid_alive(st.get("pid")):
+        title = library.title_of(DATA_DIR / st["project"]) if st.get("project") else "карточки с флагом"
+        total, done = st.get("total") or 0, st.get("done") or 0
+        items.append({"kind": "translate", "id": st.get("project"), "title": title,
+                      "label": f"перевод: пачка {min(done + 1, total)} из {total}" if total else "перевод",
+                      "percent": round(100 * done / total, 1) if total else None, "eta_seconds": None})
+    for job in agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, []):
+        items.append({"kind": "translate", "id": job["project"], "title": library.title_of(DATA_DIR / job["project"]),
+                      "label": f"перевод пакетом ({len(job['cards'])}), ждёт OpenRouter", "percent": None, "eta_seconds": None})
     return items
 
 
@@ -758,6 +794,39 @@ def agent_run(body: AgentRunRequest):
     return {"started": True}
 
 
+class AgentStopRequest(BaseModel):
+    project: str | None = None  # остановить только перевод этого видео (иначе — всё)
+
+
+@app.post("/api/agent/stop")
+def agent_stop(body: AgentStopRequest):
+    """
+    Остановить перевод: идущий процесс (сделанные пачки уже записаны) и
+    заявки Batch API (отменяются у OpenRouter).
+    """
+    from phase3_export import agent, translator
+
+    stopped = []
+    st = agent.load_json(DATA_DIR / agent.STATUS_FILE, {})
+    if st.get("state") == "running" and _pid_alive(st.get("pid")) and (not body.project or st.get("project") == body.project):
+        subprocess.run(["taskkill", "/PID", str(st["pid"]), "/F"], capture_output=True)
+        agent.save_json(DATA_DIR / agent.STATUS_FILE, {**st, "state": "idle", "message": "остановлено", "updated": time.time()})
+        stopped.append("process")
+    jobs = agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, [])
+    keep = []
+    for job in jobs:
+        if body.project and job["project"] != body.project:
+            keep.append(job)
+            continue
+        try:
+            translator._post(DATA_DIR, f"/batches/{job['id']}/cancel")
+        except Exception:
+            pass  # уже завершена/отменена
+        stopped.append(job["id"])
+    agent.save_json(DATA_DIR / agent.BATCH_JOBS_FILE, keep)
+    return {"stopped": stopped}
+
+
 class AgentApplyRequest(BaseModel):
     approve: list[int] = []
     reject: list[int] = []
@@ -831,7 +900,12 @@ def _call(action):
 def get_manifest(project_id: str):
     p = project(project_id)
     p.prepare()
-    return _public(p.store.load())
+    from webapp.library import title_of
+
+    data = _public(p.store.load())
+    # Название – заданное вручную в окне видео (если есть): его показывает меню "Сейчас правится".
+    data["video"]["title"] = title_of(p.dir)
+    return data
 
 
 @app.patch("/api/p/{project_id}/fragments/{fragment_id}")

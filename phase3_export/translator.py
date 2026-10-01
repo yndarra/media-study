@@ -263,11 +263,13 @@ def chunks(items: list, size: int = BATCH_SIZE) -> list[list]:
 
 def translate_realtime(data_dir: Path, project_dir: Path, cards: list[dict], model: str,
                        status=lambda **kw: None, transcript: str | None = None,
-                       glossary: dict | None = None) -> tuple[list[dict], float]:
+                       glossary: dict | None = None, on_batch=None) -> tuple[list[dict], float]:
     """
     Пачки по очереди (с кэшем текста видео). Возвращает (предложения, стоимость $).
     transcript / glossary — свои (для экспериментов): словарь тогда ведётся
-    в памяти и в data/glossary не пишется.
+    в памяти и в data/glossary не пишется. on_batch(предложения пачки) —
+    вызывается после каждой пачки (запись сразу, а не в конце: прерванный
+    перевод не теряет сделанного, полоса "Переведено" растёт по ходу).
     """
     if transcript is None:
         transcript, _ = video_transcript(project_dir, number_all=True)
@@ -294,7 +296,10 @@ def translate_realtime(data_dir: Path, project_dir: Path, cards: list[dict], mod
                     glossary.setdefault(item["term"], str(item.get("translation") or ""))
         else:
             merge_glossary(data_dir, project_dir, answer.get("glossary"))
-        proposals += proposals_from(answer, group, model, cost, f"{project_dir.name}:{group[0]['id']}-{group[-1]['id']}")
+        batch_proposals = proposals_from(answer, group, model, cost, f"{project_dir.name}:{group[0]['id']}-{group[-1]['id']}")
+        proposals += batch_proposals
+        if on_batch:
+            on_batch(batch_proposals)
     status(done=len(groups), total=len(groups), spent=round(spent, 4))
     return proposals, spent
 
