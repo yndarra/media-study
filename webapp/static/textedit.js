@@ -30,6 +30,17 @@
 // (f.heard_ranges — диапазоны в original_text; текст не из Notion и т.п.).
 // Это подсказка "проверь", а не правка: исправленное становится зелёным,
 // нетронутое остаётся голубым.
+// Говорящий в начале строки: всё до первого ":", если там не больше 3 слов
+// (слово через дефис — одно): "Timid Civilian:", "Jinhsi:", "Strange Tacet
+// Discord:". Возвращает {name, length} (длина вместе с ":" и пробелами) или null.
+function speakerPrefix(line) {
+  const m = /^\s*([^:\n]{1,80}?)\s*:[ \t]*/.exec(line || "");
+  if (!m) return null;
+  const words = m[1].trim().split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > 3) return null;
+  return { name: m[1].trim(), length: m[0].length };
+}
+
 const ORIG = 0;
 const INS = 1;
 const DEL = 2;
@@ -227,8 +238,9 @@ const TextEditor = {
       visible.push(k);
     }
     const line = visible.map((k) => this.tokens[k].ch).join("");
-    const match = line.match(/^([A-Z][\w .'’-]{0,50}):[ \t]*/);
-    const drop = new Set(match ? visible.slice(0, match[0].length) : []);
+    // Говорящего нет – ничего не убирается, имя только добавляется слева.
+    const prefix = speakerPrefix(line);
+    const drop = new Set(prefix ? visible.slice(0, prefix.length) : []);
     const result = [];
     this.tokens.forEach((t, k) => {
       if (!drop.has(k)) result.push(t);

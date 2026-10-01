@@ -875,8 +875,8 @@ const App = {
     for (let i = State.fragmentIndex + direction; i >= 0 && i < fragments.length; i += direction) {
       const lines = (fragments[i].text || "").split("\n");
       for (const line of direction < 0 ? lines.reverse() : lines) {
-        const m = line.match(/^\s*([A-Z][\w .'’-]{0,50}):/);
-        if (m && m[1] !== own && !names.includes(m[1])) names.push(m[1]);
+        const p = speakerPrefix(line);
+        if (p && p.name !== own && !names.includes(p.name)) names.push(p.name);
       }
       if (names.length >= 20) break;
     }
@@ -884,8 +884,8 @@ const App = {
   },
 
   _speakerOf(text) {
-    const m = (text || "").match(/^\s*([A-Z][\w .'’-]{0,50}):/);
-    return m ? m[1] : "";
+    const p = speakerPrefix((text || "").split("\n")[0]);
+    return p ? p.name : "";
   },
 
   async changeSpeaker(action) {
@@ -918,11 +918,14 @@ const App = {
       return;
     }
     TextEditor.tokens = st.tokens.map((t) => ({ ...t }));
-    // name "" – убрать говорящего (каретка – в начале реплики).
-    const caret = name === null ? 0 : TextEditor.setSpeaker(name);
+    if (name !== null) TextEditor.setSpeaker(name); // "" – убрать говорящего
+    // Поле не выделяется и каретка не ставится – шорткаты продолжают работать.
     const el = $("cur-text");
-    el.focus();
-    this.onTokensChanged(name === null ? TextEditor.tokens.length : caret);
+    if (document.activeElement === el) el.blur();
+    f.text = TextEditor.text();
+    f.text_marks = TextEditor.marks();
+    TextEditor.render(el);
+    this._scheduleTextSave(f);
   },
 
   // Кнопка "Не озвучено": переключить отметку (отменяется Ctrl+Z).
@@ -1158,6 +1161,7 @@ const HOTKEYS = {
   "Shift+KeyW": () => App.select("playhead"), // выделить текущий кадр
   KeyE: () => App.snapBound("end"), // конец отрезка — к началу следующего (кнопка справа)
   "Shift+KeyE": () => App.select("end"), // выделить конец отрезка
+  KeyR: () => App.changeSpeaker("rover"), // кнопка R: говорящий – Rover (ещё раз – как было)
   // Пометить на удаление / снять пометку (как кнопка корзины); переданные в Anki — нельзя.
   KeyS: () => currentFragment() && !isLocked(currentFragment()) && App.deleteSoft(),
 };
