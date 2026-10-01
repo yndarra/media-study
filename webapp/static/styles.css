@@ -1420,3 +1420,5 @@ body.frag-edit-unvoiced { background: #0f1f1f; }
 
 /* Подписи в полосах – на 1 px ниже. */
 .progress-label { top: 2px; }
+/* Полосы с подписью – на 1 px выше снизу (21 px; подпись на месте). */
+.progress:not(.thin) { height: 21px; }
