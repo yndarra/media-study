@@ -133,7 +133,9 @@ def flagged_notes() -> list[dict]:
     как недоработанные. Остальные карточки пользователя не смотрятся.
     """
     result = []
-    for flag in range(1, 8):
+    # Синий (4) — пометка "карточка с Rover" (rover_flags.py), а не просьба о
+    # доработке: такие карточки здесь не считаются.
+    for flag in (1, 2, 3, 5, 6, 7):
         card_ids = invoke("findCards", query=f"tag:{TAG} flag:{flag}")
         if not card_ids:
             continue

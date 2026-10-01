@@ -39,7 +39,7 @@ from pathlib import Path
 
 from common.manifest_schema import Manifest, STATUS_ACTIVE, replace_file, retry_windows_lock
 
-from . import anki
+from . import anki, rover_flags
 from .export_clips import render_clip
 
 DEFAULT_SECONDS_PER_FRAME = 0.16  # ~13 с на 3-секундный клип 4K (замер на RTX 5070 + CPU libx265)
@@ -374,6 +374,10 @@ class Worker:
             did = True
             self.reorder_needed = True
         waiting = any((not e.get("anki_note_id") and not e.get("orphan")) or e.get("anki_update_pending") for e in index)
+        if did and not waiting:
+            # Последние карточки переданы (с готовым переводом из хранилища) —
+            # может, закончен этап 4: синие флаги Rover, один раз на видео.
+            rover_flags.mark_if_finished(project, log=lambda m: print(m, flush=True))
         self.status(project, "waiting_anki" if waiting else "idle",
                     "жду Anki, чтобы создать карточки" if waiting else "", seconds_per_frame=spf)
         return did, waiting

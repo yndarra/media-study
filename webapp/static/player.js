@@ -236,6 +236,27 @@ const Player = {
     await this._start(frame);
   },
 
+  // Ускорение на зажатый Shift: временная скорость 2×, сохранённая скорость
+  // (кнопки −/+) не меняется. restart=false — только снять, не перезапуская
+  // звук (следующее действие клавиши само перезапустит или остановит).
+  async setBoost(on, restart = true) {
+    if (!!State.boost === on) return;
+    State.boost = on;
+    App.renderSpeed();
+    if (!restart) {
+      // Если действие сочетания воспроизведение не перезапустило (например,
+      // Shift+Пробел без жёлтой метки) — вернуть обычную скорость самим.
+      setTimeout(() => this.playing && this.speed !== State.speed && this.setSpeed(State.speed), 0);
+      return;
+    }
+    if (!this.playing) return;
+    const frame = clamp(Math.floor(this._audioPosition() * fps() + 1e-6), this.startFrame, this.stopFrame);
+    this._halt();
+    this._unfreeze();
+    this.seekTo(frame);
+    await this._start(frame);
+  },
+
   // Открыли другое видео: новый источник, всё состояние воспроизведения сброшено.
   setSource(url) {
     this.pauseIfPlaying();
@@ -373,7 +394,7 @@ const Player = {
     const ctx = AudioEngine.context();
     // Часы звука запускаются по действию пользователя (правило браузеров).
     ctx.resume();
-    const speed = State.speed;
+    const speed = State.boost ? BOOST_SPEED : State.speed;
     let audio;
     let buffer;
     try {

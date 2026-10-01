@@ -25,6 +25,9 @@ function loadSpeed() {
   return 1;
 }
 
+// Скорость, пока зажат Shift.
+const BOOST_SPEED = 2;
+
 function currentFragment() {
   return State.manifest ? State.manifest.fragments[State.fragmentIndex] : null;
 }
@@ -407,7 +410,7 @@ const App = {
 
   // Скорость воспроизведения: значение и доступность кнопок на краях диапазона.
   renderSpeed() {
-    const speed = State.speed;
+    const speed = State.boost ? BOOST_SPEED : State.speed;
     $("speed-value").textContent = `${speed.toFixed(1)}×`;
     $("speed-value").classList.toggle("changed", Math.abs(speed - 1) > 1e-9);
     $("speed-down").disabled = speed <= 0.5 + 1e-9;
@@ -815,7 +818,8 @@ const HOTKEYS = {
   ArrowLeft: () => App.step(-1),
   ArrowRight: () => App.step(1),
   Space: () => Player.togglePlay(), // пауза / воспроизведение
-  "Shift+Space": () => Player.replay(), // повтор с начала отрезка
+  KeyW: () => Player.replay(), // повтор с начала отрезка
+  "Shift+Space": () => Player.replayFromMarker(), // повтор с жёлтой метки (нет метки — ничего)
   KeyQ: () => App.moveHead("start"), // текущий кадр — на начало отрезка
   "Shift+KeyQ": () => App.select("start"), // выделить начало отрезка
   "Shift+KeyW": () => App.select("playhead"), // выделить текущий кадр
@@ -836,6 +840,25 @@ let ctrlAlone = false;
 let ctrlDownAt = 0;
 let altAt = 0;
 document.addEventListener("mousedown", () => (ctrlAlone = false), true);
+
+// Зажатый Shift во время воспроизведения — временно 2× (отпустил — прежняя
+// скорость). Shift вместе с другой клавишей (Shift+A, Shift+Пробел…) — это
+// сочетание, ускорение сразу снимается.
+function shiftBoostAllowed(e) {
+  return State.view === "editor" && State.manifest && !e.target.isContentEditable
+    && !["TEXTAREA", "INPUT"].includes(e.target.tagName);
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Shift") {
+    if (!e.repeat && Player.playing && shiftBoostAllowed(e)) Player.setBoost(true);
+  } else if (State.boost) {
+    Player.setBoost(false, false); // сочетание с Shift — его действие само решит, играть ли дальше
+  }
+}, true);
+document.addEventListener("keyup", (e) => {
+  if (e.key === "Shift" && State.boost) Player.setBoost(false);
+}, true);
+window.addEventListener("blur", () => State.boost && Player.setBoost(false));
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Alt" || e.altKey) altAt = performance.now();

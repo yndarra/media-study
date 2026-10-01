@@ -205,6 +205,7 @@ const Timeline = {
   _onDown(e) {
     const f = currentFragment();
     if (!f) return;
+    this.playOnUp = false;
     const { x, y } = this._pos(e);
     const R = this.HIT_RADIUS;
 
@@ -245,13 +246,13 @@ const Timeline = {
     const onTriangle = y <= this.HEAD_ROW[1] + 1 && Math.abs(x - px) <= this.TRIANGLE_HALF_WIDTH;
     const frame = clamp(this.xToFrame(f, x), f.context_start_frame, f.context_end_frame - 1);
     if (!onTriangle) {
-      const wasPlaying = Player.playing;
       Player.jumpTo(frame);
-      // Кадр выбран вручную — следующий Play поставит сюда жёлтую метку.
+      // Кадр выбран вручную — Play поставит сюда жёлтую метку.
       State.manualPlayhead = true;
-      // Во время воспроизведения клик не ставит на паузу: кадр переносится,
-      // и воспроизведение продолжается с него (как клик + Play).
-      if (wasPlaying) Player.togglePlay();
+      // Клик или протяжка по дорожке: когда кнопку мыши отпустят, воспроизведение
+      // начнётся с выбранного кадра (как клик + Play). Перетаскивание красного
+      // треугольника наверху, жёлтой метки и границ внизу — без воспроизведения.
+      this.playOnUp = true;
     } else {
       Player.pauseIfPlaying();
     }
@@ -314,5 +315,9 @@ const Timeline = {
     this.dragging = null;
     if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
     if (target === "start" || target === "end") App.saveBounds(currentFragment());
+    if (this.playOnUp) {
+      this.playOnUp = false;
+      if (!Player.playing) Player.togglePlay();
+    }
   },
 };

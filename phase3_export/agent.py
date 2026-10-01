@@ -37,7 +37,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import anki
+from . import anki, rover_flags
 
 TRANSLATION_FLAGS = (1, 3)
 AGENT_TAG = "агент_перевод"
@@ -214,6 +214,9 @@ def run(data_dir: Path, project: str | None = None, batch: bool = False, only_fl
                                                       on_batch=on_batch)
             spent += cost
             print(f"{project_dir.name}: {len(new)} переводов (${cost:.4f})", flush=True)
+            if direct:
+                # Перевод видео закончен — может, закончен и этап 4 (синие флаги Rover, один раз).
+                rover_flags.mark_if_finished(project_dir, log=lambda m: print(m, flush=True))
     except Exception as error:  # сеть, баланс, модель — показать в окне "Перевод"
         save_json(data_dir / STATUS_FILE, {"state": "error", "message": str(error)[:300], "model": model,
                                            "spent": round(spent, 4), "updated": time.time()})
@@ -238,6 +241,7 @@ def poll_batches(data_dir: Path) -> int:
         if state == "completed":
             if job.get("direct"):
                 translator.apply_direct(data_dir / job["project"], new, job["cards"])
+                rover_flags.mark_if_finished(data_dir / job["project"], log=lambda m: print(m, flush=True))
             else:
                 save_json(data_dir / PROPOSALS_FILE, load_json(data_dir / PROPOSALS_FILE, []) + new)
             added += len(new)
