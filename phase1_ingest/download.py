@@ -68,7 +68,13 @@ def download_video(url: str, dest_dir: Path, max_height: int | None = None) -> d
         "continuedl": True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+        # Сначала только сведения о видео — название и длительность пишутся
+        # сразу, чтобы приложение показывало видео (с названием) уже во время
+        # скачивания; полный video_info.json перезапишется после скачивания.
+        info = ydl.extract_info(url, download=False)
+        (dest_dir / "video_info.json").write_text(
+            json.dumps(ydl.sanitize_info(info), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        info = ydl.process_ie_result(info, download=True)
 
     requested = info.get("requested_downloads") or []
     if requested and requested[0].get("filepath"):

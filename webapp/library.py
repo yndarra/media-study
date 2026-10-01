@@ -309,7 +309,10 @@ def list_projects(data_dir: Path) -> list[dict]:
     """Все видео в data/ (папки с данными видео), новые — первыми."""
     result = []
     for project_dir in Path(data_dir).iterdir():
-        if not project_dir.is_dir() or not ((project_dir / "manifest.json").exists() or (project_dir / "video_info.json").exists()):
+        # Видео, которое ещё скачивается, тоже в списке (по файлу хода этапа 1):
+        # video_info.json появляется только после скачивания.
+        markers = ("manifest.json", "video_info.json", "phase1_status.json")
+        if not project_dir.is_dir() or not any((project_dir / name).exists() for name in markers):
             continue
         item = summary(project_dir)
         item["_mtime"] = project_dir.stat().st_ctime

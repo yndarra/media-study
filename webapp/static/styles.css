@@ -1043,3 +1043,23 @@ label.check .muted { font-size: inherit; margin-left: calc(0.28em - 8px); }
 /* Поля настроек — шрифтом приложения; подпись флажка — как подписи полей. */
 #view-settings input, #view-settings select { font-family: var(--font); }
 .set-card .field .check { font-size: 13px; }
+
+/* ---- Скрытие и показ боковых панелей – с анимацией ----
+   Колонка плавно сужается до нуля (страница расширяется), а сама панель
+   уезжает за край и гаснет. Панель не исчезает (display: none), иначе нечего
+   анимировать; ширина у неё своя, чтобы текст не переносился при сжатии. */
+#shell { transition: grid-template-columns 0.32s cubic-bezier(0.22, 0.61, 0.36, 1); overflow-x: clip; }
+.sidebar { width: var(--side-width); transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s ease; }
+body.left-closed #menu { display: block; transform: translateX(calc(-100% - 2 * var(--side-gap))); opacity: 0; pointer-events: none; }
+body.right-closed #fraglist:not(.hidden) { display: flex; transform: translateX(calc(100% + 2 * var(--side-gap))); opacity: 0; pointer-events: none; }
+.panel-open { transition: opacity 0.25s ease; }
+
+/* Итог "Проверки флагов" – по середине кнопки по вертикали. */
+.page-head .head-actions { align-items: center; }
+
+/* Заголовок с кнопками ("Видео") – те же отступы, что у простого заголовка
+   ("Обработка"): у простого отступ под заголовком и над описанием
+   перекрываются (16 px), в ряду с кнопками они складывались (28 px). */
+.page-head { margin-bottom: 16px; }
+.page-head h1 { margin: 4px 0 0; }
+.page-head + .page-note { margin-top: 0; }
