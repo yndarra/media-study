@@ -49,13 +49,13 @@ STATUS_FILE = "stage3_status.json"
 
 def default_deck(project_dir: Path) -> str:
     """Claude::2. VIDEOS::<автор>::<видео>; автор — заданный в приложении или канал."""
-    from webapp.library import app_settings, group_of, video_info
+    from webapp.library import app_settings, group_of, title_of
 
     def clean(name: str) -> str:
         return " ".join(name.replace("::", " ").replace('"', "").split()) or Path(project_dir).name
 
     group = clean(group_of(project_dir))
-    title = clean(video_info(project_dir).get("title") or "")
+    title = clean(title_of(project_dir))
     deck_root = app_settings(Path(project_dir).parent)["anki_deck_root"].strip(":") or "Claude::2. VIDEOS"
     return f"{deck_root}::{group}::{title}"
 

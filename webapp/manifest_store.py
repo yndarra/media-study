@@ -212,6 +212,13 @@ class ManifestStore:
         return manifest
 
     @_locked
+    def set_anki_deck(self, deck: str) -> None:
+        """Колоду видео в Anki переименовали (phase3_export.decks) — запомнить новую."""
+        manifest = Manifest.load(self.manifest_path)
+        manifest.settings["anki_deck"] = deck
+        self.save(manifest)
+
+    @_locked
     def set_default_padding(self, seconds: float) -> None:
         """Общий запас до/после отрезка поменяли в настройках приложения."""
         manifest = Manifest.load(self.manifest_path)

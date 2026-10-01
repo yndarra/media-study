@@ -104,6 +104,10 @@ const Api = {
     });
   },
 
+  openrouterModels() {
+    return this.json("/api/openrouter/models");
+  },
+
   activity() {
     return this.json("/api/activity");
   },

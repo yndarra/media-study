@@ -446,12 +446,16 @@ const Pages = {
         ${row("Колода Anki", v.anki_deck ? escapeHtml(v.anki_deck) : "нет")}
       </table>
       <h2>Место на диске</h2>
-      <table class="stats">
-        ${row("Оригинал", formatSize(d.master))}
-        ${row("Копия для редактора, звук", `${formatSize(d.editor)}, ${formatSize(d.editor_audio)}`)}
-        ${row("Клипы для Anki", formatSize(d.clips))}
-        ${row("Всего", `<b>${formatSize(d.total)}</b>`)}
-      </table>
+      <div class="disk-grid">
+        <table class="stats">
+          ${row("Оригинал", formatSize(d.master))}
+          ${row("Копия для редактора и звук", `${formatSize(d.editor)}, ${formatSize(d.editor_audio)}`)}
+        </table>
+        <table class="stats">
+          ${row("Клипы для Anki", formatSize(d.clips))}
+          ${row("Всего", `<b>${formatSize(d.total)}</b>`)}
+        </table>
+      </div>
       <div class="modal-actions">
         <a class="big-btn" href="#/edit/${encodeURIComponent(v.id)}">Править</a>
         <span id="info-note" class="muted small"></span>
@@ -461,9 +465,11 @@ const Pages = {
       const title = body.querySelector("#title-input").value.trim();
       const group = body.querySelector("#group-input").value.trim();
       if (!title || !group) return;
-      await Api.saveProjectInfo(id, { title, group });
-      body.querySelector("#info-note").textContent = v.anki_deck
-        ? "сохранено (уже созданная колода Anki не переименовывается)" : "сохранено";
+      const saved = await Api.saveProjectInfo(id, { title, group });
+      const sync = saved.deck_sync || {};
+      body.querySelector("#info-note").textContent = !v.anki_deck ? "сохранено"
+        : sync.pending ? "сохранено; колода Anki переименуется, когда Anki откроется"
+        : "сохранено; колода Anki переименована";
     });
   },
 
@@ -520,11 +526,10 @@ const Pages = {
       <textarea class="sources" rows="4" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
       <label class="small"><input type="checkbox" class="agent" ${v.agent ? "checked" : ""}> агент сам найдёт достоверный источник (глубокий поиск)</label>
       <div class="muted small">Агента пока нет – пока по ссылкам разбирается Claude в чате.</div>
-      ${disk ? `<h2>Место на диске</h2><table class="stats">
-        ${row("Оригинал (скачанный)", formatSize(disk.master))}
-        ${row("Копия для редактора", formatSize(disk.editor))}
-        ${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
-      </table>` : ""}
+      ${disk ? `<h2>Место на диске</h2><div class="disk-grid">
+        <table class="stats">${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}</table>
+        <table class="stats">${row("Всего", `<b>${formatSize(disk.total)}</b>`)}</table>
+      </div>` : ""}
       <div class="modal-actions">
         ${v.state === "processing" ? "" : '<button class="big-btn process-go">Обработать</button>'}
         <span class="muted small note"></span>
@@ -600,7 +605,9 @@ const Pages = {
     const s = await Api.settings();
     el.innerHTML = `<h1>Настройки</h1>
       <table class="stats">
-        <tr><td>Колода Anki</td><td><input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}"><div class="muted small">карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;</div></td></tr>
+        <tr><td>Колода Anki</td><td><input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}">
+          <div class="muted small">карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются</div>
+          <div id="deck-sync" class="small"></div></td></tr>
         <tr><td>Запас до и после отрезка</td><td><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"> сек <div class="muted small">по умолчанию для всех видео; уже просмотренные фрагменты (синие, жёлтые, красные) и запас, заданный вручную, не меняются</div></td></tr>
         <tr><td>Качество скачивания</td><td><select id="set-quality">
           ${[[0, "лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
@@ -608,15 +615,50 @@ const Pages = {
           </select><div class="muted small">по умолчанию для видео, добавленных по ссылке; клипы для Anki режутся из скачанного</div></td></tr>
         <tr><td>После добавления</td><td><label><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> сразу обрабатывать (без прикрепления источников)</label></td></tr>
         <tr><td>Ключ OpenRouter</td><td><div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть">👁</button></div><div class="muted small">для агента перевода</div></td></tr>
-        <tr><td>Модель перевода</td><td><input id="set-model" class="wide" value="${escapeHtml(s.openrouter_model || "")}"><div class="muted small">идентификатор модели на OpenRouter</div></td></tr>
+        <tr><td>Модель перевода</td><td><div class="secret-row picker"><input id="set-model" class="wide" value="${escapeHtml(s.openrouter_model || "")}" placeholder="anthropic/claude-sonnet-5.5"><button id="set-model-pick" class="icon-btn" title="Выбрать из списка">▾</button>
+          <div id="model-list" class="model-list hidden"></div></div>
+          <div class="muted small">можно вписать свою (идентификатор на OpenRouter) или выбрать из списка; цена — $ за миллион токенов (вход / выход)</div></td></tr>
       </table>
       <div class="actions"><button id="settings-save" class="step-btn">Сохранить</button><span id="settings-note" class="muted small"></span></div>`;
+    const showDeckSync = (state) => {
+      const box = document.getElementById("deck-sync");
+      if (!box || !state) return;
+      const moved = (state.moved || []).map((m) => `${escapeHtml(m.to)} (${m.cards})`).join("; ");
+      box.innerHTML = state.pending
+        ? `<span class="flagged-text">${escapeHtml(state.message)} — жду подключения…</span>`
+        : moved ? `<span class="muted">переименовано: ${moved}</span>` : "";
+    };
+    showDeckSync(s.deck_sync);
+    // Пока колоды ждут Anki — проверяем, не получилось ли уже.
+    if (s.deck_sync && s.deck_sync.pending) {
+      this.refreshEvery(5000, async () => showDeckSync((await Api.settings()).deck_sync));
+    }
     document.getElementById("set-key-eye").addEventListener("click", () => {
       const input = document.getElementById("set-key");
       input.type = input.type === "password" ? "text" : "password";
     });
+    const list = document.getElementById("model-list");
+    document.getElementById("set-model-pick").addEventListener("click", async () => {
+      if (!list.classList.contains("hidden")) {
+        list.classList.add("hidden");
+        return;
+      }
+      list.classList.remove("hidden");
+      list.innerHTML = '<div class="muted small">загрузка…</div>';
+      try {
+        const models = await Api.openrouterModels();
+        list.innerHTML = models.map((m) =>
+          `<div class="model-item" data-id="${escapeHtml(m.id)}"><span>${escapeHtml(m.id)}</span><span class="muted small">$${m.prompt} / $${m.completion}</span></div>`).join("");
+        list.querySelectorAll(".model-item").forEach((item) => item.addEventListener("click", () => {
+          document.getElementById("set-model").value = item.dataset.id;
+          list.classList.add("hidden");
+        }));
+      } catch (err) {
+        list.innerHTML = `<div class="muted small">не удалось загрузить список: ${escapeHtml(err.message)}</div>`;
+      }
+    });
     document.getElementById("settings-save").addEventListener("click", async () => {
-      await Api.saveSettings({
+      const saved = await Api.saveSettings({
         anki_deck_root: document.getElementById("set-deck").value.trim(),
         context_padding_seconds: Number(document.getElementById("set-padding").value),
         download_max_height: Number(document.getElementById("set-quality").value),
@@ -625,6 +667,10 @@ const Pages = {
         openrouter_model: document.getElementById("set-model").value.trim(),
       });
       document.getElementById("settings-note").textContent = "сохранено";
+      showDeckSync(saved.deck_sync);
+      if (saved.deck_sync && saved.deck_sync.pending) {
+        this.refreshEvery(5000, async () => showDeckSync((await Api.settings()).deck_sync));
+      }
     });
   },
 };

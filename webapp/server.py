@@ -184,7 +184,8 @@ def project_summary(project_id: str):
 @app.get("/api/p/{project_id}/stats")
 def project_stats(project_id: str):
     p = project(project_id)
-    return {"summary": library.summary(p.dir), "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir)}
+    return {"summary": library.summary(p.dir), "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir),
+            "deck_sync": _deck_sync_state()}
 
 
 @app.get("/api/p/{project_id}/disk")
@@ -203,7 +204,11 @@ class ProjectSettingsRequest(BaseModel):
 
 @app.patch("/api/p/{project_id}/settings")
 def update_project_settings(project_id: str, body: ProjectSettingsRequest):
-    """Переименовать автора (группу) и/или название видео. Колода Anki, если уже создана, не переносится."""
+    """
+    Переименовать автора (группу) и/или название видео. Колода Anki
+    (<корень>::<автор>::<название>) переименовывается вслед — карточки
+    переезжают в новую колоду (если Anki закрыт — когда он откроется).
+    """
     project_dir = DATA_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="видео не найдено")
@@ -213,7 +218,8 @@ def update_project_settings(project_id: str, body: ProjectSettingsRequest):
     if body.title is not None and body.title.strip():
         settings["title"] = body.title.strip()
     library.save_project_settings(project_dir, settings)
-    return library.summary(project_dir)
+    _deck_sync_run()
+    return {**library.summary(project_dir), "deck_sync": _deck_sync_state()}
 
 
 # -- добавить и обработать (этап 1) ------------------------------------------------
@@ -328,10 +334,84 @@ def _openrouter_key() -> str:
         return ""
 
 
+# Переименование колод Anki (корень, автор, название поменялись). Если Anki
+# закрыт — повторяется в фоне раз в DECK_SYNC_RETRY секунд, пока не получится.
+DECK_SYNC_RETRY = 30
+_deck_sync = {"pending": False, "message": "", "moved": [], "lock": threading.Lock(), "retrying": False}
+
+
+def _deck_sync_run() -> dict:
+    result = _deck_sync_run_once()
+    if result["pending"] and not _deck_sync["retrying"]:
+        _deck_sync["retrying"] = True
+
+        def retry():
+            while _deck_sync["pending"]:
+                time.sleep(DECK_SYNC_RETRY)
+                try:
+                    _deck_sync_run_once()
+                except Exception as error:  # не валить сервер из фонового потока
+                    _deck_sync["message"] = f"ошибка переименования колод: {error}"
+            _deck_sync["retrying"] = False
+
+        threading.Thread(target=retry, daemon=True).start()
+    return result
+
+
+def _deck_sync_run_once() -> dict:
+    from phase3_export import decks
+
+    with _deck_sync["lock"]:
+        result = decks.sync(DATA_DIR, lambda pid, deck: project(pid).store.set_anki_deck(deck))
+        _deck_sync.update(pending=result["pending"], message=result["message"])
+        if result["moved"]:
+            _deck_sync["moved"] = result["moved"]
+    return result
+
+
+def _deck_sync_state() -> dict:
+    return {"pending": _deck_sync["pending"], "message": _deck_sync["message"], "moved": _deck_sync["moved"]}
+
+
+_models_cache: dict = {"at": 0.0, "models": []}
+# Кого показывать в списке моделей перевода (остальные можно вписать вручную).
+MODEL_PROVIDERS = ("anthropic/", "openai/", "google/", "deepseek/", "x-ai/", "qwen/", "mistralai/")
+
+
+@app.get("/api/openrouter/models")
+def openrouter_models():
+    """Модели для перевода (текстовые, без :batch), с ценой за миллион токенов; кэш на час."""
+    import urllib.request
+
+    if time.time() - _models_cache["at"] < 3600 and _models_cache["models"]:
+        return _models_cache["models"]
+    try:
+        with urllib.request.urlopen("https://openrouter.ai/api/v1/models", timeout=20) as response:
+            data = json.loads(response.read().decode("utf-8"))["data"]
+    except OSError as error:
+        raise HTTPException(status_code=503, detail=f"OpenRouter не отвечает: {error}")
+    models = []
+    for m in data:
+        mid = m.get("id", "")
+        modality = (m.get("architecture") or {}).get("output_modalities") or ["text"]
+        if not mid.startswith(MODEL_PROVIDERS) or mid.endswith(":batch") or mid.startswith("~") or "image" in mid or modality != ["text"]:
+            continue
+        pricing = m.get("pricing") or {}
+        prompt, completion = float(pricing.get("prompt") or 0) * 1e6, float(pricing.get("completion") or 0) * 1e6
+        if prompt <= 0:
+            continue
+        models.append({"id": mid, "name": m.get("name", mid), "prompt": round(prompt, 3), "completion": round(completion, 3),
+                       "created": m.get("created", 0)})
+    # Новые модели — первыми, внутри поставщика.
+    models.sort(key=lambda x: (MODEL_PROVIDERS.index(next(p for p in MODEL_PROVIDERS if x["id"].startswith(p))), -x["created"]))
+    _models_cache.update(at=time.time(), models=models)
+    return models
+
+
 @app.get("/api/settings")
 def get_settings():
     # Ключ OpenRouter отдаётся только локальной странице настроек (поле со "скрыть/показать").
-    return {**library.app_settings(DATA_DIR), "openrouter_key": _openrouter_key()}
+    return {**library.app_settings(DATA_DIR), "openrouter_key": _openrouter_key(), "deck_sync": _deck_sync_state()}
 
 
 @app.patch("/api/settings")
@@ -346,13 +426,16 @@ def update_settings(body: dict):
         path = DATA_DIR / OPENROUTER_KEY_FILE
         path.write_text(key, encoding="utf-8")
         body["openrouter_key_file"] = str(path)
-    old_padding = library.app_settings(DATA_DIR)["context_padding_seconds"]
+    old = library.app_settings(DATA_DIR)
+    old_padding = old["context_padding_seconds"]
     saved = library.save_app_settings(DATA_DIR, body)
+    if saved["anki_deck_root"] != old["anki_deck_root"]:
+        _deck_sync_run()
     if saved["context_padding_seconds"] != old_padding:
         for item in library.list_projects(DATA_DIR):
             if item["state"] == "ready":
                 project(item["id"]).store.set_default_padding(saved["context_padding_seconds"])
-    return {**saved, "openrouter_key": _openrouter_key()}
+    return {**saved, "openrouter_key": _openrouter_key(), "deck_sync": _deck_sync_state()}
 
 
 # Для оценки оставшегося времени этапа 1: когда и с какого процента начался шаг.

@@ -670,3 +670,33 @@ textarea.sources {
 #view-settings select, #view-settings input:not([type=checkbox]) {
   background: #18181d; color: inherit; border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
 }
+
+/* Таблицы (настройки, подробности): разделители во всю ширину, под последней строкой — нет. */
+table.stats { width: 100%; }
+#view-settings table.stats { max-width: 1000px; }
+table.stats tr:last-child td { border-bottom: none; }
+.disk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
+
+/* Поля ввода: одинаковая высота; текст по центру по вертикали (у шрифта Segoe UI
+   нижний вынос больше верхнего — при равных отступах текст кажется выше центра). */
+.modal input:not([type=checkbox]),
+#view-settings input:not([type=checkbox]),
+#view-settings select {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 3px 10px 1px;
+  font-size: 14px;
+  line-height: normal;
+}
+/* Кнопка-глазок — ровно по высоте поля. */
+.secret-row .icon-btn { width: 32px; height: 32px; font-size: 14px; flex: none; }
+
+/* Выбор модели перевода: список под полем. */
+.secret-row.picker { position: relative; }
+.model-list {
+  position: absolute; top: 36px; left: 0; right: 0; z-index: 20;
+  max-height: 320px; overflow: auto;
+  background: #121216; border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+}
+.model-item { display: flex; justify-content: space-between; gap: 12px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.model-item:hover { background: #1f1f25; }
