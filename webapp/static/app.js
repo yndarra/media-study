@@ -469,7 +469,7 @@ const App = {
     const unvoiced = isUnvoiced(f);
     $("unvoiced-btn").classList.toggle("on", unvoiced);
     $("unvoiced-btn").disabled = isLocked(f);
-    for (const id of ["speaker-prev", "speaker-rover", "speaker-next"]) $(id).disabled = isLocked(f);
+    for (const id of ["speaker-prev", "speaker-clear", "speaker-rover", "speaker-next"]) $(id).disabled = isLocked(f);
     $("unvoiced-btn").title = unvoiced
       ? "Отмечено: реплика не озвучена – в Anki без видео, только текст (нажмите, чтобы снять)"
       : "Отметить: реплика не озвучена – в Anki без видео, только текст";
@@ -880,20 +880,30 @@ const App = {
     if (!st || st.id !== f.id) {
       st = this.speakerState = { id: f.id, tokens: TextEditor.tokens.map((t) => ({ ...t })), offset: 0, rover: false };
     }
-    if (action === "rover") st.rover = !st.rover;
-    else {
+    if (action === "clear") {
+      // × – убрать говорящего (ещё раз – как было).
+      st.cleared = !st.cleared;
+      st.rover = false;
+      st.offset = 0;
+    } else if (action === "rover") {
+      st.rover = !st.rover;
+      st.cleared = false;
+    } else {
       st.offset += action === "prev" ? -1 : 1;
       st.rover = false;
+      st.cleared = false;
     }
     let name = null; // null – как было
-    if (st.rover) name = "Rover";
+    if (st.cleared) name = "";
+    else if (st.rover) name = "Rover";
     else if (st.offset < 0) name = this._speakersAround(-1)[-st.offset - 1] ?? null;
     else if (st.offset > 0) name = this._speakersAround(1)[st.offset - 1] ?? null;
-    if (name === null && st.offset !== 0 && !st.rover) {
+    if (name === null && st.offset !== 0 && !st.rover && !st.cleared) {
       st.offset += action === "prev" ? 1 : -1; // дальше говорящих нет – остаёмся
       return;
     }
     TextEditor.tokens = st.tokens.map((t) => ({ ...t }));
+    // name "" – убрать говорящего (каретка – в начале реплики).
     const caret = name === null ? 0 : TextEditor.setSpeaker(name);
     const el = $("cur-text");
     el.focus();
@@ -1038,7 +1048,7 @@ $("video-wrap").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   Zoom.toggle(e);
 });
-for (const [id, action] of [["speaker-prev", "prev"], ["speaker-rover", "rover"], ["speaker-next", "next"]]) {
+for (const [id, action] of [["speaker-prev", "prev"], ["speaker-clear", "clear"], ["speaker-rover", "rover"], ["speaker-next", "next"]]) {
   // mousedown не уводит фокус из текста; сам клик – смена говорящего.
   $(id).addEventListener("mousedown", (e) => e.preventDefault());
   $(id).addEventListener("click", () => App.changeSpeaker(action));
