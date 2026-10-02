@@ -223,6 +223,7 @@ const App = {
     // только для того фрагмента, где его включили.
     if (Zoom.fragmentId && Zoom.fragmentId !== f.id) Zoom.reset(true);
     if (this.speakerState && this.speakerState.id !== f.id) this.speakerState = null;
+    Names.rememberFragment(f);
     Player.jumpTo(f.algo_start_frame);
     this.renderAll(true);
     this.refreshHistory();
@@ -893,7 +894,10 @@ const App = {
     if (!f || isLocked(f)) return;
     let st = this.speakerState;
     if (!st || st.id !== f.id) {
-      st = this.speakerState = { id: f.id, tokens: TextEditor.tokens.map((t) => ({ ...t })), offset: 0, rover: false };
+      // Списки имён – один раз, по исходному тексту (раньше пересчитывались
+      // после каждого нажатия от уже подставленного имени, и ‹ перескакивал).
+      st = this.speakerState = { id: f.id, tokens: TextEditor.tokens.map((t) => ({ ...t })), offset: 0, rover: false,
+        prevNames: this._speakersAround(-1), nextNames: this._speakersAround(1) };
     }
     if (action === "clear") {
       // × – убрать говорящего (ещё раз – как было).
@@ -911,14 +915,15 @@ const App = {
     let name = null; // null – как было
     if (st.cleared) name = "";
     else if (st.rover) name = "Rover";
-    else if (st.offset < 0) name = this._speakersAround(-1)[-st.offset - 1] ?? null;
-    else if (st.offset > 0) name = this._speakersAround(1)[st.offset - 1] ?? null;
+    else if (st.offset < 0) name = st.prevNames[-st.offset - 1] ?? null;
+    else if (st.offset > 0) name = st.nextNames[st.offset - 1] ?? null;
     if (name === null && st.offset !== 0 && !st.rover && !st.cleared) {
       st.offset += action === "prev" ? 1 : -1; // дальше говорящих нет – остаёмся
       return;
     }
     TextEditor.tokens = st.tokens.map((t) => ({ ...t }));
     if (name !== null) TextEditor.setSpeaker(name); // "" – убрать говорящего
+    if (name) Names.remember(name);
     // Поле не выделяется и каретка не ставится – шорткаты продолжают работать.
     const el = $("cur-text");
     if (document.activeElement === el) el.blur();
@@ -991,6 +996,52 @@ const App = {
       localStorage.setItem("auto-play", State.autoPlay ? "on" : "off");
     } catch (_) {}
     this.updateAutoButton();
+  },
+
+  // Имя из буфера (Alt+F) или Rover (Alt+R): "prefix" – говорящим в начало
+  // фразы; "inline" – в место каретки / вместо выделенного. В поле текста –
+  // как набор (Ctrl+Z отменяет, поле остаётся в режиме правки); вне поля –
+  // правка сохраняется (Ctrl+Z – отмена правки фрагмента).
+  insertName(name, how) {
+    const f = currentFragment();
+    if (!f || isLocked(f)) return;
+    const el = $("cur-text");
+    const editing = document.activeElement === el;
+    const sel = editing ? TextEditor.selection(el) || [TextEditor.tokens.length, TextEditor.tokens.length] : null;
+    TextEditor.remember(sel ? sel[0] : 0);
+    let caret;
+    if (how === "prefix") caret = TextEditor.setSpeaker(name);
+    else caret = TextEditor.replaceRange(sel[0], sel[1], name);
+    Names.remember(name);
+    if (editing) {
+      this.onTokensChanged(caret);
+    } else {
+      f.text = TextEditor.text();
+      f.text_marks = TextEditor.marks();
+      TextEditor.render(el);
+      this._scheduleTextSave(f);
+    }
+  },
+
+  // Alt+R в поле текста: "Rover" в место каретки / вместо выделенного; ещё раз
+  // сразу – убрать вставленное (вернуть как было). Поле остаётся в правке.
+  insertRover() {
+    const f = currentFragment();
+    const el = $("cur-text");
+    if (!f || isLocked(f) || document.activeElement !== el) return;
+    if (roverInsert && roverInsert.id === f.id && roverInsert.marks === TextEditor.marks()) {
+      TextEditor.tokens = roverInsert.tokens;
+      const caret = roverInsert.caret;
+      roverInsert = null;
+      this.onTokensChanged(caret);
+      return;
+    }
+    const sel = TextEditor.selection(el) || [TextEditor.tokens.length, TextEditor.tokens.length];
+    const tokens = TextEditor.tokens.map((t) => ({ ...t }));
+    TextEditor.remember(sel[0]);
+    const caret = TextEditor.replaceRange(sel[0], sel[1], "Rover");
+    roverInsert = { id: f.id, tokens, caret: sel[0], marks: TextEditor.marks() };
+    this.onTokensChanged(caret);
   },
 
   // Остановить передачу в Anki: ещё не закодированное снова правится.
@@ -1166,6 +1217,95 @@ const HOTKEYS = {
   KeyS: () => currentFragment() && !isLocked(currentFragment()) && App.deleteSoft(),
 };
 
+// Буфер имён: 7 недавних говорящих (свежие сверху) – из открытых фрагментов
+// и вставленных. Alt+F открывает окошко (поверх видео, справа – текст не
+// закрывает): цифра 1–7 – имя; в поле текста дальше 1 – говорящим в начало
+// фразы ("Имя: ", прежний говорящий заменяется), 2 – в место каретки / вместо
+// выделенного (без двоеточия); вне поля – сразу говорящим в начало. Пока
+// окошко открыто, цифры в текст не идут; любая другая клавиша (и Ctrl) его
+// закрывает. Отмена – Ctrl+Z.
+const Names = {
+  LIMIT: 7,
+  list: [],
+  stage: null, // null | "pick" | "how"
+  chosen: null,
+
+  remember(name) {
+    if (!name) return;
+    this.list = [name, ...this.list.filter((n) => n !== name)].slice(0, this.LIMIT);
+  },
+
+  // Открыли фрагмент – его говорящие становятся самыми свежими (первая
+  // реплика – на самом верху).
+  rememberFragment(f) {
+    const names = (f.text || "").split("\n").map((l) => speakerPrefix(l)).filter(Boolean).map((p) => p.name);
+    for (const name of names.reverse()) this.remember(name);
+  },
+
+  box() {
+    let el = document.getElementById("names-box");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "names-box";
+      $("video-wrap").appendChild(el);
+    }
+    return el;
+  },
+
+  open() {
+    this.stage = "pick";
+    this.chosen = null;
+    const items = this.list.map((n, i) => `<div class="names-item"><b>${i + 1}</b> ${escapeHtml(n)}</div>`).join("")
+      || '<div class="names-empty">Имён пока нет</div>';
+    this.box().innerHTML = `<div class="names-title">Имена</div>${items}`;
+    this.box().classList.add("open");
+  },
+
+  close() {
+    this.stage = null;
+    this.box().classList.remove("open");
+  },
+
+  // Клавиша, пока окошко открыто. true – клавиша обработана здесь.
+  key(e) {
+    if (!this.stage) return false;
+    const digit = /^Digit([1-9])$/.exec(e.code) || /^Numpad([1-9])$/.exec(e.code);
+    const n = digit ? Number(digit[1]) : 0;
+    const editing = document.activeElement === $("cur-text");
+    if (this.stage === "pick" && n >= 1 && n <= this.list.length) {
+      e.preventDefault();
+      this.chosen = this.list[n - 1];
+      if (!editing) {
+        this.close();
+        App.insertName(this.chosen, "prefix");
+        return true;
+      }
+      this.stage = "how";
+      this.box().innerHTML = `<div class="names-title">${escapeHtml(this.chosen)}</div>` +
+        '<div class="names-item"><b>1</b> говорящим в начало</div><div class="names-item"><b>2</b> в место курсора</div>';
+      return true;
+    }
+    if (this.stage === "how" && (n === 1 || n === 2)) {
+      e.preventDefault();
+      const name = this.chosen;
+      this.close();
+      App.insertName(name, n === 1 ? "prefix" : "inline");
+      return true;
+    }
+    // Любая другая клавиша (в том числе Ctrl) – окошко закрывается; цифра
+    // мимо списка – не печатается.
+    this.close();
+    if (digit) {
+      e.preventDefault();
+      return true;
+    }
+    return false;
+  },
+};
+
+// Последняя вставка Alt+R (ещё раз Alt+R – убрать её): фрагмент и состояние до неё.
+let roverInsert = null;
+
 // Одиночный Ctrl (нажат и отпущен без других клавиш и кликов) внутри текста —
 // выйти из текста, как Esc: в режиме набора горячие клавиши не работают.
 // Программы переназначения клавиш (AutoHotkey и т.п.) при Alt+клавиша сами
@@ -1196,6 +1336,29 @@ document.addEventListener("keyup", (e) => {
   if (e.key === "Shift" && State.boost) Player.setBoost(false);
 }, true);
 window.addEventListener("blur", () => State.boost && Player.setBoost(false));
+
+// Буфер имён и Alt+R – раньше остальных обработчиков (работают и в поле текста).
+document.addEventListener("keydown", (e) => {
+  if (State.view !== "editor" || !State.manifest) return;
+  if (Names.stage) {
+    if (["Shift"].includes(e.key)) return;
+    if (Names.key(e)) {
+      e.stopImmediatePropagation();
+      return;
+    }
+  }
+  if (e.altKey && !e.ctrlKey && e.code === "KeyF") {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    Names.open();
+    return;
+  }
+  if (e.altKey && !e.ctrlKey && e.code === "KeyR" && document.activeElement === $("cur-text")) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    App.insertRover();
+  }
+}, true);
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Alt" || e.altKey) altAt = performance.now();
@@ -1256,6 +1419,12 @@ document.addEventListener("keyup", (e) => {
   const real = now - ctrlDownAt >= CTRL_MIN_MS && now - altAt > ALT_QUIET_MS;
   if (e.key === "Control" && ctrlAlone && real && e.target.isContentEditable && State.view === "editor") {
     e.target.blur();
+  } else if (e.key === "Control" && ctrlAlone && real && State.view === "editor" && !e.target.isContentEditable
+    && !["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName) && currentFragment() && !isLocked(currentFragment())) {
+    // Одиночный Ctrl вне поля текста – войти в поле, каретка в конец.
+    const el = $("cur-text");
+    el.focus();
+    TextEditor.setCaret(el, TextEditor.tokens.length);
   }
   if (e.key === "Control") ctrlAlone = false;
 });

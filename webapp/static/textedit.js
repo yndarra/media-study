@@ -253,6 +253,15 @@ const TextEditor = {
     return name ? this.insert(at, `${name}: `) : at;
   },
 
+  // Строка вместо выделенного [from, to) (выделенное краснеет / набранное
+  // пропадает) или в позицию каретки. Возвращает каретку после вставки.
+  replaceRange(from, to, str) {
+    if (from !== to) {
+      this.deleteRange(from, to);
+    }
+    return this.insert(from, str);
+  },
+
   // Ввод строки в позицию at. Возвращает новую позицию каретки.
   insert(at, str) {
     for (const ch of str) {
@@ -384,6 +393,16 @@ const TextEditor = {
     let [from, to] = sel;
 
     if (type.startsWith("delete")) {
+      // Backspace в начале пустой первой строки (до каретки – только удалённое):
+      // удаляется перенос строки после каретки – первая строка пропадает.
+      if (type === "deleteContentBackward" && from === to && this.tokens.slice(0, from).every((t) => t.kind === DEL)) {
+        let k = from;
+        while (k < this.tokens.length && this.tokens[k].kind === DEL) k++;
+        if (k < this.tokens.length && this.tokens[k].ch === "\n") {
+          this.deleteRange(k, k + 1);
+          return from;
+        }
+      }
       // Точный диапазон удаления (символ, слово, строка) подсказывает браузер.
       const ranges = event.getTargetRanges ? event.getTargetRanges() : [];
       if (ranges.length) {
@@ -418,7 +437,7 @@ const TextEditor = {
   // -- своя история правок -----------------------------------------------------
 
   _snapshot(caret) {
-    return { tokens: this.tokens.map((t) => ({ ch: t.ch, kind: t.kind, heard: t.heard })), caret };
+    return { tokens: this.tokens.map((t) => ({ ch: t.ch, kind: t.kind, heard: t.heard, hidden: t.hidden })), caret };
   },
 
   resetHistory() {
