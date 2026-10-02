@@ -253,7 +253,7 @@ function procState(v) {
 function cardState(v) {
   if ((v.flagged || 0) + (v.flag_interval || 0) > 0) return " has-returned";
   if (v.complete) return " complete";
-  if (v.translating || v.ready_to_translate) return " to-translate";
+  if (v.ready_to_translate) return " to-translate"; // перевод части видео карточку не красит
   if (v.ready_to_send) return " to-send"; // передача части видео карточку не красит
   return "";
 }
@@ -645,6 +645,11 @@ function autoGrow(el) {
   requestAnimationFrame(fit);
 }
 
+// Поле в одну строку на вид многострочного (автор): Enter не переносит строку.
+function singleLine(el) {
+  if (el) el.addEventListener("keydown", (e) => e.key === "Enter" && e.preventDefault());
+}
+
 // Следит за полями формы: кнопки "Сохранить"/"Отменить" активны, только когда
 // что-то изменено. snapshot() — запомнить текущее как сохранённое.
 function formWatch(root, buttons) {
@@ -796,12 +801,9 @@ function processingBar(v) {
 // Строка "Потрачено": всего и по видам (OpenRouter).
 function spentLine(costs) {
   const c = costs || {};
-  // Оценённое (перевод старых видео, сделанный до учёта расходов) – с "≈".
-  const est = new Set(c.estimated || []);
-  const money = (x, kind) => `${est.has(kind) ? "≈" : ""}$${(Number(x) || 0).toFixed(2)}`;
+  const money = (x) => `$${(Number(x) || 0).toFixed(2)}`;
   const total = (c.search || 0) + (c.translate || 0) + (c.retranslate || 0);
-  return `${est.size ? "≈" : ""}${money(total)} всего (${money(c.search, "search")} поиск, ` +
-    `${money(c.translate, "translate")} перевод, ${money(c.retranslate, "retranslate")} повторный перевод)`;
+  return `${money(total)} всего (${money(c.search)} поиск, ${money(c.translate)} перевод, ${money(c.retranslate)} повторный перевод)`;
 }
 
 // Сумма расходов видео.
@@ -992,13 +994,30 @@ const Pages = {
       if (first) cardsEnter(box);
       // Кнопка появилась – раскрывается; исчезла – плавно возвращается строка
       // "Место на диске" (при первом показе раздела – без анимации).
-      const now = new Map(items.map((v) => [v.id, !!cardAction(v)]));
+      // Исчезла – прежняя кнопка (её копия) плавно сжимается на своём месте.
+      const now = new Map(items.map((v) => [v.id, cardAction(v)]));
       if (!first && this.lastActions) {
-        for (const [vid, has] of now) {
-          if (this.lastActions.get(vid) === has) continue;
+        for (const [vid, html] of now) {
+          const was = this.lastActions.get(vid);
+          if (!!was === !!html) continue;
           const card = box.querySelector(`a.card[href="#/video/${CSS.escape(encodeURIComponent(vid))}"]`);
-          const el = card && (has ? card.querySelector(".card-action") : card.querySelector(".muted.small:last-child"));
-          if (el) el.classList.add(has ? "grow-in" : "fade-in");
+          if (!card) continue;
+          if (html) {
+            const el = card.querySelector(".card-action");
+            if (el) el.classList.add("grow-in");
+            continue;
+          }
+          const notes = card.querySelector(".muted.small:last-child");
+          if (notes) notes.classList.add("fade-in");
+          const tmp = document.createElement("div");
+          tmp.innerHTML = was;
+          const ghost = tmp.firstElementChild;
+          ghost.classList.add("shrink-out");
+          ghost.removeAttribute("data-id"); // не кнопка: не нажимается, не рисуется заново
+          ghost.disabled = true;
+          if (notes) card.insertBefore(ghost, notes);
+          else card.appendChild(ghost);
+          ghost.addEventListener("animationend", () => ghost.remove(), { once: true });
         }
       }
       this.lastActions = now;
@@ -1240,14 +1259,16 @@ const Pages = {
     // Фрагментов без перевода (переданные в Anki и ещё нет); null — Anki закрыт, неизвестно.
     // Переводить нечего (нет непереведённых карточек в Anki) или над видео идёт
     // процесс (передача в Anki) – кнопка серая.
-    const untranslated = v.sending ? 0 : v.to_translate === null ? 1 : v.to_translate || 0;
+    // Пересчитывается при каждом обновлении окна (см. refresh): перевод
+    // закончился – кнопка сразу становится серой.
+    let untranslated = v.sending ? 0 : v.to_translate === null ? 1 : v.to_translate || 0;
     // "Править": есть что править – синяя зебра; осталось только вернувшееся
     // из Anki – фиолетовая; править нечего – просто синяя.
     const editZebra = !v.awaiting ? "" : (v.flagged || 0) >= v.awaiting ? "editReturned" : "edit";
     body.innerHTML = `
       <div class="modal-head">
         <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
-        <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
+        <label>Автор <textarea id="group-input" class="grow fixed" rows="1" data-single>${escapeHtml(v.group)}</textarea></label>
       </div>
       <div class="modal-bars" data-key="modal">${videoBars({ ...v, flag_interval: 0 })}</div>
       ${videoNotes({ ...v, disk_total: undefined })}
@@ -1277,14 +1298,15 @@ const Pages = {
       </div>
       <div class="modal-actions">
         <a id="info-edit" class="step-btn primary zebra-host" href="#/edit/${encodeURIComponent(v.id)}"
-          ${editZebra ? `data-zebra="${editZebra}"` : ""}><canvas class="zebra"></canvas><span>Править</span></a>
+          ${editZebra ? `data-zebra="${editZebra}"` : ""}><canvas class="zebra"></canvas><span>Редактировать</span></a>
         <button id="info-anki" class="step-btn fold">Передать в Anki</button>
         <button id="info-translate" class="step-btn fold" title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
-        <label class="check small batch-check fold${untranslated > 0 || v.translating ? "" : " gone"}" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом <span class="muted fold">(вдвое дешевле, но дольше)</span></label>
+        <label class="batch-chip batch-check fold${untranslated > 0 || v.translating ? "" : " gone"}" title="Пакетом (OpenRouter Batch API): вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"><span class="batch-dot"></span>Пакетом</label>
         <span id="info-note" class="muted small"></span>
         <button id="info-save" class="step-btn fold">Сохранить</button>
       </div>`;
     autoGrow(body.querySelector("#title-input"));
+    singleLine(body.querySelector("#group-input"));
     animateBars(body.querySelector(".modal-bars"));
     requestAnimationFrame(() => foldLongRows(body));
     const saveButton = body.querySelector("#info-save");
@@ -1338,7 +1360,6 @@ const Pages = {
       const busy = sending || running;
       body.querySelectorAll(".modal-head input, .modal-head textarea").forEach((field) => (field.disabled = busy));
       fold(saveButton, busy);
-      fold(body.querySelector(".batch-check .muted"), busy);
       fold(ankiButton, running);
       fold(translateButton, sending);
       fold(body.querySelector(".batch-check"), sending || !(untranslated > 0 || running));
@@ -1348,6 +1369,7 @@ const Pages = {
       ankiButton.classList.toggle("send-ready", canSend && !sending);
       ankiButton.title = sending ? "" : canSend ? `Передать отредактированные: ${s.sendable}` : "Передавать нечего – отредактированное уже в Anki";
       translateButton.textContent = running ? "Остановить" : "Перевести";
+      translateButton.title = s.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Всё переданное в Anki уже переведено";
       translateButton.disabled = !running && untranslated <= 0;
       translateButton.classList.toggle("translate-ready", !running && untranslated > 0);
       note.classList.toggle("busy", busy);
@@ -1362,13 +1384,17 @@ const Pages = {
         const s = stats.summary;
         const st = state.status || {};
         sending = !!s.sending;
+        untranslated = s.sending ? 0 : s.to_translate === null ? 1 : s.to_translate || 0;
         waitingBatch = (state.batches || []).some((j) => j.project === id);
         if (waitingBatch) batchBox.checked = true; // ждёт пакетная заявка – значит, пакетом
         running = waitingBatch || (st.state === "running" && st.project === id && Date.now() / 1000 - st.updated < 300);
         render(s);
         paint(s);
         if (sending) setNote(`Передача в Anki: ${s.in_anki}/${s.active_total}`);
-        else if (st.state === "running" && st.project === id && st.total) setNote(`Перевод: ${st.done || 0}/${st.total}`);
+        else if (st.state === "running" && st.project === id && st.cards_total) {
+          setNote(`Перевод: ${Math.floor(100 * (st.cards_done || 0) / st.cards_total)}% – ${st.cards_done || 0}/${st.cards_total} ` +
+            plural(st.cards_total, "фрагмент", "фрагмента", "фрагментов"));
+        }
         else if (waitingBatch) setNote("Ждём ответ пакета");
         const box = body.querySelector(".modal-bars");
         if ((sending || running) && box) renderSmooth(box, videoBars({ ...s, flag_interval: 0 }));
@@ -1473,7 +1499,7 @@ const Pages = {
       <div class="process-form">
         <div class="modal-head">
           <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
-          <label>Автор <input id="group-input" value="${escapeHtml(v.group)}"></label>
+          <label>Автор <textarea id="group-input" class="grow fixed" rows="1" data-single>${escapeHtml(v.group)}</textarea></label>
         </div>
         ${v.audio_only ? '<div class="muted">Аудио</div>' : ""}
         ${v.state === "processing" ? processingBar(v) : ""}
@@ -1495,7 +1521,8 @@ const Pages = {
         ${v.state === "processing" ? '<span class="process-status"></span>' : ""}
         <button class="step-btn info-save">Сохранить</button>
       </div>`;
-    body.querySelectorAll("textarea.grow").forEach(autoGrow);
+    body.querySelectorAll("textarea.grow:not(.fixed)").forEach(autoGrow);
+    singleLine(body.querySelector("#group-input"));
     requestAnimationFrame(() => foldLongRows(body));
     // Градиент окна – по этапу, как у карточки в "Обработке" (рыжий – скачивание,
     // синий – шаг с процентом, жёлтый – сверка/поиск агентом/нарезка, зелёный – начало).
@@ -1676,7 +1703,7 @@ const Pages = {
     const all = data.videos;
     const ready = all.filter((v) => v.state === "ready");
     const sum = (list, f) => list.reduce((s, v) => s + (Number(f(v)) || 0), 0);
-    const money = (x, est = false) => `${est ? "≈" : ""}$${(Number(x) || 0).toFixed(2)}`;
+    const money = (x) => `$${(Number(x) || 0).toFixed(2)}`;
     const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : "0%");
     const num = (n) => Number(n || 0).toLocaleString("ru-RU");
     const edited = (v) => { const e = v.edit_bar || {}; return (e.accepted || 0) + (e.unvoiced || 0) + (e.changed || 0) + (e.deleted || 0); };
@@ -1698,8 +1725,7 @@ const Pages = {
     const costRows = byCost.map((v) =>
       `<tr><td><a href="#/${v.state === "ready" ? "video" : "process"}/${encodeURIComponent(v.id)}">${escapeHtml(v.title)}</a></td>` +
       Object.keys(kinds).map((k) => `<td>${money(v.costs[k], est(v, k))}</td>`).join("") +
-      `<td><b>${money(costTotal(v.costs), (v.costs.estimated || []).length > 0)}</b></td>` +
-      `<td>${v.cards_total ? money(costTotal(v.costs) / v.cards_total * 100, (v.costs.estimated || []).length > 0) : "–"}</td></tr>`).join("");
+      `<td><b>${money(costTotal(v.costs))}</b></td></tr>`).join("");
 
     // По авторам.
     const groups = new Map();
@@ -1716,12 +1742,11 @@ const Pages = {
     }).join("");
 
     el.innerHTML = `<h1>Статистика</h1>
-      <p class="muted small page-note">По всем видео. Расходы – OpenRouter (поиск источников и перевод); «≈» – оценка для перевода, сделанного до учёта расходов (по цене карточки у видео с точным учётом).</p>
+      <p class="muted small page-note">По всем видео. Расходы – OpenRouter (поиск источников и перевод); для видео, обработанных до учёта расходов, – оценка по средней цене.</p>
       <div class="settings-grid stats-grid">
         ${card("Расходы", [
           row("Всего", `<b>${money(spentAll, anyEst(all))}</b>`),
           ...Object.entries(kinds).map(([k, name]) => row(name, money(kindTotal(k), kindEst(k)))),
-          row("На 100 карточек", cards ? money(spentAll / cards * 100, anyEst(all)) : "–"),
         ])}
         ${card("Видео", [
           row("Готово к правке", num(ready.length)),
@@ -1742,9 +1767,9 @@ const Pages = {
           row("Вернулись на правку", num(sum(ready, (v) => v.flagged))),
         ])}
         <section class="set-card wide-card"><h2>Расходы по видео</h2>
-          <table class="stats grid-table"><tr><th>Видео</th>${Object.values(kinds).map((k) => `<th>${k}</th>`).join("")}<th>Всего</th><th>На 100 карточек</th></tr>
+          <table class="stats grid-table"><tr><th>Видео</th>${Object.values(kinds).map((k) => `<th>${k}</th>`).join("")}<th>Всего</th></tr>
           ${costRows}
-          <tr class="total-row"><td>Итого</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k), kindEst(k))}</td>`).join("")}<td><b>${money(spentAll, anyEst(all))}</b></td><td></td></tr></table>
+          <tr class="total-row"><td>Итого</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k), kindEst(k))}</td>`).join("")}<td><b>${money(spentAll)}</b></td></tr></table>
         </section>
         <section class="set-card wide-card"><h2>По авторам</h2>
           <table class="stats grid-table"><tr><th>Автор</th><th>Видео</th><th>Длительность</th><th>Отредактировано</th><th>В Anki</th><th>Переведено</th><th>Потрачено</th><th>Место</th></tr>
@@ -1920,7 +1945,8 @@ const Activity = {
       const cls = a.kind === "translate" ? "translated" : a.kind === "phase1" ? (a.step === "download" ? "downloading" : "accepted") : "ok";
       const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ${cls}" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
       return `<div class="activity-item" data-key="${escapeHtml(`${a.kind}:${a.id}`)}"><div class="activity-name">${escapeHtml(a.title)}</div>` +
-        `<div class="activity-line">${escapeHtml(cap(a.label))}${has ? `: ${Math.floor(a.percent)}%` : ""}</div>${bar}</div>`;
+        `<div class="activity-line">${escapeHtml(cap(a.label))}${has ? `: ${Math.floor(a.percent)}%` : ""}` +
+        `${a.detail ? ` – ${escapeHtml(a.detail)}` : ""}</div>${bar}</div>`;
     }).join("");
     animateBars(box, snap);
   },

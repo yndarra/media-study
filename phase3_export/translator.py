@@ -281,7 +281,8 @@ def translate_realtime(data_dir: Path, project_dir: Path, cards: list[dict], mod
     proposals, spent = [], 0.0
     groups = chunks(cards)
     for n, group in enumerate(groups, 1):
-        status(done=n - 1, total=len(groups), spent=round(spent, 4))
+        status(done=n - 1, total=len(groups), spent=round(spent, 4),
+               cards_done=sum(len(g) for g in groups[: n - 1]), cards_total=len(cards))
         terms = glossary if glossary is not None else load_glossary(data_dir, project_dir)
         # Модель изредка возвращает битый JSON (пропущена запятая и т.п.) — пачка повторяется.
         for attempt in range(MAX_ATTEMPTS):
@@ -305,7 +306,7 @@ def translate_realtime(data_dir: Path, project_dir: Path, cards: list[dict], mod
         proposals += batch_proposals
         if on_batch:
             on_batch(batch_proposals)
-    status(done=len(groups), total=len(groups), spent=round(spent, 4))
+    status(done=len(groups), total=len(groups), spent=round(spent, 4), cards_done=len(cards), cards_total=len(cards))
     return proposals, spent
 
 

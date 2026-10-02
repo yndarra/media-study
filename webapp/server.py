@@ -605,6 +605,14 @@ def _pid_alive(pid) -> bool:
     return code.value == 259  # STILL_ACTIVE
 
 
+def _fragments_word(n: int) -> str:
+    """Форма слова "фрагмент" по числу (для подписи "N/K фрагментов")."""
+    a, b = n % 100, n % 10
+    if 11 <= a <= 14 or b == 0 or b >= 5:
+        return "фрагментов"
+    return "фрагмент" if b == 1 else "фрагмента"
+
+
 def _translation_activity() -> list[dict]:
     """Перевод в "Сейчас идёт": идущий процесс агента (пачки) и заявки Batch API."""
     from phase3_export import agent
@@ -613,16 +621,21 @@ def _translation_activity() -> list[dict]:
     st = agent.load_json(DATA_DIR / agent.STATUS_FILE, {})
     if st.get("state") == "running" and _pid_alive(st.get("pid")):
         title = library.title_of(DATA_DIR / st["project"]) if st.get("project") else "карточки с флагом"
-        total, done = st.get("total") or 0, st.get("done") or 0
-        items.append({"kind": "translate", "id": st.get("project"), "title": title,
-                      # Сколько пачек уже готово: с 0 / N.
-                      "label": f"Перевод: {done}/{total}" if total else "Перевод",
-                      "percent": round(100 * done / total, 1) if total else None, "eta_seconds": None})
+        # "Перевод: 28% – N/K фрагментов": процент и счёт – по фрагментам (карточкам), не по пачкам.
+        cards_total, cards_done = st.get("cards_total") or 0, st.get("cards_done") or 0
+        items.append({"kind": "translate", "id": st.get("project"), "title": title, "label": "Перевод",
+                      "detail": f"{cards_done}/{cards_total} {_fragments_word(cards_total)}" if cards_total else "",
+                      "percent": round(100 * cards_done / cards_total, 1) if cards_total else None, "eta_seconds": None})
     for job in agent.load_json(DATA_DIR / agent.BATCH_JOBS_FILE, []):
-        total = job.get("total") or len(job.get("groups", [])) or 0
+        groups = job.get("groups", [])
+        total = job.get("total") or len(groups) or 0
+        # Заявка сообщает только число готовых запросов (пачек) – фрагменты по их доле.
+        cards_total = sum(len(g) for g in groups)
+        share = (job.get("done") or 0) / total if total else 0
         items.append({"kind": "translate", "id": job["project"], "title": library.title_of(DATA_DIR / job["project"]),
                       "label": "Перевод пакетом",
-                      "percent": round(100 * (job.get("done") or 0) / total, 1) if total else None, "eta_seconds": None})
+                      "detail": f"{round(cards_total * share)}/{cards_total} {_fragments_word(cards_total)}" if cards_total else "",
+                      "percent": round(100 * share, 1) if total else None, "eta_seconds": None})
     return items
 
 
