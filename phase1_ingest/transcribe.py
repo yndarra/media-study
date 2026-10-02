@@ -22,7 +22,10 @@ def transcribe(video_path: Path, model_size: str = "medium.en") -> dict:
     отдельным шагом, после того как известен точный fps пере-энкодированного
     источника).
     """
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    from common.resources import cpu_threads
+
+    # Не на всех ядрах — сколько оставить свободными, задаётся в настройках.
+    model = WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=cpu_threads())
     segments_iter, info = model.transcribe(
         str(video_path),
         language="en",

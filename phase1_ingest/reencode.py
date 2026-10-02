@@ -18,6 +18,8 @@ import subprocess
 
 from imageio_ffmpeg import get_ffmpeg_exe
 
+from common.resources import cpu_threads
+
 
 _FPS_RE = re.compile(r",\s*([\d.]+)\s*fps")
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)")
@@ -105,6 +107,7 @@ def make_editing_proxy(
         "-g", "1",
         "-bf", "0",
         "-x264-params", "keyint=1:min-keyint=1:scenecut=0",
+        "-threads", str(cpu_threads()),  # не на всех ядрах (настройка "свободные ядра")
         "-c:v", "libx264",
         "-crf", str(crf),
         "-preset", preset,

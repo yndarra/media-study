@@ -30,6 +30,27 @@ const Panels = {
   },
 };
 
+// Горячие клавиши редактора – список в настройках (сами клавиши – в app.js, HOTKEYS и обработчики).
+const HOTKEY_HELP = [
+  ["Пробел", "Воспроизведение / пауза"],
+  ["W", "Повтор с начала отрезка"],
+  ["Shift+Пробел / Ctrl+Пробел", "Повтор с жёлтой метки"],
+  ["Shift (зажать)", "Скорость 2×, пока держишь"],
+  ["A / D", "Предыдущий / следующий фрагмент (в рамках фильтра списка)"],
+  ["← / → / Shift+A / Shift+D", "Кадр назад / вперёд (или выделенная граница)"],
+  ["Q / E", "Начало отрезка – к концу предыдущего / конец – к началу следующего"],
+  ["Shift+Q / Shift+E / Shift+W", "Выделить начало / конец отрезка / текущий кадр"],
+  ["S", "Пометить на удаление (ещё раз – снять)"],
+  ["R", "Говорящий – Rover (ещё раз – как было)"],
+  ["Ctrl", "Войти в текст (каретка в конец) / выйти из текста"],
+  ["Esc", "Выйти из текста"],
+  ["Alt+R", "В тексте: «Rover» в место каретки или вместо выделенного (ещё раз – убрать)"],
+  ["Alt+F", "Буфер имён: цифра 1–7; в тексте затем 1 – говорящим в начало, 2 – в место каретки"],
+  ["Backspace", "В начале пустой первой строки – убрать эту строку"],
+  ["Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z", "Отменить / вернуть"],
+  ["Правая кнопка по видео", "Приблизить область (ещё раз – обратно)"],
+];
+
 // Что будет при отмене обработки на каждом шаге (готовое не переделывается).
 const PROCESS_CANCEL_EFFECT = {
   download: "Скачанная часть видео <b>сохранится</b>; при следующем запуске скачивание продолжится с места остановки.",
@@ -1615,6 +1636,13 @@ const Pages = {
             "Для видео, добавленных по ссылке; клипы для Anki режутся из скачанного")}
           <div class="field"><label class="check"><input id="set-auto" type="checkbox" ${s.auto_process ? "checked" : ""}> Сразу обрабатывать</label></div>
         </section>
+        <section class="set-card">
+          <h2>Производительность</h2>
+          ${field("set-reserve", "Свободные ядра процессора",
+            `<div class="with-unit"><input id="set-reserve" type="number" min="0" max="${Math.max(0, (navigator.hardwareConcurrency || 8) - 1)}" step="1" value="${Number(s.reserve_cpu_cores ?? 2)}"><span>из ${navigator.hardwareConcurrency || "?"}</span></div>`,
+            "Распознавание речи и перекодирование их не занимают – система не захлёбывается. Клипы для Anki кодирует видеокарта")}
+          <div class="field"><label class="check"><input id="set-priority" type="checkbox" ${s.low_priority !== false ? "checked" : ""}> Пониженный приоритет обработки</label></div>
+        </section>
         <section class="set-card wide-card">
           <h2>Агенты (OpenRouter)</h2>
           ${field("set-key", "Ключ", `<div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть"><svg viewBox="0 0 20 20"><path d="M1.8 10s3-5.5 8.2-5.5S18.2 10 18.2 10s-3 5.5-8.2 5.5S1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6"/></svg></button></div>`,
@@ -1627,6 +1655,11 @@ const Pages = {
           </div>
         </section>
       </div>
+      <section class="set-card wide-card hotkeys-card">
+        <h2>Горячие клавиши редактора</h2>
+        <div class="hotkeys">${HOTKEY_HELP.map(([keys, what]) =>
+          `<div class="hk-keys">${keys.split(" / ").map((k) => `<kbd>${escapeHtml(k)}</kbd>`).join(" / ")}</div><div class="hk-what">${escapeHtml(what)}</div>`).join("")}</div>
+      </section>
       <div class="settings-actions"><span id="settings-note" class="muted small"></span><button id="settings-cancel" class="step-btn">Отменить</button><button id="settings-save" class="step-btn primary">Сохранить</button></div>`;
     const host = (id) => el.querySelector(`.picker-host[data-for="${id}"]`);
     Picker.create(host("set-quality"), {
@@ -1684,6 +1717,8 @@ const Pages = {
         openrouter_key: document.getElementById("set-key").value.trim(),
         openrouter_model: document.getElementById("set-model").value.trim(),
         search_model: document.getElementById("set-search-model").value.trim(),
+        reserve_cpu_cores: Math.max(0, Number(document.getElementById("set-reserve").value) || 0),
+        low_priority: document.getElementById("set-priority").checked,
         });
       } catch (err) {
         let message = err.message;

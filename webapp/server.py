@@ -270,6 +270,19 @@ def update_project_settings(project_id: str, body: ProjectSettingsRequest):
 # -- добавить и обработать (этап 1) ------------------------------------------------
 
 
+def _priority_flag() -> int:
+    """Пониженный приоритет фоновых процессов (настройка low_priority)."""
+    return subprocess.BELOW_NORMAL_PRIORITY_CLASS if library.app_settings(DATA_DIR).get("low_priority", True) else 0
+
+
+def _worker_env() -> dict:
+    """Окружение фоновых процессов: сколько ядер оставить свободными (common/resources.py)."""
+    from common.resources import ENV_RESERVE
+
+    reserve = library.app_settings(DATA_DIR).get("reserve_cpu_cores", 2)
+    return {**os.environ, "PYTHONIOENCODING": "utf-8", ENV_RESERVE: str(int(reserve))}
+
+
 def _spawn_phase1(project_dir: Path, args: list[str]) -> None:
     """Этап 1 в фоне; вывод — в data/<id>/phase1.log, ход — в phase1_status.json."""
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -280,9 +293,9 @@ def _spawn_phase1(project_dir: Path, args: list[str]) -> None:
         stdout=log,
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
+        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP | _priority_flag(),
         close_fds=True,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        env=_worker_env(),
     )
     # Чтобы обработку можно было отменить из окна видео (см. cancel_process).
     (project_dir / PHASE1_PID_FILE).write_text(str(process.pid), encoding="utf-8")
@@ -630,7 +643,7 @@ def _spawn_worker() -> None:
         stdout=log,
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
+        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP | _priority_flag(),
         close_fds=True,
     )
 
@@ -939,8 +952,8 @@ def agent_run(body: AgentRunRequest):
         threading.Timer(5, _ensure_batch_poller).start()  # заявка уйдёт — начать ждать ответ
     subprocess.Popen(
         args, cwd=str(REPO_DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP | _priority_flag(), close_fds=True,
+        env=_worker_env(),
     )
     return {"started": True}
 

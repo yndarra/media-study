@@ -1509,3 +1509,11 @@ body.frag-edit-changed { background: var(--bg); }
 .names-item { padding: 2px 0; white-space: nowrap; }
 .names-item b { display: inline-block; width: 16px; color: #79b8ff; }
 .names-empty { color: var(--dim); }
+
+/* Горячие клавиши в настройках: клавиши слева, что делают – справа. */
+.hotkeys { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; font-size: 13px; padding-bottom: 12px; }
+.hk-keys { white-space: nowrap; color: var(--dim); }
+.hk-what { color: var(--text); }
+kbd { display: inline-block; min-width: 14px; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 5px; background: #18181d; color: var(--text); font: 12px var(--font); text-align: center; }
+.hotkeys-card { max-width: 1080px; box-sizing: border-box; margin-top: 14px; }
