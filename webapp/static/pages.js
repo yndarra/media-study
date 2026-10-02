@@ -256,6 +256,7 @@ function cardState(v) {
   if (v.complete) return " complete";
   if (v.ready_to_translate) return " to-translate"; // перевод части видео карточку не красит
   if (v.ready_to_send) return " to-send"; // передача части видео карточку не красит
+  if (v.awaiting && (v.reviewed || 0) > 0) return " started";
   return "";
 }
 
@@ -698,11 +699,10 @@ const Modal = {
     const overlay = document.createElement("div");
     overlay.id = "modal-overlay";
     overlay.className = "modal-overlay";
-    overlay.innerHTML = `<div class="modal"><button class="modal-close" title="Закрыть (Esc)">×</button><div class="modal-body">${html}</div></div>`;
+    overlay.innerHTML = `<div class="modal"><div class="modal-body">${html}</div></div>`;
     overlay.addEventListener("mousedown", (e) => {
       if (e.target === overlay) this.requestClose();
     });
-    overlay.querySelector(".modal-close").addEventListener("click", () => this.requestClose());
     document.body.appendChild(overlay);
     this.animateHeight(overlay.querySelector(".modal"), overlay.querySelector(".modal-body"));
     this.onClose = onClose || null;
@@ -1242,7 +1242,7 @@ const Pages = {
     // Состояние меняется (передача закончилась или её остановили) – градиент
     // окна вслед за ним (раньше оставался прежним до закрытия окна).
     const paint = (sv) => {
-      modalBox.classList.remove("complete", "to-translate", "to-send", "has-returned");
+      modalBox.classList.remove("complete", "to-translate", "to-send", "has-returned", "started");
       const state = cardState(sv).trim();
       if (state) modalBox.classList.add(state);
     };
@@ -1299,7 +1299,7 @@ const Pages = {
         </table>
       </div>
       <div class="modal-actions">
-        <a id="info-edit" class="step-btn primary zebra-host" href="#/edit/${encodeURIComponent(v.id)}"
+        <a id="info-edit" class="step-btn${editZebra ? " primary" : ""} zebra-host" href="#/edit/${encodeURIComponent(v.id)}"
           ${editZebra ? `data-zebra="${editZebra}"` : ""}><canvas class="zebra"></canvas><span>Редактировать</span></a>
         <button id="info-anki" class="step-btn fold">Передать в Anki</button>
         <button id="info-translate" class="step-btn fold" title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
