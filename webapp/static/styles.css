@@ -1618,10 +1618,10 @@ table.grid-table tr.total-row td { border-top: 1px solid #34343c; font-weight: 6
 
 /* Начатое видео (что-то отредактировано, но не всё) – светло-серый градиент. */
 a.card.started, .modal.started {
-  background: radial-gradient(120% 160% at 0% 0%, rgba(225, 225, 235, 0.12), transparent 55%), linear-gradient(160deg, #1b1b20, #111115 70%);
-  border-color: rgba(225, 225, 235, 0.16);
+  background: radial-gradient(120% 160% at 0% 0%, rgba(225, 225, 235, 0.08), transparent 55%), linear-gradient(160deg, #18181c, #111115 70%);
+  border-color: rgba(225, 225, 235, 0.09);
 }
-a.card.started:hover { border-color: rgba(220, 220, 230, 0.2); }
+a.card.started:hover { border-color: rgba(225, 225, 235, 0.16); }
 
 /* "Пакетом" – размером и видом как кнопка (высота, рамка, скругление), с точкой;
    включён – розовая подсветка. */
