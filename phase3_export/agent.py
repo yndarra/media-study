@@ -35,6 +35,7 @@ import os
 import re
 import sys
 import time
+from common.text_clean import normalize_dashes
 from pathlib import Path
 
 from . import anki
@@ -104,7 +105,7 @@ def front_text(front_html: str) -> str:
 # -- оборот по правилам -----------------------------------------------------------
 
 def _clean(text) -> str:
-    return (str(text or "")).replace("—", "–").strip()
+    return normalize_dashes(str(text or "")).strip()
 
 
 def render_back(answer: dict) -> str:
@@ -307,7 +308,7 @@ def apply(data_dir: Path, approve: list[int], reject: list[int], edits: dict | N
             continue
         # Этап 4 (перевод) — вся карточка: длинное тире "—" -> короткое "–" (и лицо, и оборот).
         anki.invoke("updateNoteFields", note={"id": p["note_id"], "fields": {
-            anki.FRONT_FIELD: p["front_new"].replace("—", "–"), anki.BACK_FIELD: p["back_new"].replace("—", "–")}})
+            anki.FRONT_FIELD: normalize_dashes(p["front_new"]), anki.BACK_FIELD: normalize_dashes(p["back_new"])}})
         anki.invoke("addTags", notes=[p["note_id"]], tags=AGENT_TAG)
         if p.get("flag"):  # перевод по флагу: зелёный снимается, красный -> оранжевый
             new_flag = 2 if p["flag"] == 1 else 0

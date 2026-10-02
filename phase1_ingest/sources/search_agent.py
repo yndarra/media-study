@@ -424,5 +424,9 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
     save_project_settings(project_dir, settings)
     if not used:
         return False
+    # Чистка строк (невидимые символы, шаблон имени героя с вики и т.п.).
+    from common.text_clean import clean_text
+
+    lines = [clean_text(line) for line in lines if clean_text(line)]
     (project_dir / "transcript.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return True

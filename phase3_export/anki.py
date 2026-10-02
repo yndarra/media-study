@@ -233,6 +233,48 @@ def split_speakers(text: str, known: set[str]) -> tuple[str, list[str]]:
     return clean, speakers
 
 
+def speaker_groups(text: str, known: set[str]) -> list[tuple[str | None, str]]:
+    """Реплики фрагмента по порядку: [(говорящий или None, текст реплики)] — как строки карточки."""
+    if not known:
+        return [(None, line) for line in text.split("\n") if line.strip()]
+    names = "|".join(re.escape(n) for n in sorted(known, key=len, reverse=True))
+    marker = re.compile(rf"(?:^|(?<=\s))({names}):\s*")
+    groups: list[list] = []
+    for line in text.split("\n"):
+        pos = 0
+        for match in marker.finditer(line):
+            before = line[pos:match.start()].strip()
+            if before:
+                if not groups:
+                    groups.append([None, []])
+                groups[-1][1].append(before)
+            name = match.group(1)
+            if not groups or groups[-1][0] != name:
+                groups.append([name, []])
+            pos = match.end()
+        rest = line[pos:].strip()
+        if rest:
+            if not groups:
+                groups.append([None, []])
+            groups[-1][1].append(rest)
+    return [(name, " ".join(parts)) for name, parts in groups if parts]
+
+
+def text_from_card(card_text: str, fragment_text: str, known: set[str]) -> str:
+    """
+    Текст фрагмента из (поправленного в Anki) текста карточки: строки карточки —
+    реплики, имена говорящих берутся из фрагмента ("Имя: реплика"). Число
+    строк изменилось — имена по порядку, лишним строкам — без имени.
+    """
+    groups = speaker_groups(fragment_text, known)
+    lines = [line.strip() for line in card_text.split("\n") if line.strip()]
+    out = []
+    for k, line in enumerate(lines):
+        name = groups[k][0] if k < len(groups) else None
+        out.append(f"{name}: {line}" if name else line)
+    return "\n".join(out)
+
+
 def split_speakers_ex(text: str, known: set[str], labeled: set[str] | None = None) -> tuple[str, list[str], bool]:
     """
     Текст карточки без имён говорящих и сами говорящие (для меток).

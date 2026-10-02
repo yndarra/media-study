@@ -14,6 +14,8 @@ Starlette у него из коробки поддерживает HTTP Range (2
 это и даёт браузерному <video> нормальную перемотку.
 """
 from pathlib import Path
+import html
+import re
 import json
 import os
 import subprocess
@@ -1003,7 +1005,47 @@ def anki_return(body: ReturnRequest):
         returned.setdefault(item.project, []).append(item.fragment_id)
     for project_id, fragment_ids in returned.items():
         project(project_id).store.return_from_stage3(fragment_ids)
+        _pull_texts_from_anki(project_id, fragment_ids)
     return {"returned": {k: len(v) for k, v in returned.items()}}
+
+
+def _pull_texts_from_anki(project_id: str, fragment_ids: list[str]) -> int:
+    """
+    Вернувшиеся из Anki фрагменты: если текст карточки поправили в Anki, он
+    становится текстом фрагмента (с именами говорящих: "Имя: реплика").
+    Возвращает, у скольких текст поменялся.
+    """
+    from phase3_export import anki
+    from phase3_export.worker import known_speakers
+
+    p = project(project_id)
+    manifest = p.store.load()
+    known = known_speakers(p.dir, manifest)
+    entries = {e["fragment_id"]: e for e in library.export_index(p.dir) if e.get("anki_note_id")}
+    wanted = [fid for fid in fragment_ids if fid in entries]
+    if not wanted:
+        return 0
+    try:
+        notes = {n["noteId"]: n for n in anki.invoke("notesInfo", notes=[entries[fid]["anki_note_id"] for fid in wanted])}
+    except (anki.AnkiUnavailable, RuntimeError):
+        return 0
+    changed = 0
+    for fid in wanted:
+        note = notes.get(entries[fid]["anki_note_id"])
+        fragment = next((f for f in manifest.fragments if f.id == fid), None)
+        if not note or fragment is None:
+            continue
+        front = note["fields"][anki.FRONT_FIELD]["value"]
+        card = html.unescape(re.sub(r"\[sound:[^\]]*\]", "", front).replace("<br>", "\n"))
+        card = re.sub(r"<[^>]+>", "", card).strip()
+        expected = anki.card_content(fragment.text, known)[0]
+        if not card or card.strip() == expected.strip():
+            continue
+        new_text = anki.text_from_card(card, fragment.text, known)
+        if new_text != fragment.text:
+            p.store.update_fragment(fid, text=new_text)
+            changed += 1
+    return changed
 
 
 # -- редактор одного видео ------------------------------------------------------------

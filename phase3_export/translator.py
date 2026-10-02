@@ -27,6 +27,7 @@ import json
 import re
 import time
 import urllib.request
+from common.text_clean import normalize_dashes
 from datetime import datetime
 from pathlib import Path
 
@@ -84,7 +85,7 @@ def merge_glossary(data_dir: Path, project_dir: Path, new_terms: list) -> None:
     glossary = load_json(path, {})
     for item in new_terms or []:
         if isinstance(item, dict) and item.get("term") and item["term"] not in glossary:
-            glossary[item["term"]] = str(item.get("translation") or "").replace("—", "–")
+            glossary[item["term"]] = normalize_dashes(str(item.get("translation") or ""))
     path.parent.mkdir(parents=True, exist_ok=True)
     save_json(path, glossary)
 
@@ -445,7 +446,7 @@ def apply_direct(project_dir: Path, proposals: list[dict], cards: list[dict]) ->
         stored.append({**card, "back": p["back_new"], "model": p["model"]})
         if card["note_id"]:
             anki.invoke("updateNoteFields", note={"id": card["note_id"], "fields": {
-                anki.FRONT_FIELD: card["front_old"].replace("—", "–"), anki.BACK_FIELD: p["back_new"].replace("—", "–")}})
+                anki.FRONT_FIELD: normalize_dashes(card["front_old"]), anki.BACK_FIELD: normalize_dashes(p["back_new"])}})
             anki.invoke("addTags", notes=[card["note_id"]], tags=TRANSLATED_TAG)
     store_translations(project_dir, stored)
     return len(stored)
