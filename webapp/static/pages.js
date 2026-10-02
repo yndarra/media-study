@@ -58,6 +58,7 @@ const PROCESS_CANCEL_EFFECT = {
   transcribe: "Видео и копия для редактора <b>сохранятся</b>. Распознавание речи не готово – при следующем запуске начнётся <b>заново</b> (это самый долгий шаг).",
   agent_search: "Видео, копия и распознанная речь <b>сохранятся</b>. Поиск текста для сверки начнётся <b>заново</b> (агент – снова платный запрос).",
   search: "Видео, копия и распознанная речь <b>сохранятся</b>. Сверка с текстом начнётся <b>заново</b>.",
+  ai_fix: "Видео, копия, распознанная речь и текст для сверки <b>сохранятся</b>. Нарезка и ИИ-доводка текста на слух начнутся <b>заново</b> (доводка – снова платный запрос, недорогой).",
   segment: "Видео, копия, распознанная речь и текст для сверки <b>сохранятся</b>. Нарезка на фразы начнётся <b>заново</b> (это быстро).",
   assets: "Всё <b>сохранится</b>, кроме звуковой дорожки для редактора – её построение начнётся <b>заново</b> (это быстро).",
   default: "Готовые шаги <b>сохранятся</b>, незаконченный начнётся <b>заново</b> при следующем запуске.",
@@ -241,7 +242,7 @@ function procState(v) {
   if (v.state !== "processing") return "";
   if (v.step === "download") return " proc-red";
   if (v.percent !== null && v.percent !== undefined) return " proc-blue";
-  if (["search", "agent_search", "segment", "assets"].includes(v.step)) return " proc-yellow";
+  if (["search", "agent_search", "ai_fix", "segment", "assets"].includes(v.step)) return " proc-yellow";
   return " proc-green";
 }
 
@@ -802,12 +803,13 @@ function processingBar(v) {
 function spentLine(costs) {
   const c = costs || {};
   const money = (x) => `$${(Number(x) || 0).toFixed(2)}`;
-  const total = (c.search || 0) + (c.translate || 0) + (c.retranslate || 0);
-  return `${money(total)} всего (${money(c.search)} поиск, ${money(c.translate)} перевод, ${money(c.retranslate)} повторный перевод)`;
+  const total = costTotal(c);
+  return `${money(total)} всего (${money(c.search)} поиск, ` + (c.fix ? `${money(c.fix)} доводка ИИ, ` : "") +
+    `${money(c.translate)} перевод, ${money(c.retranslate)} повторный перевод)`;
 }
 
 // Сумма расходов видео.
-const costTotal = (c) => (c && ((c.search || 0) + (c.translate || 0) + (c.retranslate || 0))) || 0;
+const costTotal = (c) => (c && ((c.search || 0) + (c.fix || 0) + (c.translate || 0) + (c.retranslate || 0))) || 0;
 
 // Форма слова по числу: plural(n, "фрагмент", "фрагмента", "фрагментов").
 function plural(n, one, few, many) {
@@ -1708,7 +1710,7 @@ const Pages = {
     const num = (n) => Number(n || 0).toLocaleString("ru-RU");
     const edited = (v) => { const e = v.edit_bar || {}; return (e.accepted || 0) + (e.unvoiced || 0) + (e.changed || 0) + (e.deleted || 0); };
     const anyEst = (list) => list.some((v) => (v.costs.estimated || []).length);
-    const kinds = { search: "Поиск источников", translate: "Перевод", retranslate: "Повторный перевод" };
+    const kinds = { search: "Поиск источников", fix: "Доводка ИИ", translate: "Перевод", retranslate: "Повторный перевод" };
     const kindTotal = (k, list = all) => sum(list, (v) => v.costs[k]);
     const kindEst = (k, list = all) => list.some((v) => (v.costs.estimated || []).includes(k));
     const spentAll = sum(all, (v) => costTotal(v.costs));

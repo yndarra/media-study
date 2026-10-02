@@ -193,6 +193,15 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
         boundary_cache=raw_dir / "sat_boundary_probs.json",
         unvoiced=unvoiced_speakers(project_dir),
     )
+    # Фрагменты "на слух" (реплики не нашлось в источнике) – ИИ-доводка имён,
+    # терминов и ошибок распознавания по контексту (ai_fix.py). Только когда
+    # включён агент (это платный запрос, как и поиск).
+    if project_settings(project_dir).get("agent") in ("search", "deep"):
+        from .ai_fix import fix_unmatched
+
+        report(project_dir, "ai_fix", None, force=True)
+        fix_unmatched(project_dir, manifest, log=lambda m: print(m, flush=True))
+        report(project_dir, "segment", None, force=True)
     # Флажок "Без пустых фрагментов" (окно видео в "Обработке"): фрагменты без
     # текста — музыка, шумы, звуки природы — в нарезку не попадают.
     if project_settings(project_dir).get("no_gaps"):
@@ -202,6 +211,14 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
     report(project_dir, "assets", None, force=True)
     build_waveform(proxy_path, project_dir / "waveform.bin", fps, total_frames)
     build_audio_track(master, project_dir / "audio.pcm")
+    # Конец фразы на стыках без паузы – по звуку (end_refine.py): whisper
+    # обрезает последнее слово, граница выходила левее нужного.
+    from .end_refine import refine_touching_ends
+    from .segment import flatten_words
+
+    refine_touching_ends(manifest, project_dir / "audio.pcm",
+                         {w["id"]: w for w in flatten_words(whisper_transcript) if w.get("id")},
+                         log=lambda m: print(m, flush=True))
     # manifest.json — последним: по нему библиотека считает видео готовым.
     manifest.save(project_dir / "manifest.json")
     report(project_dir, "done", 100, force=True)

@@ -50,7 +50,8 @@ COMMON_PROMPT = """Ты – агент поиска текстовых исто�
 - страницы, где выложен полный текст диалогов именно этого контента (этого акта, главы, квеста, эпизода) – реплики подряд, в формате «Имя: реплика»;
 - лучше всего: архивы сценариев (в т.ч. на Notion), страницы «Transcript»/«Script»/«Dialogue» на фан-вики, официальные публикации; хуже – пересказы, гайды без реплик, субтитры без имён (такие не бери);
 - давай ПРЯМЫЕ ссылки на страницы с текстом (страницу главы/квеста или базу Notion, где лежат страницы сцен), а не на поисковую выдачу и не на главную сайта;
-- проверяй, что источник покрывает реплики из видео (сравни с примерами реплик ниже).
+- проверяй, что источник покрывает реплики из видео (сравни с примерами реплик ниже);
+- ищи настойчиво: сделай несколько разных запросов (название акта/квеста, название главы, точные цитаты из реплик в кавычках); архивы сценариев часто называют страницы по главам («Chapter 1: …»), а не по актам или названию видео – открывай оглавления и подстраницы.
 
 Ответ – только JSON:
 {"sources": [{"url": "...", "title": "...", "why": "почему это тот самый текст", "covers": "что именно покрывает (главы/сцены)"}], "note": "кратко: что нашёл, чего не хватает"}
@@ -58,12 +59,20 @@ COMMON_PROMPT = """Ты – агент поиска текстовых исто�
 
 SEARCH_PROMPT = """РЕЖИМ: самостоятельный поиск. Ссылок от пользователя нет – найди достоверные источники сам по названию видео, каналу и репликам."""
 
-GAP_PROMPT = """РЕЖИМ: поиск недостающих реплик. Основной источник уже найден, но в нём нет части реплик, которые звучат в видео (их список ниже – распознанная речь, с ошибками распознавания). Найди страницы, где эти реплики есть с именами говорящих: другие транскрипты этой же главы/квеста, страницы отдельных сцен, вики персонажей, обсуждения с цитатами. Основной источник повторно не возвращай."""
+GAP_PROMPT = """РЕЖИМ: поиск недостающих реплик. Основной источник уже найден, но в нём нет части реплик, которые звучат в видео (их список ниже – распознанная речь, с ошибками распознавания). Эти реплики ТОЧНО где-то опубликованы – не сдавайся и не отвечай «не нашёл», пока не попробовал всё:
+- ищи по точным цитатам в кавычках (по 2–3 разные цитаты; убирай явные ошибки распознавания, ищи по уцелевшим словам);
+- в архивах сценариев (Notion и т.п.) этот кусок может лежать на странице с другим названием: соседняя глава, «Chapter N: …», интерлюдия, побочный/компаньон-квест, сюжетное событие – открывай оглавление архива и подстраницы;
+- страницы отдельных сцен, локаций, персонажей (раздел Dialogue/Quotes), страницы событий, другие вики по этой игре/шоу;
+- давай ПРЯМЫЕ ссылки на страницы, где есть эти реплики.
+Ссылки из списка «уже проверено» не возвращай – там этих реплик нет."""
 
 # Пропуски основного источника: сколько ненайденных реплик речи (каждая не
 # короче MIN_PAIRS пар слов) стоит отдельного запроса агенту.
 GAP_QUERY_MIN = 3
 GAP_QUERY_SAMPLES = 15
+# Сколько раз подряд спрашивать агента про оставшиеся пропуски: каждый раунд –
+# другие цитаты и список уже проверенных ссылок; раунд ничего не добавил – хватит.
+GAP_ROUNDS = 4
 
 DEEP_PROMPT = """РЕЖИМ: глубокий поиск. Пользователь дал ссылки – это отправная точка (часто это сборник сценариев, где лежит и этот контент, и много другого). Твоя задача:
 1. разобраться, что по этим ссылкам: какие страницы/подстраницы/главы соответствуют ИМЕННО этому видео (по названию акта/квеста и по репликам);
@@ -112,9 +121,15 @@ class _TextBlocks(HTMLParser):
 
 
 def _dialogue(lines: list[str]) -> list[str]:
+    from common.text_clean import clean_text
+
     result = []
     for text in lines:
-        parsed = notion.dialogue_line(text)
+        # Сначала чистка: реплики героя на вики записаны шаблоном
+        # "(RoverThe player's chosen name for Rover): …" – до чистки строка
+        # начинается со скобки и не узнавалась как реплика (терялись все
+        # реплики Ровера).
+        parsed = notion.dialogue_line(clean_text(text))
         if parsed:
             result.append(f"{parsed[0]}: {parsed[1]}")
     return result
@@ -316,7 +331,8 @@ def ask_agent(data_dir: Path, project_dir: Path, mode: str, links: list[str], wh
     if mode == "deep":
         user += "Ссылки пользователя:\n" + ("\n".join(links) or "—") + "\n\n"
     if missing:
-        user += "Основной источник: " + "\n".join(links) + "\n\nРеплики видео, которых в нём нет:\n" + "\n".join(missing)
+        user += ("Основной источник: " + links[0] + "\n\nУже проверено (этих реплик там нет):\n" + "\n".join(links) +
+                 "\n\nРеплики видео, которых ни в одном источнике нет:\n" + "\n".join(missing))
     else:
         user += "Примеры реплик из распознанной речи видео (с ошибками распознавания):\n" + _samples(whisper_transcript)
     body = {
@@ -324,7 +340,7 @@ def ask_agent(data_dir: Path, project_dir: Path, mode: str, links: list[str], wh
         "messages": [{"role": "system", "content": COMMON_PROMPT + "\n\n" + (
             GAP_PROMPT if missing else DEEP_PROMPT if mode == "deep" else SEARCH_PROMPT)},
                      {"role": "user", "content": user}],
-        "plugins": [{"id": "web", "max_results": 8}],
+        "plugins": [{"id": "web", "max_results": 10}],
         "temperature": 0.2,
         "max_tokens": 2000,
         "usage": {"include": True},
@@ -390,20 +406,28 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
         if added:
             log(f"  Недостающие реплики из других источников: {added}")
             used += [c for c in checked[1:] if any(line in lines for line in c["lines"])]
-        # Всё ещё много не найдено, и агент включён — спросить его именно про них.
-        missing = missing_segments(lines, whisper_transcript)
-        if len(missing) >= GAP_QUERY_MIN and mode in ("deep", "search"):
-            quotes = [seg["text"] for seg in missing[:GAP_QUERY_SAMPLES]]
-            log(f"  Не найдено реплик: {len(missing)} — агент ищет их отдельно…")
+        # Всё ещё много не найдено, и агент включён — спрашивать его именно про
+        # них, несколько раундов (каждый раз – другие цитаты и уже проверенные
+        # ссылки), пока раунды что-то добавляют.
+        idle = 0
+        for round_no in range(1, GAP_ROUNDS + 1):
+            missing = missing_segments(lines, whisper_transcript)
+            if len(missing) < GAP_QUERY_MIN or mode not in ("deep", "search"):
+                break
+            # Цитаты – вразброс по всему видео, каждый раунд со сдвигом.
+            step = max(1, len(missing) // GAP_QUERY_SAMPLES)
+            quotes = [seg["text"] for seg in missing[round_no - 1::step]][:GAP_QUERY_SAMPLES]
+            log(f"  Не найдено реплик: {len(missing)} — агент ищет их отдельно (раунд {round_no})…")
             try:
                 report(project_dir, "agent_search", None, force=True)
-                gap_answer = ask_agent(data_dir, project_dir, mode, [checked[0]["url"]], whisper_transcript, missing=quotes)
+                tried = [checked[0]["url"]] + [c["url"] for c in checked[1:]]
+                gap_answer = ask_agent(data_dir, project_dir, mode, tried, whisper_transcript, missing=quotes)
                 report(project_dir, "search", None, force=True)
                 add_cost(project_dir, "search", gap_answer.get("cost", 0))
                 log(f"  Агент: {gap_answer.get('note', '')} (${gap_answer.get('cost', 0):.4f})")
                 extra = []
                 for source in gap_answer.get("sources", [])[:MAX_SOURCES]:
-                    if not source.get("url") or any(source["url"] == c["url"] for c in checked):
+                    if not source.get("url") or any(source["url"] == c["url"] for c in checked + extra):
                         continue
                     try:
                         extra_lines = fetch_lines(source["url"], log)
@@ -415,8 +439,13 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
                 log(f"  Ещё добавлено из найденного агентом: {added}")
                 checked += extra
                 used += [c for c in extra if any(line in lines for line in c["lines"])]
+                # Два раунда подряд впустую (другие цитаты тоже не помогли) – хватит.
+                idle = 0 if added else idle + 1
+                if idle >= 2:
+                    break
             except Exception as error:
                 log(f"  Агент не смог: {error}")
+                break
     settings["found_sources"] = [{"url": c["url"], "title": c.get("title", ""), "coverage": round(c["coverage"], 3),
                                   "used": c in used} for c in checked]
     if note:

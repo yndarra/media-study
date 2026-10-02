@@ -203,7 +203,9 @@ def dialogue_line(text: str) -> tuple[str, str] | None:
         return None
     speaker, line = match.group(1).strip(), match.group(2).strip()
     # Имя — короткое и с заглавной буквы; иначе это просто текст с двоеточием.
-    if not speaker or not speaker[0].isupper() or len(speaker.split()) > 4:
+    # "???" — ещё не представившийся персонаж (так его показывает игра и вики).
+    unknown = bool(re.fullmatch(r"\?{2,3}", speaker))
+    if not speaker or not (speaker[0].isupper() or unknown) or len(speaker.split()) > 4:
         return None
     line = line.strip(_QUOTES).strip()
     return (speaker, line) if line else None
