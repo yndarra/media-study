@@ -77,6 +77,14 @@ def assemble_manifest(
     entries = segment_mod.fill_full_coverage(raw_segments, fps, total_frames, min_filler, start_frame=start_frame)
     if source_words:
         source_text_mod.assign_source_words(entries, words, source_words, unvoiced)
+        # Реплики разных говорящих — в разные фрагменты; фраза, оборванная на
+        # запятой, — вместе со своим продолжением (см. reshape.py).
+        from . import reshape
+
+        entries = reshape.split_by_speakers(entries, words, fps, source_text_mod._join)
+        entries = reshape.merge_comma_tails(entries, fps, reshape.proper_words(source_words))
+        for entry in entries:
+            entry.pop("_words", None)
     # Каждая строка карточки — законченная фраза: заглавная, знак конца,
     # парные кавычки (см. common/text_polish.py).
     from common.text_polish import polish_text

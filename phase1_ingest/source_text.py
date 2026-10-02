@@ -320,6 +320,8 @@ def assign_source_words(entries: list[dict], asr_words: list[dict], source_words
         entry_index = entry_of_asr[asr_index]
         if entry_index is not None:
             words_per_entry.setdefault(entry_index, []).append(source_words[src_index])
+            # (слово источника, индекс слова речи) — для деления по говорящим (reshape.py).
+            entries[entry_index].setdefault("_words", []).append((source_words[src_index], asr_index))
 
     for entry_index, entry in enumerate(entries):
         asr_ids = [asr_index_by_id[i] for i in entry.get("source_segment_ids", []) if i in asr_index_by_id]
