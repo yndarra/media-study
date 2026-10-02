@@ -723,10 +723,16 @@ def queue_stage3(project_id: str, body: QueueRequest):
 
     p = project(project_id)
     if not body.through_fragment_id:
-        fragments = p.store.load().fragments
-        if not fragments:
-            raise HTTPException(status_code=404, detail="в видео нет фрагментов")
-        body.through_fragment_id = fragments[-1].id
+        # Кнопка в списке видео / в окне видео: передаётся только
+        # отредактированное – до скрытой метки (последнего изменённого
+        # фрагмента). Раньше передавалось всё видео, и не тронутые фрагменты
+        # считались "отредактированными" (полоса прыгала на 100%, карточка
+        # синела раньше времени).
+        manifest = p.store.load()
+        last = library.last_touched_index(manifest)
+        if last < 0:
+            raise HTTPException(status_code=400, detail="Передавать нечего – ещё ничего не отредактировано")
+        body.through_fragment_id = manifest.fragments[last].id
     try:
         manifest, queued = p.store.queue_for_stage3(body.through_fragment_id, default_deck(p.dir))
     except KeyError as error:
@@ -788,6 +794,26 @@ def _disk_total(project_id: str) -> int:
     total = library.disk_usage(DATA_DIR / project_id)["total"]
     _disk_cache[project_id] = (time.time(), total)
     return total
+
+
+@app.get("/api/stats")
+def overall_stats():
+    """
+    Раздел "Статистика": по каждому видео – длительность, правка, Anki,
+    перевод, место на диске и расходы OpenRouter (страница сама считает итоги).
+    """
+    _anki_flag_counts()  # обновить кэш "переведено" (не чаще раза в минуту)
+    translated = _anki_flags_cache.get("translated", {})
+    videos = []
+    for item in library.list_projects(DATA_DIR):
+        row = {key: item.get(key) for key in (
+            "id", "title", "group", "state", "duration", "fragments_total", "active_total", "cards_total",
+            "reviewed", "edit_bar", "in_anki", "exported", "deleted_total", "bar_total", "flagged")}
+        row["costs"] = library.project_settings(DATA_DIR / item["id"]).get("costs", {})
+        row["translated"] = translated.get(item["id"], 0) if item["state"] == "ready" else 0
+        row["disk_total"] = _disk_total(item["id"])
+        videos.append(row)
+    return {"videos": videos}
 
 
 @app.get("/api/anki/overview")

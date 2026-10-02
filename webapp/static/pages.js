@@ -45,7 +45,7 @@ const HOTKEY_HELP = [
   ["Ctrl", "Войти в текст (каретка в конец) / выйти из текста"],
   ["Esc", "Выйти из текста"],
   ["Alt+R", "В тексте: «Rover» в место каретки или вместо выделенного (ещё раз – убрать)"],
-  ["Alt+F", "Буфер имён: цифра 1–7; в тексте затем 1 – говорящим в начало, 2 – в место каретки"],
+  ["Alt+F / F", "Буфер имён (F – вне поля текста): цифра 1–7 или S/W и F – выбрать; в тексте затем 1 – говорящим в начало, 2 – в место каретки"],
   ["Backspace", "В начале пустой первой строки – убрать эту строку"],
   ["Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z", "Отменить / вернуть"],
   ["Правая кнопка по видео", "Приблизить область (ещё раз – обратно)"],
@@ -183,6 +183,9 @@ const Router = {
     } else if (page === "add" || page === "download") {
       this.show("add", "add");
       Pages.add();
+    } else if (page === "stats") {
+      this.show("stats", "stats");
+      Pages.stats();
     } else if (page === "settings") {
       this.show("settings", "settings");
       Pages.settings();
@@ -251,7 +254,7 @@ function cardState(v) {
   if ((v.flagged || 0) + (v.flag_interval || 0) > 0) return " has-returned";
   if (v.complete) return " complete";
   if (v.translating || v.ready_to_translate) return " to-translate";
-  if (v.sending || v.ready_to_send) return " to-send";
+  if (v.ready_to_send) return " to-send"; // передача части видео карточку не красит
   return "";
 }
 
@@ -268,7 +271,7 @@ const Zebra = {
   // stripe – ширина цветной полосы (= промежутка), px; speed – px/с.
   PARAMS: {
     send: { stripe: 26, speed: 32.5, color: "#1f6b3b" },
-    sendBusy: { stripe: 52, speed: 40, color: "#1f6b3b" },
+    sendBusy: { stripe: 15, speed: 73.125, color: "#1f6b3b" }, // как translateBusy
     translate: { stripe: 323, speed: 32.5, color: "#a3407a" },
     translateBusy: { stripe: 15, speed: 73.125, color: "#a3407a" },
     // "Править" (есть что править) и "Обработать" – синяя; только вернувшиеся
@@ -323,14 +326,17 @@ const Zebra = {
     const canvas = button.querySelector("canvas.zebra");
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const w = button.clientWidth;
-    const h = button.clientHeight;
+    // Точный (дробный) размер холста: иначе картинка чуть растягивается по
+    // ширине, и полосы у кнопок разной ширины выглядят по-разному.
+    const box = canvas.getBoundingClientRect();
+    const w = box.width;
+    const h = box.height;
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
     }
     const ctx = canvas.getContext("2d");
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(canvas.width / w, 0, 0, canvas.height / h, 0, 0);
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = color;
     const period = 2 * st.stripe;
@@ -527,11 +533,11 @@ function videoBars(v) {
     { n: e.deleted, cls: "deleted", title: `удалены: ${e.deleted}` },
   ], total, "Отредактировано", edited) +
   (() => {
+    // Только то, что уже стало карточкой (очередь не показывается – полоса
+    // растёт по мере создания карточек).
     const inAnki = v.in_anki ?? v.exported;
-    const queued = Math.max(0, v.exported - inAnki);
     return segmentBar([
       { n: inAnki - (v.flag_interval || 0), cls: "ok", title: `В Anki: ${inAnki}` },
-      { n: queued, cls: "queued", title: `В очереди: ${queued}` },
       { n: v.flag_interval || 0, cls: "returned", right: true, title: `Флаг «обрезка/текст» в Anki: ${v.flag_interval || 0}` },
     ], v.active_total, "Передано в Anki", inAnki);
   })() +
@@ -557,10 +563,34 @@ function tableRow(name, value) {
     `<div class="multi-rest">${value.slice(1).map((line) => `<div>${line}</div>`).join("")}</div></td></tr>`;
 }
 
+// Значения таблиц, которые не влезли в одну строку (длинная колода Anki и
+// т.п.), – тоже сворачиваются: видна одна строка с многоточием и стрелка ▾.
+// Вызывается, когда окно уже на экране (нужны настоящие размеры).
+function foldLongRows(root) {
+  root.querySelectorAll("table.stats tr:not(.multi) > td:last-child").forEach((td) => {
+    const line = parseFloat(getComputedStyle(td).lineHeight) || 20;
+    if (td.querySelector(".one-line") || td.clientHeight - 8 < line * 1.5) return;
+    td.innerHTML = `<div class="multi-first one-line"><span class="one-line-text">${td.innerHTML}</span>` +
+      '<button class="multi-toggle" title="Показать целиком">▾</button></div>';
+    td.parentElement.classList.add("multi");
+  });
+}
+
 // Раскрыть / свернуть многострочное значение (плавно, по высоте содержимого).
 document.addEventListener("click", (e) => {
   const button = e.target.closest(".multi-toggle");
   if (!button) return;
+  const single = button.closest(".one-line");
+  if (single) {
+    // Свёрнутая в одну строку: плавно до полной высоты и обратно.
+    const text = single.querySelector(".one-line-text");
+    const from = text.offsetHeight;
+    const open = single.classList.toggle("open");
+    button.classList.toggle("open", open);
+    const to = text.offsetHeight;
+    text.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: 250, easing: "ease" });
+    return;
+  }
   const rest = button.closest("td").querySelector(".multi-rest");
   const open = !rest.classList.contains("open");
   rest.style.maxHeight = open ? `${rest.scrollHeight}px` : "0px";
@@ -580,10 +610,10 @@ function groupBatches(proposals) {
 }
 
 // Строка под полосами (только если есть что сказать): вернулись из Anki,
-// ждут перевода, очередь Anki.
+// ждут перевода, Anki закрыт.
 function videoNotes(v, withDisk = true) {
   const q = v.stage3 || {};
-  const queue = q.state === "waiting_anki" ? "Ждёт Anki" : q.notes_left ? `В очереди Anki ${q.notes_left}` : "";
+  const queue = q.state === "waiting_anki" ? "Ждёт Anki" : "";
   const parts = [
     withDisk && v.disk_total !== undefined ? `Место на диске: ${formatSize(v.disk_total)}` : "",
     v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
@@ -766,10 +796,16 @@ function processingBar(v) {
 // Строка "Потрачено": всего и по видам (OpenRouter).
 function spentLine(costs) {
   const c = costs || {};
-  const money = (x) => `$${(Number(x) || 0).toFixed(2)}`;
+  // Оценённое (перевод старых видео, сделанный до учёта расходов) – с "≈".
+  const est = new Set(c.estimated || []);
+  const money = (x, kind) => `${est.has(kind) ? "≈" : ""}$${(Number(x) || 0).toFixed(2)}`;
   const total = (c.search || 0) + (c.translate || 0) + (c.retranslate || 0);
-  return `${money(total)} всего (${money(c.search)} поиск, ${money(c.translate)} перевод, ${money(c.retranslate)} повторный перевод)`;
+  return `${est.size ? "≈" : ""}${money(total)} всего (${money(c.search, "search")} поиск, ` +
+    `${money(c.translate, "translate")} перевод, ${money(c.retranslate, "retranslate")} повторный перевод)`;
 }
+
+// Сумма расходов видео.
+const costTotal = (c) => (c && ((c.search || 0) + (c.translate || 0) + (c.retranslate || 0))) || 0;
 
 // Форма слова по числу: plural(n, "фрагмент", "фрагмента", "фрагментов").
 function plural(n, one, few, many) {
@@ -804,26 +840,30 @@ function sortWithin(groups, cmp) {
 }
 
 // "Видео" внутри группы, по этапу:
-//   1) с фиолетовым (вернулись из Anki / флаг "обрезка/текст"),
-//   2) начатые (хоть что-то отредактировано, но не всё),
-//   3) не начатые,
-//   4) отредактированные полностью.
-// Внутри 1–3 – где больше осталось править; внутри 4 – где больше не передано
-// в Anki, затем – где больше не переведено. При равенстве – по алфавиту.
+//   0) есть вернувшиеся из Anki (фиолетовые),
+//   1) не начатые (отредактировано 0 из N),
+//   2) начатые (отредактировано хоть одно, но не всё),
+//   3) всё отредактировано, но не всё передано в Anki,
+//   4) всё в Anki, но не всё переведено,
+//   5) готовые целиком.
+// Внутри 0–2 – где больше осталось править; 3 – где больше не передано;
+// 4 – где больше не переведено. При равенстве – по алфавиту.
+const notSent = (v) => (v.active_total || 0) - (v.exported || 0);
+const notTranslated = (v) => (v.cards_total || 0) - (v.translated || 0) - (v.translated_waiting || 0);
 function videoStage(v) {
   if ((v.flagged || 0) + (v.flag_interval || 0) > 0) return 0;
-  if (!v.awaiting) return 3;
-  return (v.reviewed || 0) > 0 ? 1 : 2;
+  if (v.awaiting) return (v.reviewed || 0) > 0 ? 2 : 1;
+  if (notSent(v) > 0) return 3;
+  if (notTranslated(v) > 0) return 4;
+  return 5;
 }
 function byVideoWork(a, b) {
   const sa = videoStage(a);
   const sb = videoStage(b);
   if (sa !== sb) return sa - sb;
-  const notSent = (v) => (v.active_total || 0) - (v.exported || 0);
-  const notTranslated = (v) => (v.cards_total || 0) - (v.translated || 0) - (v.translated_waiting || 0);
-  const diff = sa === 3
-    ? notSent(b) - notSent(a) || notTranslated(b) - notTranslated(a)
-    : (b.awaiting || 0) - (a.awaiting || 0);
+  const diff = sa === 3 ? notSent(b) - notSent(a)
+    : sa === 4 ? notTranslated(b) - notTranslated(a)
+      : (b.awaiting || 0) - (a.awaiting || 0);
   return diff || String(a.title).localeCompare(String(b.title));
 }
 
@@ -1178,9 +1218,14 @@ const Pages = {
     const d = data.disk;
     // Градиент и обводка окна – как у карточки этого видео в списке.
     const modalBox = body.closest(".modal");
-    modalBox.classList.remove("complete", "to-translate", "to-send");
-    const state = cardState(v).trim();
-    if (state) modalBox.classList.add(state);
+    // Состояние меняется (передача закончилась или её остановили) – градиент
+    // окна вслед за ним (раньше оставался прежним до закрытия окна).
+    const paint = (sv) => {
+      modalBox.classList.remove("complete", "to-translate", "to-send", "has-returned");
+      const state = cardState(sv).trim();
+      if (state) modalBox.classList.add(state);
+    };
+    paint(v);
     const row = tableRow;
     // Строк в карточке: по 6 записей в строке, дальше — следующие строки (свёрнуты).
     const lineItems = Object.entries(s.lines_per_card).map(([n, c]) => `${n} стр. – ${c}`);
@@ -1231,9 +1276,8 @@ const Pages = {
         </table>
       </div>
       <div class="modal-actions">
-        <a id="info-edit" class="step-btn primary zebra-host${v.sending ? " disabled" : ""}" href="#/edit/${encodeURIComponent(v.id)}"
-          ${editZebra ? `data-zebra="${editZebra}"` : ""}
-          ${v.sending ? 'aria-disabled="true" tabindex="-1" title="Идёт передача в Anki – править можно после неё или остановив её"' : ""}><canvas class="zebra"></canvas><span>Править</span></a>
+        <a id="info-edit" class="step-btn primary zebra-host" href="#/edit/${encodeURIComponent(v.id)}"
+          ${editZebra ? `data-zebra="${editZebra}"` : ""}><canvas class="zebra"></canvas><span>Править</span></a>
         <button id="info-anki" class="step-btn fold">Передать в Anki</button>
         <button id="info-translate" class="step-btn fold" title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
         <label class="check small batch-check fold${untranslated > 0 || v.translating ? "" : " gone"}" title="OpenRouter Batch API: вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"> Пакетом <span class="muted fold">(вдвое дешевле, но дольше)</span></label>
@@ -1242,6 +1286,7 @@ const Pages = {
       </div>`;
     autoGrow(body.querySelector("#title-input"));
     animateBars(body.querySelector(".modal-bars"));
+    requestAnimationFrame(() => foldLongRows(body));
     const saveButton = body.querySelector("#info-save");
     const closeAndFlash = () => {
       Pages.flashId = id;
@@ -1298,15 +1343,15 @@ const Pages = {
       fold(translateButton, sending);
       fold(body.querySelector(".batch-check"), sending || !(untranslated > 0 || running));
       ankiButton.textContent = sending ? "Остановить" : "Передать в Anki";
-      const canSend = sending || (s.exported || 0) < (s.active_total || 0);
+      const canSend = sending || (s.sendable || 0) > 0;
       ankiButton.disabled = !canSend;
       ankiButton.classList.toggle("send-ready", canSend && !sending);
+      ankiButton.title = sending ? "" : canSend ? `Передать отредактированные: ${s.sendable}` : "Передавать нечего – отредактированное уже в Anki";
       translateButton.textContent = running ? "Остановить" : "Перевести";
       translateButton.disabled = !running && untranslated <= 0;
       translateButton.classList.toggle("translate-ready", !running && untranslated > 0);
       note.classList.toggle("busy", busy);
       if (!busy) setNote("");
-      body.querySelector("#info-edit").classList.toggle("disabled", sending);
     };
     render();
 
@@ -1321,6 +1366,7 @@ const Pages = {
         if (waitingBatch) batchBox.checked = true; // ждёт пакетная заявка – значит, пакетом
         running = waitingBatch || (st.state === "running" && st.project === id && Date.now() / 1000 - st.updated < 300);
         render(s);
+        paint(s);
         if (sending) setNote(`Передача в Anki: ${s.in_anki}/${s.active_total}`);
         else if (st.state === "running" && st.project === id && st.total) setNote(`Перевод: ${st.done || 0}/${st.total}`);
         else if (waitingBatch) setNote("Ждём ответ пакета");
@@ -1450,6 +1496,16 @@ const Pages = {
         <button class="step-btn info-save">Сохранить</button>
       </div>`;
     body.querySelectorAll("textarea.grow").forEach(autoGrow);
+    requestAnimationFrame(() => foldLongRows(body));
+    // Градиент окна – по этапу, как у карточки в "Обработке" (рыжий – скачивание,
+    // синий – шаг с процентом, жёлтый – сверка/поиск агентом/нарезка, зелёный – начало).
+    const procBox = body.closest(".modal");
+    const paintProc = (pv) => {
+      procBox.classList.remove("proc-red", "proc-blue", "proc-yellow", "proc-green");
+      const state = procState(pv).trim();
+      if (state) procBox.classList.add(state);
+    };
+    paintProc(v);
     // Над видео идёт работа (скачивание, обработка) – ничего не меняется.
     if (v.state === "processing") {
       body.querySelectorAll("input, textarea, select").forEach((field) => (field.disabled = true));
@@ -1465,6 +1521,7 @@ const Pages = {
         if (!body.isConnected) return;
         const now = (await Api.projects()).find((item) => item.id === id);
         if (!now) return;
+        paintProc(now);
         if (now.state !== "processing") {
           statusBox.textContent = cap(now.status || "Готово");
           return;
@@ -1603,6 +1660,100 @@ const Pages = {
   },
 
   // -- настройки ------------------------------------------------------------------------
+  // -- статистика ------------------------------------------------------------------
+  // Итоги по всем видео: расходы OpenRouter, правка, Anki, перевод, место;
+  // ниже – расходы по видео и сводка по авторам.
+  async stats() {
+    const el = document.getElementById("view-stats");
+    el.innerHTML = "";
+    let data;
+    try {
+      data = await Api.overallStats();
+    } catch (err) {
+      el.innerHTML = `<h1>Статистика</h1><p class="muted">Не удалось загрузить: ${escapeHtml(err.message)}</p>`;
+      return;
+    }
+    const all = data.videos;
+    const ready = all.filter((v) => v.state === "ready");
+    const sum = (list, f) => list.reduce((s, v) => s + (Number(f(v)) || 0), 0);
+    const money = (x, est = false) => `${est ? "≈" : ""}$${(Number(x) || 0).toFixed(2)}`;
+    const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : "0%");
+    const num = (n) => Number(n || 0).toLocaleString("ru-RU");
+    const edited = (v) => { const e = v.edit_bar || {}; return (e.accepted || 0) + (e.unvoiced || 0) + (e.changed || 0) + (e.deleted || 0); };
+    const anyEst = (list) => list.some((v) => (v.costs.estimated || []).length);
+    const kinds = { search: "Поиск источников", translate: "Перевод", retranslate: "Повторный перевод" };
+    const kindTotal = (k, list = all) => sum(list, (v) => v.costs[k]);
+    const kindEst = (k, list = all) => list.some((v) => (v.costs.estimated || []).includes(k));
+    const spentAll = sum(all, (v) => costTotal(v.costs));
+    const cards = sum(ready, (v) => v.cards_total);
+    const translated = sum(ready, (v) => v.translated);
+    const barTotal = sum(ready, (v) => v.bar_total || v.fragments_total);
+    const editedAll = sum(ready, edited);
+    const row = (name, value) => `<tr><td>${name}</td><td>${value}</td></tr>`;
+    const card = (title, rows) => `<section class="set-card"><h2>${title}</h2><table class="stats">${rows.join("")}</table></section>`;
+
+    // Расходы по видео – дорогие сверху; итог внизу.
+    const byCost = [...all].filter((v) => costTotal(v.costs) > 0 || v.state === "ready").sort((a, b) => costTotal(b.costs) - costTotal(a.costs));
+    const est = (v, k) => (v.costs.estimated || []).includes(k);
+    const costRows = byCost.map((v) =>
+      `<tr><td><a href="#/${v.state === "ready" ? "video" : "process"}/${encodeURIComponent(v.id)}">${escapeHtml(v.title)}</a></td>` +
+      Object.keys(kinds).map((k) => `<td>${money(v.costs[k], est(v, k))}</td>`).join("") +
+      `<td><b>${money(costTotal(v.costs), (v.costs.estimated || []).length > 0)}</b></td>` +
+      `<td>${v.cards_total ? money(costTotal(v.costs) / v.cards_total * 100, (v.costs.estimated || []).length > 0) : "–"}</td></tr>`).join("");
+
+    // По авторам.
+    const groups = new Map();
+    for (const v of all) {
+      if (!groups.has(v.group)) groups.set(v.group, []);
+      groups.get(v.group).push(v);
+    }
+    const groupRows = [...groups.entries()].sort((a, b) => b[1].length - a[1].length).map(([group, list]) => {
+      const r = list.filter((v) => v.state === "ready");
+      return `<tr><td>${escapeHtml(group)}</td><td>${list.length}</td><td>${formatDuration(sum(list, (v) => v.duration))}</td>` +
+        `<td>${pct(sum(r, edited), sum(r, (v) => v.bar_total || v.fragments_total))}</td>` +
+        `<td>${num(sum(r, (v) => v.in_anki))}</td><td>${num(sum(r, (v) => v.translated))}</td>` +
+        `<td>${money(sum(list, (v) => costTotal(v.costs)), anyEst(list))}</td><td>${formatSize(sum(list, (v) => v.disk_total))}</td></tr>`;
+    }).join("");
+
+    el.innerHTML = `<h1>Статистика</h1>
+      <p class="muted small page-note">По всем видео. Расходы – OpenRouter (поиск источников и перевод); «≈» – оценка для перевода, сделанного до учёта расходов (по цене карточки у видео с точным учётом).</p>
+      <div class="settings-grid stats-grid">
+        ${card("Расходы", [
+          row("Всего", `<b>${money(spentAll, anyEst(all))}</b>`),
+          ...Object.entries(kinds).map(([k, name]) => row(name, money(kindTotal(k), kindEst(k)))),
+          row("На 100 карточек", cards ? money(spentAll / cards * 100, anyEst(all)) : "–"),
+        ])}
+        ${card("Видео", [
+          row("Готово к правке", num(ready.length)),
+          row("В обработке и ждут", num(all.length - ready.length)),
+          row("Длительность", formatDuration(sum(all, (v) => v.duration))),
+          row("Место на диске", formatSize(sum(all, (v) => v.disk_total))),
+        ])}
+        ${card("Правка", [
+          row("Фрагментов", num(sum(ready, (v) => v.fragments_total))),
+          row("Отредактировано", `${num(editedAll)} (${pct(editedAll, barTotal)})`),
+          row("Изменено", num(sum(ready, (v) => (v.edit_bar || {}).changed))),
+          row("Удалено", num(sum(ready, (v) => v.deleted_total))),
+        ])}
+        ${card("Anki и перевод", [
+          row("Карточек с текстом", num(cards)),
+          row("В Anki", `${num(sum(ready, (v) => v.in_anki))} (${pct(sum(ready, (v) => v.in_anki), sum(ready, (v) => v.active_total))})`),
+          row("Переведено", `${num(translated)} (${pct(translated, cards)})`),
+          row("Вернулись на правку", num(sum(ready, (v) => v.flagged))),
+        ])}
+        <section class="set-card wide-card"><h2>Расходы по видео</h2>
+          <table class="stats grid-table"><tr><th>Видео</th>${Object.values(kinds).map((k) => `<th>${k}</th>`).join("")}<th>Всего</th><th>На 100 карточек</th></tr>
+          ${costRows}
+          <tr class="total-row"><td>Итого</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k), kindEst(k))}</td>`).join("")}<td><b>${money(spentAll, anyEst(all))}</b></td><td></td></tr></table>
+        </section>
+        <section class="set-card wide-card"><h2>По авторам</h2>
+          <table class="stats grid-table"><tr><th>Автор</th><th>Видео</th><th>Длительность</th><th>Отредактировано</th><th>В Anki</th><th>Переведено</th><th>Потрачено</th><th>Место</th></tr>
+          ${groupRows}</table>
+        </section>
+      </div>`;
+    viewEnter(el);
+  },
+
   async settings() {
     const el = document.getElementById("view-settings");
     // Пока настройки грузятся, прошлое содержимое не показываем (иначе оно
@@ -1657,8 +1808,8 @@ const Pages = {
       </div>
       <section class="set-card wide-card hotkeys-card">
         <h2>Горячие клавиши редактора</h2>
-        <div class="hotkeys">${HOTKEY_HELP.map(([keys, what]) =>
-          `<div class="hk-keys">${keys.split(" / ").map((k) => `<kbd>${escapeHtml(k)}</kbd>`).join(" / ")}</div><div class="hk-what">${escapeHtml(what)}</div>`).join("")}</div>
+        <table class="stats hotkeys-table">${HOTKEY_HELP.map(([keys, what]) =>
+          `<tr><td>${keys.split(" / ").map((k) => `<kbd>${escapeHtml(k)}</kbd>`).join(" / ")}</td><td>${escapeHtml(what)}</td></tr>`).join("")}</table>
       </section>
       <div class="settings-actions"><span id="settings-note" class="muted small"></span><button id="settings-cancel" class="step-btn">Отменить</button><button id="settings-save" class="step-btn primary">Сохранить</button></div>`;
     const host = (id) => el.querySelector(`.picker-host[data-for="${id}"]`);

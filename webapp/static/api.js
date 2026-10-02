@@ -127,6 +127,11 @@ const Api = {
     return this.json("/api/anki/overview");
   },
 
+  // Раздел "Статистика": все видео с расходами, правкой, Anki и местом.
+  overallStats() {
+    return this.json("/api/stats");
+  },
+
   // Кнопка "Финиш" в редакторе: всё видео считается отредактированным.
   finish(project) {
     return this.json(`/api/p/${encodeURIComponent(project)}/finish`, { method: "POST" });

@@ -1508,12 +1508,77 @@ body.frag-edit-changed { background: var(--bg); }
 .names-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 4px; }
 .names-item { padding: 2px 0; white-space: nowrap; }
 .names-item b { display: inline-block; width: 16px; color: #79b8ff; }
+/* Подсвеченная строка (S/W – перемещение, F – выбрать). */
+.names-item { margin: 0 -6px; padding: 2px 6px; border-radius: 5px; }
+.names-item.active { background: rgba(121, 184, 255, 0.16); }
 .names-empty { color: var(--dim); }
 
-/* Горячие клавиши в настройках: клавиши слева, что делают – справа. */
-.hotkeys { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; font-size: 13px; padding-bottom: 12px; }
-.hk-keys { white-space: nowrap; color: var(--dim); }
-.hk-what { color: var(--text); }
 kbd { display: inline-block; min-width: 14px; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px;
   border-radius: 5px; background: #18181d; color: var(--text); font: 12px var(--font); text-align: center; }
 .hotkeys-card { max-width: 1080px; box-sizing: border-box; margin-top: 14px; }
+
+/* Шапка окон (Видео и Обработка): название шире, промежуток меньше; автор –
+   до правого края окна (крестик выше, на уровне подписей); поле автора –
+   той же высоты, что и название (когда название в несколько строк). */
+.modal-head { grid-template-columns: 1fr 230px; gap: 8px; margin-right: 0; align-items: stretch; }
+.modal-head label > input, .modal-head label > textarea { flex: 1 1 auto; box-sizing: border-box; }
+/* Полосы под названием – на 1 px ниже. */
+.modal .modal-bars, .modal .process-form > .progress { margin-top: 1px; }
+
+/* Окно обработки – с подсветкой этапа, как карточка. */
+.modal.proc-blue { background: radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.12), transparent 55%), linear-gradient(160deg, #11141b, #121216 70%); border-color: rgba(96, 165, 250, 0.16); }
+.modal.proc-green { background: radial-gradient(120% 160% at 0% 0%, rgba(63, 185, 80, 0.1), transparent 55%), linear-gradient(160deg, #111a14, #121216 70%); border-color: rgba(63, 185, 80, 0.15); }
+.modal.proc-yellow { background: radial-gradient(120% 160% at 0% 0%, rgba(227, 179, 65, 0.11), transparent 55%), linear-gradient(160deg, #1a1810, #121216 70%); border-color: rgba(227, 179, 65, 0.15); }
+.modal.proc-red { background: radial-gradient(120% 160% at 0% 0%, rgba(181, 101, 29, 0.14), transparent 55%), linear-gradient(160deg, #1b1310, #121216 70%); border-color: rgba(181, 101, 29, 0.18); }
+
+/* Значение таблицы, свёрнутое в одну строку (▾ – целиком). */
+.multi-first.one-line { height: auto; align-items: flex-start; }
+.one-line-text { display: block; min-width: 0; flex: 0 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.one-line.open .one-line-text { white-space: normal; }
+
+/* "Править" и "Обработать" – одна и та же кнопка: высота, отступы, текст. */
+#info-edit, #process-go { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  height: 34px; padding: 0 12px 2px; line-height: 1; font: 14px var(--font); vertical-align: middle; }
+/* Свёрнутое значение не растягивает таблицу: ячейка берёт оставшуюся ширину. */
+table.stats td:has(> .one-line) { max-width: 0; width: 100%; }
+
+/* Горячие клавиши – таблица как остальные (table.stats): клавиши слева. */
+table.hotkeys-table td:first-child { color: var(--text); padding-right: 24px; }
+table.hotkeys-table td:last-child { color: var(--text); }
+
+/* Статистика: таблицы со столбцами – заголовки приглушённые, числа справа. */
+table.grid-table th { text-align: right; font-weight: 500; font-size: 12px; color: var(--dim); padding: 0 0 6px 16px; white-space: nowrap; border-bottom: 1px solid #26262d; }
+table.grid-table th:first-child { text-align: left; padding-left: 0; }
+table.grid-table td { text-align: right; padding-left: 16px; white-space: nowrap; }
+table.grid-table td:first-child { text-align: left; padding-left: 0; white-space: normal; color: var(--text); }
+table.grid-table td a { color: #79c0ff; text-decoration: none; }
+table.grid-table td a:hover { text-decoration: underline; }
+table.grid-table tr.total-row td { border-top: 1px solid #34343c; font-weight: 600; }
+.stats-grid table.stats td:last-child { text-align: right; }
+.stats-grid table.grid-table td:first-child { text-align: left; }
+/* Статистика: четыре карточки итогов в ряд; таблицы по видео/авторам – во всю ширину. */
+.stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 1400px; }
+@media (max-width: 1300px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stats-grid table.grid-table { max-width: none; width: 100%; }
+
+/* Таймер правки – поверх плеера, слева сверху (timer.js). Квадратная кнопка;
+   раскрыт – справа от неё кнопки и значения в виде кнопок. */
+#edit-timer { position: absolute; top: 10px; left: 10px; z-index: 6; display: flex; align-items: center; gap: 6px; }
+#edit-timer button { height: 28px; box-sizing: border-box; border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(18, 18, 22, 0.88); color: var(--text); font: 13px var(--font); cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; }
+#edit-timer button:hover:not(:disabled) { background: rgba(38, 38, 46, 0.95); }
+#edit-timer svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+#edit-timer .et-toggle { width: 28px; opacity: 0.55; }
+#edit-timer:hover .et-toggle, #edit-timer.open .et-toggle { opacity: 1; }
+/* Идёт, но свёрнут – кнопка подсвечена зелёным, чтобы было видно, что считает. */
+#edit-timer.running .et-toggle { color: #56d364; border-color: rgba(86, 211, 100, 0.45); opacity: 0.85; }
+#edit-timer .et-btn { width: 28px; }
+#edit-timer .et-btn:disabled { opacity: 0.35; cursor: default; }
+#edit-timer .et-run { color: #56d364; }
+#edit-timer .et-info { padding: 0 10px 1px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#edit-timer .et-info.copied { animation: et-copied 0.6s ease; }
+@keyframes et-copied { 0% { background: rgba(86, 211, 100, 0.45); border-color: #56d364; } 100% { } }
+#edit-timer .et-panel { display: flex; gap: 6px; overflow: hidden; max-width: 0; opacity: 0; pointer-events: none;
+  transition: max-width 0.3s ease, opacity 0.2s ease; }
+#edit-timer.open .et-panel { max-width: 640px; opacity: 1; pointer-events: auto; }

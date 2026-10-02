@@ -41,7 +41,11 @@ def save_project_settings(project_dir: Path, settings: dict) -> None:
     path = Path(project_dir) / "project.json"
     tmp_path = path.with_suffix(".json.tmp")
     tmp_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp_path.replace(path)
+    # С повторами: сервер в это время читает project.json (список видео раз в
+    # 3 с), и Windows не давал его заменить – перевод падал с WinError 5.
+    from common.manifest_schema import replace_file
+
+    replace_file(tmp_path, path)
 
 
 def add_cost(project_dir: Path, kind: str, amount: float) -> None:
@@ -253,13 +257,13 @@ def summary(project_dir: Path) -> dict:
         from phase1_ingest.acquire import master_path
 
         added = master_path(project_dir) is not None and not phase1_running(project_dir)
-        # Что сделает "Обработать" (готовые шаги не переделываются).
+        # Что сделает "Обработать" (готовые шаги не переделываются). Пока речь
+        # не распознана – просто "Обработать" (готовая копия для редактора –
+        # внутренняя подробность, "Обработать речь" только путало).
         if master_path(project_dir) is None:
             next_step = "Докачать и обработать"
-        elif not (project_dir / "source.mp4").exists():
-            next_step = "Обработать"
         elif not (project_dir / "raw" / "whisper_transcript.json").exists():
-            next_step = "Обработать речь"
+            next_step = "Обработать"
         else:
             next_step = "Нарезать на фразы"
         failed = (progress.get("step") == "failed") and not phase1_running(project_dir)
@@ -309,6 +313,9 @@ def summary(project_dir: Path) -> dict:
         # Уже в Anki по факту (карточка создана); exported − in_anki — ещё в очереди.
         "in_anki": sum(1 for f in active if f.exported and f.id in with_note),
         "editable": sum(not f.exported for f in fragments),
+        # Отредактированы (до скрытой метки) и ещё не переданы в Anki – их
+        # передаст кнопка "Передать в Anki".
+        "sendable": sum(1 for f in head if f.status == STATUS_ACTIVE and not f.exported),
         "last_touched": reviewed,
         "reviewed": reviewed,
         "edit_bar": edit_bar,

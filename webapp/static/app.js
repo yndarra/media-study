@@ -223,7 +223,7 @@ const App = {
     // только для того фрагмента, где его включили.
     if (Zoom.fragmentId && Zoom.fragmentId !== f.id) Zoom.reset(true);
     if (this.speakerState && this.speakerState.id !== f.id) this.speakerState = null;
-    Names.rememberFragment(f);
+    Names.visit(f);
     Player.jumpTo(f.algo_start_frame);
     this.renderAll(true);
     this.refreshHistory();
@@ -923,7 +923,6 @@ const App = {
     }
     TextEditor.tokens = st.tokens.map((t) => ({ ...t }));
     if (name !== null) TextEditor.setSpeaker(name); // "" – убрать говорящего
-    if (name) Names.remember(name);
     // Поле не выделяется и каретка не ставится – шорткаты продолжают работать.
     const el = $("cur-text");
     if (document.activeElement === el) el.blur();
@@ -1012,7 +1011,6 @@ const App = {
     let caret;
     if (how === "prefix") caret = TextEditor.setSpeaker(name);
     else caret = TextEditor.replaceRange(sel[0], sel[1], name);
-    Names.remember(name);
     if (editing) {
       this.onTokensChanged(caret);
     } else {
@@ -1217,29 +1215,48 @@ const HOTKEYS = {
   KeyS: () => currentFragment() && !isLocked(currentFragment()) && App.deleteSoft(),
 };
 
-// Буфер имён: 7 недавних говорящих (свежие сверху) – из открытых фрагментов
-// и вставленных. Alt+F открывает окошко (поверх видео, справа – текст не
-// закрывает): цифра 1–7 – имя; в поле текста дальше 1 – говорящим в начало
-// фразы ("Имя: ", прежний говорящий заменяется), 2 – в место каретки / вместо
-// выделенного (без двоеточия); вне поля – сразу говорящим в начало. Пока
-// окошко открыто, цифры в текст не идут; любая другая клавиша (и Ctrl) его
-// закрывает. Отмена – Ctrl+Z.
+// Буфер имён: 7 недавних говорящих (свежие сверху). Обновляется только при
+// переходе к другому фрагменту: сначала говорящие покинутого (уже с правками –
+// подставленное имя тоже попадает в буфер), потом открытого. Пока работаешь
+// с одним фрагментом, список не двигается (раньше каждая правка/‹/› его
+// переставляла и номера "уезжали").
+// Alt+F (или F вне поля текста) открывает окошко поверх видео, справа:
+// цифра 1–7 – имя сразу; или S – вверх, W – вниз и F / Alt+F – выбрать
+// подсвеченное. В поле текста дальше так же: 1 / 2 (или S/W и F / Alt+F):
+// 1 – говорящим в начало фразы ("Имя: ", прежний говорящий заменяется),
+// 2 – в место каретки / вместо выделенного (без двоеточия); вне поля – сразу
+// говорящим в начало. Пока окошко открыто, его клавиши в текст не идут;
+// любая другая клавиша (и Ctrl) его закрывает. Отмена – Ctrl+Z.
 const Names = {
   LIMIT: 7,
   list: [],
   stage: null, // null | "pick" | "how"
   chosen: null,
+  cursor: 0, // подсвеченная строка окошка
+  lastFragment: null, // фрагмент, чьи имена уже в буфере (id и сам объект)
 
   remember(name) {
     if (!name) return;
     this.list = [name, ...this.list.filter((n) => n !== name)].slice(0, this.LIMIT);
   },
 
-  // Открыли фрагмент – его говорящие становятся самыми свежими (первая
-  // реплика – на самом верху).
+  // Говорящие фрагмента – самыми свежими (первая реплика – на самом верху).
   rememberFragment(f) {
     const names = (f.text || "").split("\n").map((l) => speakerPrefix(l)).filter(Boolean).map((p) => p.name);
     for (const name of names.reverse()) this.remember(name);
+  },
+
+  // Открыт фрагмент. Тот же самый (повторная отрисовка после правки, удаления,
+  // отмены) – буфер не трогаем.
+  visit(f) {
+    const last = this.lastFragment;
+    if (last && last.id === f.id) return;
+    if (last) {
+      const left = (State.manifest.fragments || []).find((x) => x.id === last.id);
+      if (left) this.rememberFragment(left);
+    }
+    this.rememberFragment(f);
+    this.lastFragment = { id: f.id };
   },
 
   box() {
@@ -1255,10 +1272,42 @@ const Names = {
   open() {
     this.stage = "pick";
     this.chosen = null;
-    const items = this.list.map((n, i) => `<div class="names-item"><b>${i + 1}</b> ${escapeHtml(n)}</div>`).join("")
-      || '<div class="names-empty">Имён пока нет</div>';
-    this.box().innerHTML = `<div class="names-title">Имена</div>${items}`;
+    this.cursor = 0;
+    this.draw();
     this.box().classList.add("open");
+  },
+
+  // Строки текущего шага окошка.
+  options() {
+    return this.stage === "how" ? ["говорящим в начало", "в место курсора"] : this.list;
+  },
+
+  draw() {
+    const title = this.stage === "how" ? escapeHtml(this.chosen) : "Имена";
+    const items = this.options().map((n, i) =>
+      `<div class="names-item${i === this.cursor ? " active" : ""}"><b>${i + 1}</b> ${escapeHtml(n)}</div>`).join("")
+      || '<div class="names-empty">Имён пока нет</div>';
+    this.box().innerHTML = `<div class="names-title">${title}</div>${items}`;
+  },
+
+  // Выбрана строка n (с 1) текущего шага.
+  choose(n) {
+    const editing = document.activeElement === $("cur-text");
+    if (this.stage === "pick") {
+      this.chosen = this.list[n - 1];
+      if (!editing) {
+        this.close();
+        App.insertName(this.chosen, "prefix");
+        return;
+      }
+      this.stage = "how";
+      this.cursor = 0;
+      this.draw();
+      return;
+    }
+    const name = this.chosen;
+    this.close();
+    App.insertName(name, n === 1 ? "prefix" : "inline");
   },
 
   close() {
@@ -1271,25 +1320,26 @@ const Names = {
     if (!this.stage) return false;
     const digit = /^Digit([1-9])$/.exec(e.code) || /^Numpad([1-9])$/.exec(e.code);
     const n = digit ? Number(digit[1]) : 0;
-    const editing = document.activeElement === $("cur-text");
-    if (this.stage === "pick" && n >= 1 && n <= this.list.length) {
+    const count = this.options().length;
+    if (n >= 1 && n <= count) {
       e.preventDefault();
-      this.chosen = this.list[n - 1];
-      if (!editing) {
-        this.close();
-        App.insertName(this.chosen, "prefix");
-        return true;
-      }
-      this.stage = "how";
-      this.box().innerHTML = `<div class="names-title">${escapeHtml(this.chosen)}</div>` +
-        '<div class="names-item"><b>1</b> говорящим в начало</div><div class="names-item"><b>2</b> в место курсора</div>';
+      this.choose(n);
       return true;
     }
-    if (this.stage === "how" && (n === 1 || n === 2)) {
+    // S – вверх, W – вниз (по кругу); F / Alt+F – выбрать подсвеченное.
+    // Без Ctrl: Ctrl закрывает окошко, как и раньше.
+    if (!e.ctrlKey && (e.code === "KeyS" || e.code === "KeyW")) {
       e.preventDefault();
-      const name = this.chosen;
-      this.close();
-      App.insertName(name, n === 1 ? "prefix" : "inline");
+      if (count) {
+        this.cursor = (this.cursor + (e.code === "KeyS" ? -1 : 1) + count) % count;
+        this.draw();
+      }
+      return true;
+    }
+    if (!e.ctrlKey && e.code === "KeyF") {
+      e.preventDefault();
+      if (count) this.choose(this.cursor + 1);
+      else this.close();
       return true;
     }
     // Любая другая клавиша (в том числе Ctrl) – окошко закрывается; цифра
@@ -1341,13 +1391,17 @@ window.addEventListener("blur", () => State.boost && Player.setBoost(false));
 document.addEventListener("keydown", (e) => {
   if (State.view !== "editor" || !State.manifest) return;
   if (Names.stage) {
-    if (["Shift"].includes(e.key)) return;
+    // Сами по себе Shift и Alt окошко не закрывают (Alt – начало Alt+F,
+    // которым выбирают подсвеченное); Ctrl закрывает.
+    if (["Shift", "Alt", "Meta"].includes(e.key)) return;
     if (Names.key(e)) {
       e.stopImmediatePropagation();
       return;
     }
   }
-  if (e.altKey && !e.ctrlKey && e.code === "KeyF") {
+  // Alt+F – везде; просто F – когда не пишешь в поле текста (и не в другом поле ввода).
+  const typing = e.target.isContentEditable || ["TEXTAREA", "INPUT", "SELECT"].includes(e.target.tagName);
+  if (e.code === "KeyF" && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.altKey || !typing)) {
     e.preventDefault();
     e.stopImmediatePropagation();
     Names.open();
