@@ -1805,3 +1805,37 @@ table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: 
 .store-add input { flex: 1; min-width: 0; }
 /* Горячие клавиши – во всю ширину блока. */
 #view-settings table.hotkeys-table { max-width: none; width: 100%; }
+
+/* Статистика: вкладки и графики. */
+.stats-tabs .tab-bar { margin-bottom: 16px; }
+.tab-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.tab-head .picker-host { flex: 0 1 280px; margin-right: auto; }
+.tab-sub { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; margin: 18px 0 8px; }
+.chart-box { margin: 10px 0 6px; }
+.speed-line { display: block; }
+.speed-line .grid { stroke: rgba(255, 255, 255, 0.06); }
+.speed-line .axis { fill: var(--dim); font: 11px var(--font); }
+.speed-line .area { fill: url(#speed-fill); }
+.speed-line .line { fill: none; stroke: #79b8ff; stroke-width: 2.5; }
+.speed-line .avg { stroke: #e3b341; stroke-width: 1.5; stroke-dasharray: 6 5; }
+.speed-line .avg-label { fill: #e3b341; font: 11px var(--font); }
+.speed-line .dot { fill: #0d0d10; stroke: #79b8ff; stroke-width: 2.5; }
+.speed-line .dot.best { stroke: #56d364; fill: #56d364; }
+.speed-line .dot:hover { stroke-width: 4; }
+.hbars { display: flex; flex-direction: column; gap: 7px; margin: 6px 0 16px; }
+.hbar-legend { display: flex; gap: 16px; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+.hbar-key { display: inline-flex; align-items: center; gap: 6px; }
+.hbar-key i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.hbar-row { display: grid; grid-template-columns: minmax(140px, 30%) 1fr auto; gap: 12px; align-items: center; font-size: 13px; }
+.hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-label a { color: var(--text); text-decoration: none; }
+.hbar-label a:hover { color: #79c0ff; }
+.hbar-track { display: flex; height: 14px; border-radius: 4px; background: #1b1b21; overflow: hidden; }
+.hbar-seg { height: 100%; transition: width 0.5s ease; }
+.hbar-value { white-space: nowrap; text-align: right; min-width: 70px; }
+.c-blue { background: #2f6fbf; }
+.c-pink { background: #b6528a; }
+.c-violet { background: #8957e5; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover, th.sortable.sorted { color: var(--text); }
+.info-table td, .info-table th { font-size: 12.5px; }

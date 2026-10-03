@@ -1804,7 +1804,7 @@ const Heartbeat = {
       const res = await fetch("/api/heartbeat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_id: this.clientId, opened_at: this.openedAt, project: State.project }),
+        body: JSON.stringify({ client_id: this.clientId, opened_at: this.openedAt, project: State.project, editing: State.view === "editor" }),
       });
       if (!res.ok) return;
       info = await res.json();

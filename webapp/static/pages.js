@@ -1017,14 +1017,76 @@ const shortDate = (iso) => {
   return isNaN(d) ? iso : d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 };
 
-function speedSection(results, remaining) {
-  const head = (extra = "") => `<div class="speed-head"><h2>Скорость правки</h2>${extra}</div>`;
+// Горизонтальные столбцы для статистики: строки {label, href, segs:[{value,
+// cls, title}], text} – длина по сумме сегментов (самая длинная – во всю
+// ширину), справа – подпись значения.
+function hbars(items, legend = "") {
+  const total = (i) => i.segs.reduce((acc, x) => acc + (x.value || 0), 0);
+  const max = Math.max(0, ...items.map(total)) || 1;
+  return `<div class="hbars">${legend ? `<div class="hbar-legend">${legend}</div>` : ""}${items.map((i) => {
+    const label = i.href ? `<a href="${i.href}">${escapeHtml(i.label)}</a>` : escapeHtml(i.label);
+    return `<div class="hbar-row"><div class="hbar-label" title="${escapeHtml(i.label)}">${label}</div><div class="hbar-track">` +
+      i.segs.map((x) => `<div class="hbar-seg ${x.cls || ""}" style="width:${((x.value || 0) / max * 100).toFixed(2)}%" title="${escapeHtml(x.title || "")}"></div>`).join("") +
+      `</div><div class="hbar-value">${i.text}</div></div>`;
+  }).join("") || '<p class="muted small">Нет данных</p>'}</div>`;
+}
+
+const legendItem = (cls, text) => `<span class="hbar-key"><i class="hbar-seg ${cls}"></i>${text}</span>`;
+
+// Название результата таймера: видео или пометка для замеров без видео.
+const resultTitle = (r) => r.title || "Без видео (замер из чата)";
+
+// График скорости правки: линия по результатам (по порядку сохранения) с
+// заливкой, точки (лучшая – зелёная), средняя – пунктиром, сетка с подписями.
+// Рисуется по настоящей ширине блока (точки не растягиваются).
+function drawSpeedChart(box, list, avg) {
+  const W = Math.max(320, box.clientWidth);
+  const H = 230;
+  const pad = { l: 44, r: 16, t: 16, b: 30 };
+  const speeds = list.map(speedOf);
+  const max = Math.max(...speeds, avg) * 1.18 || 1;
+  const x = (k) => pad.l + (list.length === 1 ? (W - pad.l - pad.r) / 2 : (k / (list.length - 1)) * (W - pad.l - pad.r));
+  const y = (v) => pad.t + (1 - v / max) * (H - pad.t - pad.b);
+  const pts = speeds.map((v, k) => [x(k), y(v)]);
+  // Плавная линия (Catmull-Rom -> кривые Безье).
+  let line = `M${pts[0][0]},${pts[0][1]}`;
+  for (let k = 1; k < pts.length; k++) {
+    const p0 = pts[k - 2] || pts[k - 1];
+    const p1 = pts[k - 1];
+    const p2 = pts[k];
+    const p3 = pts[k + 1] || p2;
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    line += ` C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p2[0]},${p2[1]}`;
+  }
+  const area = `${line} L${pts[pts.length - 1][0]},${H - pad.b} L${pts[0][0]},${H - pad.b} Z`;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => max / 1.18 * t);
+  const grid = ticks.map((v) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/>` +
+    `<text class="axis" x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(1)}</text>`).join("");
+  const best = speeds.indexOf(Math.max(...speeds));
+  const dots = list.map((r, k) => `<circle class="dot${k === best ? " best" : ""}" cx="${pts[k][0]}" cy="${pts[k][1]}" r="${k === best ? 6 : 4.5}">` +
+    `<title>${escapeHtml(shortDate(r.saved_at))} · ${escapeHtml(resultTitle(r))}\n${speedOf(r).toFixed(2)}/мин – ${r.frags} фрагм. за ${formatMinutes(r.ms)}</title></circle>`).join("");
+  const labels = list.length > 1
+    ? `<text class="axis" x="${x(0)}" y="${H - 8}">${escapeHtml(shortDate(list[0].saved_at))}</text>` +
+      `<text class="axis" x="${x(list.length - 1)}" y="${H - 8}" text-anchor="end">${escapeHtml(shortDate(list[list.length - 1].saved_at))}</text>`
+    : "";
+  box.innerHTML = `<svg class="speed-line" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs><linearGradient id="speed-fill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#79b8ff" stop-opacity="0.35"/><stop offset="1" stop-color="#79b8ff" stop-opacity="0"/></linearGradient></defs>
+    ${grid}<path class="area" d="${area}"/><path class="line" d="${line}"/>
+    <line class="avg" x1="${pad.l}" x2="${W - pad.r}" y1="${y(avg)}" y2="${y(avg)}"/>
+    <text class="avg-label" x="${W - pad.r}" y="${y(avg) - 6}" text-anchor="end">средняя ${avg.toFixed(2)}/мин</text>
+    ${dots}${labels}</svg>`;
+}
+
+// Вкладка "Скорость правки": итоги, график, разбивка по видео.
+function speedTab(results, remaining) {
   if (!results || !results.length) {
-    return `<section class="set-card wide-card">${head()}<p class="muted small">Результатов пока нет – запустите таймер над видео в редакторе и сохраните результат (иконка рядом со скоростью).</p></section>`;
+    return '<p class="muted small">Результатов пока нет – запустите таймер над видео в редакторе и сохраните результат (иконка рядом со скоростью).</p>';
   }
   const list = [...results].sort((a, b) => String(a.saved_at).localeCompare(String(b.saved_at))); // старые – первыми
-  const totalMs = list.reduce((s, r) => s + r.ms, 0);
-  const totalFrags = list.reduce((s, r) => s + r.frags, 0);
+  const totalMs = list.reduce((acc, r) => acc + r.ms, 0);
+  const totalFrags = list.reduce((acc, r) => acc + r.frags, 0);
   const avg = totalMs ? totalFrags / (totalMs / 60000) : 0; // взвешенная по времени
   const speeds = list.map(speedOf);
   const best = list[speeds.indexOf(Math.max(...speeds))];
@@ -1032,57 +1094,34 @@ function speedSection(results, remaining) {
   const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
   const last = list[list.length - 1];
   const vsAvg = avg ? Math.round(((speedOf(last) - avg) / avg) * 100) : 0;
-  const sp = (x) => `${x.toFixed(2)}/мин <span class="muted small">(${Math.round(x * 60)}/ч)</span>`;
+  const sp = (v) => `${v.toFixed(2)}/мин <span class="muted small">(${Math.round(v * 60)}/ч)</span>`;
   const row = (name, value) => `<tr><td>${name}</td><td>${value}</td></tr>`;
-  const left = [
-    row("Результатов", list.length),
-    row("Всего времени", formatMinutes(totalMs)),
-    row("Всего фрагментов", totalFrags.toLocaleString("ru-RU")),
-    row("Средняя скорость", sp(avg)),
-  ].join("");
+  const left = [row("Результатов", list.length), row("Всего времени", formatMinutes(totalMs)),
+    row("Всего фрагментов", totalFrags.toLocaleString("ru-RU")), row("Средняя скорость", sp(avg))].join("");
   const right = [
     row("Лучшая", `${sp(speedOf(best))} <span class="muted small">· ${shortDate(best.saved_at)}</span>`),
     row("Медиана", sp(median)),
     row("Последняя", `${sp(speedOf(last))} <span class="${vsAvg >= 0 ? "ok-text" : "flagged-text"} small">${vsAvg >= 0 ? "+" : ""}${vsAvg}% к средней</span>`),
     row("Осталось править", remaining && avg ? `${remaining.toLocaleString("ru-RU")} фрагм. ≈ ${formatMinutes((remaining / avg) * 60000)}` : "–"),
   ].join("");
-  // График: столбец – результат (по порядку), высота – скорость; лучшая – зелёная,
-  // пунктир – средняя.
-  const shown = list.slice(-40);
-  const max = Math.max(...shown.map(speedOf), avg) * 1.15 || 1;
-  const W = 1000;
-  const H = 150;
-  const step = W / shown.length;
-  const bars = shown.map((r, k) => {
-    const h = (speedOf(r) / max) * (H - 22);
-    const bw = Math.min(step * 0.64, 46); // мало результатов – столбцы не во всю ширину
-    return `<rect class="bar${r === best ? " best" : ""}" x="${k * step + (step - bw) / 2}" y="${H - 18 - h}" width="${bw}" height="${h}" rx="2">` +
-      `<title>${escapeHtml(shortDate(r.saved_at))}: ${speedOf(r).toFixed(2)}/мин, ${r.frags} фрагм. за ${formatMinutes(r.ms)}</title></rect>`;
-  }).join("");
-  const avgY = H - 18 - (avg / max) * (H - 22);
-  const chart = `<svg class="speed-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${bars}` +
-    `<line class="avg" x1="0" x2="${W}" y1="${avgY}" y2="${avgY}"/>` +
-    `<text x="4" y="${H - 4}">${escapeHtml(shortDate(shown[0].saved_at))}</text>` +
-    `<text x="${W - 4}" y="${H - 4}" text-anchor="end">${escapeHtml(shortDate(last.saved_at))}</text></svg>`;
-  // По видео.
   const byVideo = new Map();
   for (const r of list) {
-    const key = r.title || "Не указано";
+    const key = resultTitle(r);
     const v = byVideo.get(key) || { n: 0, ms: 0, frags: 0 };
     v.n += 1;
     v.ms += r.ms;
     v.frags += r.frags;
     byVideo.set(key, v);
   }
-  const videoRows = [...byVideo.entries()].sort((a, b) => b[1].ms - a[1].ms).map(([title, v]) =>
-    `<tr><td>${escapeHtml(title)}</td><td>${v.n}</td><td>${v.frags.toLocaleString("ru-RU")}</td><td>${formatMinutes(v.ms)}</td>` +
-    `<td>${(v.frags / (v.ms / 60000)).toFixed(2)}/мин</td></tr>`).join("");
-  return `<section class="set-card wide-card">
-      ${head(`<button id="speed-all" class="step-btn">Все результаты (${list.length})</button>`)}
-      <div class="disk-grid"><table class="stats">${left}</table><table class="stats">${right}</table></div>
-      ${chart}
-      <table class="stats grid-table"><tr><th>Видео</th><th>Результатов</th><th>Фрагментов</th><th>Время</th><th>Скорость</th></tr>${videoRows}</table>
-    </section>`;
+  const videos = [...byVideo.entries()].map(([title, v]) => ({ title, ...v, speed: v.frags / (v.ms / 60000) }))
+    .sort((a, b) => b.speed - a.speed);
+  return `<div class="tab-head"><span class="muted small">Результаты таймера в редакторе (иконка сохранения рядом со скоростью)</span>
+      <button id="speed-all" class="step-btn">Все результаты (${list.length})</button></div>
+    <div class="disk-grid"><table class="stats">${left}</table><table class="stats">${right}</table></div>
+    <div id="speed-chart" class="chart-box"></div>
+    <h3 class="tab-sub">Скорость по видео</h3>
+    ${hbars(videos.map((v) => ({ label: v.title, segs: [{ value: v.speed, cls: "c-blue", title: `${v.frags} фрагм. за ${formatMinutes(v.ms)}` }],
+      text: `${v.speed.toFixed(2)}/мин <span class="muted small">· ${v.n} рез., ${formatMinutes(v.ms)}</span>` })))}`;
 }
 
 // Окно со всеми результатами таймера (новые – первыми): удалить лишние.
@@ -2249,7 +2288,78 @@ const Pages = {
         `<td>${money(sum(list, (v) => costTotal(v.costs)))}</td><td>${formatSize(sum(list, (v) => v.disk_total))}</td></tr>`;
     }).join("");
 
-    const speedCard = speedSection(data.results, Math.max(0, barTotal - editedAll));
+    // Показатели медиа – для вкладки "Информация" (график и сортировка) и "Авторы".
+    const metrics = [
+      { key: "duration", label: "Длительность", get: (v) => v.duration || 0, fmt: (x) => formatDuration(x) },
+      { key: "fragments", label: "Фрагментов", get: (v) => v.fragments_total || 0, fmt: num },
+      { key: "edited", label: "Отредактировано, %", get: (v) => (v.bar_total ? (edited(v) / v.bar_total) * 100 : 0), fmt: (x) => `${Math.round(x)}%` },
+      { key: "anki", label: "В Anki", get: (v) => v.in_anki || 0, fmt: num },
+      { key: "translated", label: "Переведено", get: (v) => v.translated || 0, fmt: num },
+      { key: "editor", label: "Время в редакторе", get: (v) => v.editor_seconds || 0, fmt: (x) => formatMinutes(x * 1000) },
+      { key: "cost", label: "Потрачено", get: (v) => costTotal(v.costs), fmt: money },
+      { key: "disk", label: "Место на диске", get: (v) => v.disk_total || 0, fmt: (x) => formatSize(x) },
+    ];
+    const metricOf = (k) => metrics.find((m) => m.key === k) || metrics[0];
+    const ui = (this.statsUi ||= { tab: localStorage.getItem("stats-tab") || "speed", infoMetric: "duration", sort: "duration", dir: -1, authorMetric: "duration" });
+    const mediaLink = (v) => `#/${v.state === "ready" ? (v.audio_only ? "audio" : "video") : "process"}/${encodeURIComponent(v.id)}`;
+
+    const tabs = {
+      speed: { label: "Скорость правки", html: () => speedTab(data.results, Math.max(0, barTotal - editedAll)) },
+      costs: {
+        label: "Расходы",
+        html: () => {
+          const byCost = [...all].filter((v) => costTotal(v.costs) > 0).sort((a, b) => costTotal(b.costs) - costTotal(a.costs));
+          return hbars(byCost.map((v) => ({
+            label: v.title, href: mediaLink(v),
+            segs: [{ value: v.costs.search || 0, cls: "c-blue", title: `Поиск источников: ${money(v.costs.search)}` },
+              { value: translateCost(v.costs), cls: "c-pink", title: `Перевод и доводка: ${money(translateCost(v.costs))}` }],
+            text: `<b>${money(costTotal(v.costs))}</b>`,
+          })), legendItem("c-blue", "Поиск источников") + legendItem("c-pink", "Перевод и доводка")) +
+            `<table class="stats grid-table"><tr><th>${audioMode ? "Аудио" : "Видео"}</th>${Object.values(kinds).map((k) => `<th>${k}</th>`).join("")}<th>Всего</th></tr>
+            ${byCost.map((v) => `<tr><td><a href="${mediaLink(v)}">${escapeHtml(v.title)}</a></td>` +
+              Object.keys(kinds).map((k) => `<td>${money(kindOf(v.costs, k))}</td>`).join("") + `<td><b>${money(costTotal(v.costs))}</b></td></tr>`).join("")}
+            <tr class="total-row"><td>Итого</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k))}</td>`).join("")}<td><b>${money(spentVideos)}</b></td></tr></table>`;
+        },
+      },
+      info: {
+        label: "Информация",
+        html: () => {
+          const m = metricOf(ui.infoMetric);
+          const chart = [...all].sort((a, b) => m.get(b) - m.get(a));
+          const s2 = metricOf(ui.sort);
+          const rows = [...all].sort((a, b) => ui.sort === "title"
+            ? ui.dir * String(a.title).localeCompare(String(b.title)) : ui.dir * (s2.get(a) - s2.get(b)));
+          const th = (key, label) => `<th class="sortable${ui.sort === key ? " sorted" : ""}" data-sort="${key}">${label}${ui.sort === key ? (ui.dir < 0 ? " ↓" : " ↑") : ""}</th>`;
+          return `<div class="tab-head"><span class="field-label">График по</span><div class="picker-host" data-for="info-metric"></div></div>` +
+            hbars(chart.map((v) => ({ label: v.title, href: mediaLink(v), segs: [{ value: m.get(v), cls: "c-blue" }], text: m.fmt(m.get(v)) }))) +
+            `<table class="stats grid-table info-table"><tr>${th("title", audioMode ? "Аудио" : "Видео")}${metrics.map((x) => th(x.key, x.label)).join("")}</tr>` +
+            rows.map((v) => `<tr><td><a href="${mediaLink(v)}">${escapeHtml(v.title)}</a></td>${metrics.map((x) => `<td>${x.fmt(x.get(v))}</td>`).join("")}</tr>`).join("") +
+            "</table>";
+        },
+      },
+      authors: {
+        label: audioMode ? "Исполнители" : "Авторы",
+        html: () => {
+          const groups = new Map();
+          for (const v of all) {
+            if (!groups.has(v.group)) groups.set(v.group, []);
+            groups.get(v.group).push(v);
+          }
+          // Для автора – сумма по его медиа (отредактировано – общей долей).
+          const agg = (list, m) => (m.key === "edited"
+            ? (sum(list, (v) => v.bar_total) ? (sum(list, edited) / sum(list, (v) => v.bar_total)) * 100 : 0)
+            : sum(list, m.get));
+          const m = metricOf(ui.authorMetric);
+          const entries = [...groups.entries()].sort((a, b) => agg(b[1], m) - agg(a[1], m));
+          return `<div class="tab-head"><span class="field-label">График по</span><div class="picker-host" data-for="author-metric"></div></div>` +
+            hbars(entries.map(([g, list]) => ({ label: g, segs: [{ value: agg(list, m), cls: "c-violet" }], text: m.fmt(agg(list, m)) }))) +
+            `<table class="stats grid-table"><tr><th>${audioMode ? "Исполнитель" : "Автор"}</th><th>${audioMode ? "Аудио" : "Видео"}</th>${metrics.map((x) => `<th>${x.label}</th>`).join("")}</tr>` +
+            entries.map(([g, list]) => `<tr><td>${escapeHtml(g)}</td><td>${list.length}</td>${metrics.map((x) => `<td>${x.fmt(agg(list, x))}</td>`).join("")}</tr>`).join("") +
+            "</table>";
+        },
+      },
+    };
+    if (!tabs[ui.tab]) ui.tab = "speed";
 
     el.innerHTML = `<h1>Статистика</h1>
       <div class="page-grid stats-grid">
@@ -2258,10 +2368,11 @@ const Pages = {
           ...Object.entries(kinds).map(([k, name]) => row(name, money(kindTotal(k)))),
           ...(other >= 0.005 ? [row("Прочее (не по видео)", money(other))] : []),
         ])}
-        ${card("Видео", [
-          row("Готово к правке", `${num(ready.length)}${ready.some((v) => v.audio_only) ? ` <span class="muted small">(аудио ${ready.filter((v) => v.audio_only).length})</span>` : ""}`),
+        ${card(audioMode ? "Аудио" : "Видео", [
+          row("Готово к правке", num(ready.length)),
           row("В обработке и ждут", num(all.length - ready.length)),
           row("Длительность", formatDuration(sum(all, (v) => v.duration))),
+          row("Время в редакторе", formatMinutes(sum(all, (v) => v.editor_seconds) * 1000)),
           row("Место на диске", formatSize(sum(all, (v) => v.disk_total))),
         ])}
         ${card("Правка", [
@@ -2276,20 +2387,51 @@ const Pages = {
           row("Переведено", `${num(translated)} (${pct(translated, cards)})`),
           row("Вернулись на правку", num(sum(ready, (v) => v.flagged))),
         ])}
-        ${speedCard}
-        <section class="set-card wide-card"><h2>Расходы по видео</h2>
-          <table class="stats grid-table"><tr><th>Видео</th>${Object.values(kinds).map((k) => `<th>${k}</th>`).join("")}<th>Всего</th></tr>
-          ${costRows}
-          <tr class="total-row"><td>Итого по видео</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k))}</td>`).join("")}<td><b>${money(spentVideos)}</b></td></tr></table>
-        </section>
-        <section class="set-card wide-card"><h2>По авторам</h2>
-          <table class="stats grid-table"><tr><th>Автор</th><th>Видео</th><th>Длительность</th><th>Отредактировано</th><th>В Anki</th><th>Переведено</th><th>Потрачено</th><th>Место</th></tr>
-          ${groupRows}</table>
+        <section class="set-card wide-card stats-tabs">
+          <div class="seg-switch tab-bar">${Object.entries(tabs).map(([k, t]) => `<button data-k="${k}" class="${k === ui.tab ? "active" : ""}">${t.label}</button>`).join("")}</div>
+          <div id="stats-tab"></div>
         </section>
       </div>`;
-    const all_ = el.querySelector("#speed-all");
-    if (all_) all_.addEventListener("click", () => resultsModal(data.results, () => this.stats()));
+
+    // Содержимое вкладки (переключение – без перезагрузки страницы).
+    const panel = el.querySelector("#stats-tab");
+    const showTab = () => {
+      panel.innerHTML = tabs[ui.tab].html();
+      if (ui.tab === "speed" && data.results.length) {
+        const list = [...data.results].sort((a, b) => String(a.saved_at).localeCompare(String(b.saved_at)));
+        const ms = list.reduce((acc, r) => acc + r.ms, 0);
+        drawSpeedChart(panel.querySelector("#speed-chart"), list, ms ? list.reduce((acc, r) => acc + r.frags, 0) / (ms / 60000) : 0);
+        panel.querySelector("#speed-all").addEventListener("click", () => resultsModal(data.results, () => this.stats()));
+      }
+      const metricPicker = (id, key) => {
+        const host = panel.querySelector(`.picker-host[data-for="${id}"]`);
+        if (!host) return;
+        Picker.create(host, {
+          id, value: ui[key], options: metrics.map((m) => ({ value: m.key, label: m.label })),
+          onChange: (value) => {
+            ui[key] = value;
+            showTab();
+          },
+        });
+      };
+      metricPicker("info-metric", "infoMetric");
+      metricPicker("author-metric", "authorMetric");
+      panel.querySelectorAll("th.sortable").forEach((th) => th.addEventListener("click", () => {
+        ui.dir = ui.sort === th.dataset.sort ? -ui.dir : th.dataset.sort === "title" ? 1 : -1;
+        ui.sort = th.dataset.sort;
+        showTab();
+      }));
+    };
+    el.querySelectorAll(".tab-bar button").forEach((b) => b.addEventListener("click", () => {
+      ui.tab = b.dataset.k;
+      try {
+        localStorage.setItem("stats-tab", ui.tab);
+      } catch (_) {}
+      el.querySelectorAll(".tab-bar button").forEach((x) => x.classList.toggle("active", x === b));
+      showTab();
+    }));
     viewEnter(el);
+    showTab();
   },
 
   async settings() {

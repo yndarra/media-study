@@ -140,6 +140,47 @@ class HeartbeatRequest(BaseModel):
     client_id: str
     opened_at: float  # когда вкладка открыта (мс с эпохи, из браузера)
     project: str | None = None  # какое видео сейчас открыто в редакторе
+    editing: bool = False  # открыт сам редактор (а не другой раздел) – время идёт в статистику
+
+
+# Время в редакторе по каждому медиа (для "Статистики"): пока вкладка сообщает,
+# что открыт редактор, секунды копятся здесь и раз в EDITOR_FLUSH секунд
+# дописываются в project.json ("editor_seconds"). Между отметками – не больше
+# EDITOR_MAX_GAP (вкладка в фоне отмечается реже, но закрытую не считаем).
+EDITOR_FLUSH = 30
+EDITOR_MAX_GAP = 90
+_editor_time: dict = {"pending": {}, "last": {}, "flushed": time.monotonic()}
+
+
+def _count_editor_time(client_id: str, project_id: str | None, editing: bool) -> None:
+    now = time.monotonic()
+    prev = _editor_time["last"].get(client_id)
+    _editor_time["last"][client_id] = (now, project_id if editing else None)
+    if prev and prev[1] and editing and prev[1] == project_id:
+        gap = now - prev[0]
+        if gap <= EDITOR_MAX_GAP:
+            pending = _editor_time["pending"]
+            pending[project_id] = pending.get(project_id, 0.0) + gap
+    if now - _editor_time["flushed"] >= EDITOR_FLUSH:
+        _flush_editor_time()
+
+
+def _flush_editor_time() -> None:
+    _editor_time["flushed"] = time.monotonic()
+    pending, _editor_time["pending"] = _editor_time["pending"], {}
+    for project_id, seconds in pending.items():
+        project_dir = DATA_DIR / project_id
+        if not project_dir.is_dir():
+            continue
+        settings = library.project_settings(project_dir)
+        settings["editor_seconds"] = round(settings.get("editor_seconds", 0) + seconds, 1)
+        library.save_project_settings(project_dir, settings)
+
+
+def _editor_seconds(project_id: str) -> float:
+    """Сколько всего редактор был открыт на этом медиа (с ещё не записанным)."""
+    saved = library.project_settings(DATA_DIR / project_id).get("editor_seconds", 0)
+    return round(saved + _editor_time["pending"].get(project_id, 0.0))
 
 
 def _live_clients() -> dict:
@@ -150,6 +191,7 @@ def _live_clients() -> dict:
 @app.post("/api/heartbeat")
 def heartbeat(body: HeartbeatRequest):
     _clients[body.client_id] = {"opened_at": body.opened_at, "seen": time.monotonic()}
+    _count_editor_time(body.client_id, body.project, body.editing)
     live = _live_clients()
     newest = max(live.values(), key=lambda c: c["opened_at"])["opened_at"]
     stage3 = None
@@ -220,6 +262,7 @@ def restart():
             "  # -m webapp.run")
     subprocess.Popen([exe, "-c", code], cwd=str(REPO_DIR), close_fds=True,
                      creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS)
+    _flush_editor_time()  # время в редакторе – записать до выхода
     threading.Timer(0.4, lambda: os._exit(0)).start()
     return {"ok": True}
 
@@ -230,6 +273,7 @@ def shutdown():
     Остановить сервер (кнопка внизу меню). Фоновые процессы – обработка,
     передача в Anki, перевод – живут отдельно и доделывают своё.
     """
+    _flush_editor_time()  # время в редакторе – записать до выхода
     threading.Timer(0.4, lambda: os._exit(0)).start()
     return {"ok": True}
 
@@ -1076,10 +1120,11 @@ def overall_stats():
     for item in library.list_projects(DATA_DIR):
         row = {key: item.get(key) for key in (
             "id", "title", "group", "state", "duration", "fragments_total", "active_total", "cards_total",
-            "reviewed", "edit_bar", "in_anki", "exported", "deleted_total", "bar_total", "flagged")}
+            "reviewed", "edit_bar", "in_anki", "exported", "deleted_total", "bar_total", "flagged", "audio_only")}
         row["costs"] = library.project_settings(DATA_DIR / item["id"]).get("costs", {})
         row["translated"] = translated.get(item["id"], 0) if item["state"] == "ready" else 0
         row["disk_total"] = _disk_total(item["id"])
+        row["editor_seconds"] = _editor_seconds(item["id"])
         videos.append(row)
     return {"videos": videos, "openrouter_usage": _openrouter_usage()}
 
