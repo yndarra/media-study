@@ -139,6 +139,11 @@ const Api = {
     return this.json("/api/openrouter/models");
   },
 
+  // Сколько медиа в разделах меню (по режимам видео/аудио).
+  counts() {
+    return this.json("/api/counts");
+  },
+
   activity() {
     return this.json("/api/activity");
   },

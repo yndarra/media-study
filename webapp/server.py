@@ -759,6 +759,21 @@ def update_settings(body: dict):
     return {**saved, "openrouter_key": _openrouter_key(), "deck_sync": _deck_sync_state()}
 
 
+# Счётчики разделов меню (Медиа, Обработка) по режимам – раз в 10 с, не чаще.
+_counts_cache: dict = {"at": 0.0, "value": None}
+
+
+@app.get("/api/counts")
+def menu_counts():
+    if time.time() - _counts_cache["at"] > 10 or _counts_cache["value"] is None:
+        value = {"video": {"ready": 0, "pending": 0}, "audio": {"ready": 0, "pending": 0}}
+        for item in library.list_projects(DATA_DIR):
+            kind = "audio" if item.get("audio_only") else "video"
+            value[kind]["ready" if item["state"] == "ready" else "pending"] += 1
+        _counts_cache.update(at=time.time(), value=value)
+    return _counts_cache["value"]
+
+
 @app.get("/api/activity")
 def activity():
     """Что сейчас идёт: скачивание/обработка видео и очереди Anki — с процентом и временем."""

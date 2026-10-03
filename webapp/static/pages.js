@@ -160,9 +160,77 @@ function askStorage(info) {
   });
 }
 
+// Режим приложения: видео или аудио (переключатель под названием в меню).
+// От него зависят разделы "Медиа" (название и значок тоже), "Обработка",
+// "Добавить" и "Статистика"; "Настройки" общие. Запоминается в браузере.
+const Mode = {
+  ICONS: {
+    video: '<svg class="menu-icon" viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M8.5 7.5l4 2.5-4 2.5z"/></svg>',
+    audio: '<svg class="menu-icon" viewBox="0 0 20 20"><path d="M8 14.5V4.5l8-1.5v10"/><circle cx="5.8" cy="14.5" r="2.2"/><circle cx="13.8" cy="13" r="2.2"/></svg>',
+  },
+  kind: (() => {
+    try {
+      return localStorage.getItem("media-mode") === "audio" ? "audio" : "video";
+    } catch (_) {
+      return "video";
+    }
+  })(),
+  counts: null,
+
+  init() {
+    document.querySelectorAll("#mode-switch button").forEach((b) => b.addEventListener("click", () => this.set(b.dataset.k)));
+    this.paint();
+    this.refreshCounts();
+    setInterval(() => this.refreshCounts(), 5000);
+  },
+
+  // Переключить режим; открытый раздел (кроме настроек и редактора) – заново.
+  set(kind, reroute = true) {
+    if (kind !== "video" && kind !== "audio") return;
+    const changed = kind !== this.kind;
+    this.kind = kind;
+    try {
+      localStorage.setItem("media-mode", kind);
+    } catch (_) {}
+    this.paint();
+    if (changed && reroute && ["videos", "process", "add", "stats"].includes(State.view)) {
+      if (State.view === "videos") location.hash = "#/media";
+      Router.route(true);
+    }
+  },
+
+  paint() {
+    const audio = this.kind === "audio";
+    const sw = document.getElementById("mode-switch");
+    sw.classList.toggle("audio", audio);
+    sw.classList.toggle("video", !audio);
+    sw.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.k === this.kind));
+    const link = document.getElementById("menu-media");
+    link.querySelector(".menu-icon-host").innerHTML = this.ICONS[this.kind];
+    link.querySelector(".menu-label").textContent = audio ? "Аудио" : "Видео";
+    this.paintCounts();
+  },
+
+  async refreshCounts() {
+    try {
+      this.counts = await Api.counts();
+    } catch (_) {
+      return;
+    }
+    this.paintCounts();
+  },
+
+  paintCounts() {
+    const c = this.counts && this.counts[this.kind];
+    document.getElementById("count-media").textContent = c && c.ready ? c.ready : "";
+    document.getElementById("count-process").textContent = c && c.pending ? c.pending : "";
+  },
+};
+
 const Router = {
   start() {
     Panels.init();
+    Mode.init();
     Activity.start();
     window.addEventListener("hashchange", () => this.route());
     // Нажали на раздел, который уже открыт, – он показывается заново, с той же
@@ -196,8 +264,10 @@ const Router = {
     const listShown = (view, box) => !full && State.view === view && document.querySelector(`#${box} a.card`);
     // Библиотека: "Видео" (#/videos, #/video/<код>) и "Аудио" (#/audio, #/audio/<код>) –
     // одна страница с разным списком.
-    const lib = page === "audio" ? "audio" : page === "video" || page === "videos" ? "video" : null;
-    const libModal = !!(lib && id && page !== "videos");
+    // Адрес видео или аудио переключает режим (ссылка на конкретное медиа).
+    if (page === "audio" || page === "video" || page === "videos") Mode.set(page === "audio" ? "audio" : "video", false);
+    const lib = page === "media" || page === "audio" || page === "video" || page === "videos" ? Mode.kind : null;
+    const libModal = !!(lib && id && (page === "audio" || page === "video"));
     if (lib && listShown("videos", "videos-list") && Pages.libraryKind === lib) {
       if (libModal) Pages.videoModal(id);
       else {
@@ -225,7 +295,7 @@ const Router = {
         lock = await Api.editState(id);
       } catch (_) {}
       if (lock.locked) {
-        history.replaceState(null, "", "#/videos");
+        history.replaceState(null, "", "#/media");
         askConfirm({ title: "Редактировать нельзя", text: escapeHtml(lock.reason), yes: "Понятно", no: null });
         if (State.view !== "videos") this.route(true);
         return;
@@ -240,7 +310,7 @@ const Router = {
     if (lib) {
       // Подробности – окно поверх списка своего раздела (видео или аудио).
       if (!(libModal && document.getElementById("modal-overlay") && Pages.libraryKind === lib)) {
-        this.show("videos", lib === "audio" ? "audio" : "videos");
+        this.show("videos", "media");
         await Pages.videos(lib);
       }
       if (libModal) Pages.videoModal(id);
@@ -260,8 +330,8 @@ const Router = {
       this.show("settings", "settings");
       Pages.settings();
     } else {
-      this.show("videos", "videos");
-      Pages.videos();
+      this.show("videos", "media");
+      Pages.videos(Mode.kind);
     }
   },
 
@@ -1749,40 +1819,18 @@ const Pages = {
   // -- обработка (этап 1) --------------------------------------------------------------
   async process() {
     const el = document.getElementById("view-process");
-    // "Обработка" – общая для видео и аудио; переключатель вверху справа,
-    // открывается последний выбранный подраздел.
-    let kind = "video";
-    try {
-      kind = localStorage.getItem("process-kind") === "audio" ? "audio" : "video";
-    } catch (_) {}
-    el.innerHTML = `<div class="page-head"><h1>Обработка</h1>
-        <div class="seg-switch" role="tablist">
-          <button data-k="video" class="${kind === "video" ? "active" : ""}">Видео <span class="seg-count"></span></button>
-          <button data-k="audio" class="${kind === "audio" ? "active" : ""}">Аудио <span class="seg-count"></span></button>
-        </div></div>
-      <p class="muted small page-note">Добавленные видео и аудио: копия для редактора, распознавание речи, сверка с текстом и нарезка на фразы. Нажмите на видео (аудио), чтобы прикрепить ссылки на текст для сверки (например, страницу Notion или текст песни) и запустить обработку.</p>
+    // Видео или аудио – по режиму (переключатель в меню).
+    const kind = Mode.kind;
+    el.innerHTML = `<h1>Обработка</h1>
+      <p class="muted small page-note">${kind === "audio"
+        ? "Добавленные аудио: распознавание речи, сверка с текстом (агент ищет текст песни сам или по вашей ссылке) и нарезка на фразы. Нажмите на аудио, чтобы прикрепить ссылки и запустить обработку."
+        : "Добавленные видео: копия для редактора, распознавание речи, сверка с текстом и нарезка на фразы. Нажмите на видео, чтобы прикрепить ссылки на текст для сверки (например, страницу Notion) и запустить обработку."}</p>
       <div id="process-list"><p class="muted">Загрузка…</p></div>`;
-    el.querySelectorAll(".seg-switch button").forEach((b) => b.addEventListener("click", () => {
-      if (b.dataset.k === kind) return;
-      kind = b.dataset.k;
-      try {
-        localStorage.setItem("process-kind", kind);
-      } catch (_) {}
-      el.querySelectorAll(".seg-switch button").forEach((x) => x.classList.toggle("active", x === b));
-      const box = document.getElementById("process-list");
-      box.innerHTML = "";
-      render();
-    }));
     viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     const render = async () => {
       const box = document.getElementById("process-list");
       if (!box) return;
       const pending = (await Api.projects()).filter((v) => v.state !== "ready");
-      // Сколько ждёт обработки в каждом подразделе – на переключателе.
-      const counts = { video: pending.filter((v) => !v.audio_only).length, audio: pending.filter((v) => v.audio_only).length };
-      document.querySelectorAll("#view-process .seg-switch button").forEach((b) => {
-        b.querySelector(".seg-count").textContent = counts[b.dataset.k] || "";
-      });
       const items = pending.filter((v) => !!v.audio_only === (kind === "audio"));
       if (!items.length) {
         box.innerHTML = `<p class="muted">Нечего обрабатывать – добавьте ${kind === "audio" ? "аудио" : "видео"} в разделе «Добавить».</p>`;
@@ -2020,18 +2068,21 @@ const Pages = {
   async add() {
     const el = document.getElementById("view-add");
     // Как в "Настройках": блоки-карточки, два рядом (на узком экране – друг под другом).
+    const audio = Mode.kind === "audio";
     el.innerHTML = `<h1>Добавить</h1>
       <div class="page-grid">
-        <section class="set-card half-card">
+        <section class="set-card half-card${audio ? " hidden" : ""}">
           <h2>По ссылке</h2>
           <p class="muted small">YouTube и всё, что умеет yt-dlp. Видео скачается в качестве, заданном в «Настройках».</p>
           <div class="author-row"><input id="download-url" class="wide" placeholder="https://youtu.be/…"><button id="download-go" class="step-btn" disabled>Скачать</button></div>
         </section>
         <section class="set-card half-card">
-          <h2>Свой файл</h2>
-          <p class="muted small">Видео или аудио любого распространённого формата (mp4, mkv, webm, mov, mp3, m4a, wav, flac, ogg…).</p>
+          <h2>${audio ? "Свой аудиофайл" : "Свой файл"}</h2>
+          <p class="muted small">${audio
+            ? "Песня, подкаст и т.п. любого распространённого формата (mp3, m4a, wav, flac, ogg, opus…). Имя «Исполнитель — Название» разберётся само."
+            : "Видео любого распространённого формата (mp4, mkv, webm, mov…); аудиофайлы – в режиме «Аудио»."}</p>
           <div class="author-row">
-            <label class="step-btn file-pick">Выбрать файл<input id="file-input" type="file" accept="video/*,audio/*" hidden></label>
+            <label class="step-btn file-pick">Выбрать файл<input id="file-input" type="file" accept="${audio ? "audio/*" : "video/*,audio/*"}" hidden></label>
             <span id="file-chip" class="file-chip hidden"><span class="file-chip-name"></span><button class="file-chip-x" title="Убрать файл">×</button></span>
             <button id="file-go" class="step-btn" disabled>Добавить</button>
           </div>
@@ -2102,7 +2153,11 @@ const Pages = {
       el.innerHTML = `<h1>Статистика</h1><p class="muted">Не удалось загрузить: ${escapeHtml(err.message)}</p>`;
       return;
     }
-    const all = data.videos;
+    // Только медиа текущего режима (видео или аудио).
+    const audioMode = Mode.kind === "audio";
+    const all = data.videos.filter((v) => !!v.audio_only === audioMode);
+    const ids = new Set(all.map((v) => v.id));
+    data.results = (data.results || []).filter((r) => (r.project ? ids.has(r.project) : !audioMode));
     const ready = all.filter((v) => v.state === "ready");
     const sum = (list, f) => list.reduce((s, v) => s + (Number(f(v)) || 0), 0);
     const money = (x) => `$${(Number(x) || 0).toFixed(2)}`;
@@ -2116,7 +2171,8 @@ const Pages = {
     // Итог – по счётчику OpenRouter (если доступен): туда входят и расходы не
     // по видео (эксперименты, проверки, траты до появления учёта).
     const usage = data.openrouter_usage;
-    const spentAll = usage !== null && usage !== undefined ? Math.max(usage, spentVideos) : spentVideos;
+    // Счётчик OpenRouter – общий на всё; в режиме "Аудио" – только расходы по аудио.
+    const spentAll = !audioMode && usage !== null && usage !== undefined ? Math.max(usage, spentVideos) : spentVideos;
     const other = spentAll - spentVideos;
     const cards = sum(ready, (v) => v.cards_total);
     const translated = sum(ready, (v) => v.translated);

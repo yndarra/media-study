@@ -1767,3 +1767,22 @@ table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: 
 #video-wrap.audio-mode #audio-vis { display: block; }
 #video-wrap.audio-mode #video { opacity: 0; }
 #app.audio-project #speaker-rover, #app.audio-project #unvoiced-btn, #app.audio-project .speaker-btns + .sep { display: none; }
+
+/* Переключатель режима Видео / Аудио в меню: выбранная кнопка и подсветка
+   всего переключателя – синие у видео, розовые (с переливом) у аудио. */
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 2px 0 10px;
+  border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); background: #121217;
+  transition: box-shadow 0.4s ease, border-color 0.4s ease, background 0.4s ease; }
+.mode-switch button { height: 30px; border: none; border-radius: 7px; background: transparent; color: var(--dim);
+  font-size: 13px; transition: background 0.35s ease, color 0.35s ease, box-shadow 0.35s ease; }
+.mode-switch button:hover { color: var(--text); }
+.mode-switch.video { border-color: rgba(96, 165, 250, 0.35); box-shadow: 0 0 18px rgba(96, 165, 250, 0.16), inset 0 0 12px rgba(96, 165, 250, 0.08); }
+.mode-switch.audio { border-color: rgba(240, 139, 196, 0.38); box-shadow: 0 0 18px rgba(240, 139, 196, 0.18), inset 0 0 12px rgba(240, 139, 196, 0.08); }
+.mode-switch.video button.active { background: linear-gradient(135deg, #2f5f9e, #214a73); color: #fff; box-shadow: 0 2px 8px rgba(47, 95, 158, 0.45); }
+.mode-switch.audio button.active { background: linear-gradient(135deg, #c2508f, #8957e5, #c2508f); background-size: 200% 200%;
+  animation: mode-shimmer 6s ease infinite; color: #fff; box-shadow: 0 2px 10px rgba(194, 80, 143, 0.5); }
+@keyframes mode-shimmer { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+/* Количество в разделе меню – справа. */
+.menu-count { margin-left: auto; font-size: 12px; color: var(--dim); }
+.menu-count:empty { display: none; }
+.menu-icon-host { display: inline-flex; }

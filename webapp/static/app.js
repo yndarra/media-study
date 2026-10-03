@@ -725,7 +725,7 @@ const App = {
     if (!result) return;
     State.manifest.settings = result.manifest.settings;
     this.renderNav();
-    location.hash = "#/videos";
+    location.hash = State.manifest && State.manifest.video.audio_only ? "#/audio" : "#/videos";
   },
 
   // Скорость воспроизведения: значение и доступность кнопок на краях диапазона.
