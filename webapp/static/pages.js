@@ -2181,6 +2181,8 @@ const Pages = {
             <label class="check"><input id="set-def-auto" type="checkbox" ${s.default_auto_play !== false ? "checked" : ""}> Автозапуск</label>
             <label class="check"><input id="set-def-stop" type="checkbox" ${s.default_stop_at_end !== false ? "checked" : ""}> Остановка на конце отрезка</label>
             <label class="check"><input id="set-def-skip" type="checkbox" ${s.default_skip_deleted !== false ? "checked" : ""}> Соседние фразы без удалённых</label>
+            <label class="check"><input id="set-def-link-video" type="checkbox" ${s.default_link_video ? "checked" : ""}> Связанные границы – видео</label>
+            <label class="check"><input id="set-def-link-audio" type="checkbox" ${s.default_link_audio !== false ? "checked" : ""}> Связанные границы – аудио</label>
           </div>
         </section>
         <section class="set-card">
@@ -2327,6 +2329,8 @@ const Pages = {
         default_auto_play: document.getElementById("set-def-auto").checked,
         default_stop_at_end: document.getElementById("set-def-stop").checked,
         default_skip_deleted: document.getElementById("set-def-skip").checked,
+        default_link_video: document.getElementById("set-def-link-video").checked,
+        default_link_audio: document.getElementById("set-def-link-audio").checked,
         new_video_storage: document.getElementById("set-new-storage").value,
         });
       } catch (err) {

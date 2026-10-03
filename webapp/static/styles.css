@@ -1749,3 +1749,6 @@ table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: 
 /* Соседняя фраза удалённого фрагмента (режим "показывать удалённые"). */
 .ctx.deleted-neighbor { text-decoration: line-through; text-decoration-color: rgba(248, 81, 73, 0.55); }
 .speaker-btns + .sep, #nav-mid-right .sep, .stage3 .sep { align-self: center; }
+
+/* Включённый режим "связанные границы" – иконка подсвечена. */
+#link-bounds-btn.on { color: #79b8ff; }

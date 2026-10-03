@@ -1382,6 +1382,7 @@ class UpdateFragmentRequest(BaseModel):
     text_marks: str | None = None  # разметка правки (см. Fragment.text_marks)
     needs_review: bool | None = None
     review_note: str | None = None
+    link: bool = False  # режим "связанные границы" (см. ManifestStore.update_fragment)
 
 
 class UnvoicedRequest(BaseModel):
@@ -1432,6 +1433,8 @@ def get_manifest(project_id: str):
     data = _public(p.store.load())
     # Название – заданное вручную в окне видео (если есть): его показывает меню "Сейчас правится".
     data["video"]["title"] = title_of(p.dir)
+    # Аудио без видео: редактор показывает фон с кругом вместо картинки.
+    data["video"]["audio_only"] = bool(library.video_info(p.dir).get("audio_only"))
     return data
 
 
@@ -1439,7 +1442,9 @@ def get_manifest(project_id: str):
 def update_fragment(project_id: str, fragment_id: str, body: UpdateFragmentRequest):
     store = project(project_id).store
     manifest = _call(lambda: store.update_fragment(fragment_id, **body.model_dump()))
-    return manifest.by_id(fragment_id).to_dict()
+    # Сдвинутые вместе с этой границей соседи (режим "связанные границы").
+    linked = [manifest.by_id(i).to_dict() for i in getattr(store, "last_linked", [])]
+    return {**manifest.by_id(fragment_id).to_dict(), "linked": linked}
 
 
 @app.post("/api/p/{project_id}/fragments/{fragment_id}/heard")

@@ -360,9 +360,20 @@ class ManifestStore:
         needs_review: bool | None = None,
         review_note: str | None = None,
         text_marks: str | None = None,
+        link: bool = False,
     ) -> Manifest:
+        """
+        Правка фрагмента. link – режим "связанные границы": граница, стоявшая
+        вплотную к соседу (ближайшему живому, не переданному в Anki),
+        двигается вместе с его границей – склейка всех фрагментов остаётся
+        покадрово равной исходному видео. Сосед правится тем же шагом истории
+        (Ctrl+Z отменяет обе правки); его запас при нужде расширяется.
+        Изменённые соседи – в self.last_linked.
+        """
         manifest, before = self._begin()
         fragment = self._editable(manifest, fragment_id)
+        old_start, old_end = fragment.algo_start_frame, fragment.algo_end_frame
+        self.last_linked = []
         # Правка только текста склеивается с предыдущей правкой текста
         # этого же фрагмента; любые границы — всегда отдельный шаг.
         only_text = text is not None and algo_start_frame is None and algo_end_frame is None
@@ -377,6 +388,30 @@ class ManifestStore:
             <= fragment.context_end_frame
         ):
             raise ValueError("границы отрезка должны лежать внутри фрагмента и start < end")
+        if link:
+            index = manifest.index_of(fragment_id)
+            for side, old, new in (("start", old_start, fragment.algo_start_frame), ("end", old_end, fragment.algo_end_frame)):
+                if old == new:
+                    continue
+                direction = "prev" if side == "start" else "next"
+                k = self._nearest_live_neighbor_index(manifest, index, direction)
+                neighbor = manifest.fragments[k] if k is not None else None
+                if neighbor is None or neighbor.exported:
+                    continue
+                if side == "start" and neighbor.algo_end_frame == old:
+                    if new <= neighbor.algo_start_frame:
+                        raise ValueError("соседний фрагмент стал бы пустым")
+                    neighbor.algo_end_frame = new
+                    neighbor.context_end_frame = max(neighbor.context_end_frame, new)
+                elif side == "end" and neighbor.algo_start_frame == old:
+                    if new >= neighbor.algo_end_frame:
+                        raise ValueError("соседний фрагмент стал бы пустым")
+                    neighbor.algo_start_frame = new
+                    neighbor.context_start_frame = min(neighbor.context_start_frame, new)
+                else:
+                    continue  # не стояли вплотную – соседа не трогаем
+                neighbor.context_custom = (neighbor.context_start_frame, neighbor.context_end_frame) != self._default_context(manifest, neighbor)
+                self.last_linked.append(neighbor.id)
         if text is not None:
             fragment.text = clean_text(text)
             # Разметка правки приходит вместе с текстом; без неё — старая

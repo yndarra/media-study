@@ -23,6 +23,10 @@ const State = {
   // Соседние фразы (серые): удалённые фрагменты пропускаются – видна ближайшая
   // живая; выключено – видна и удалённая (зачёркнутой).
   skipDeleted: true,
+  // Связанные границы: внутренняя граница отрезка двигается вместе с
+  // границей соседа (склейка всех фрагментов = исходник покадрово).
+  // По умолчанию: видео – выкл, аудио – вкл (настройки).
+  linkBounds: false,
 };
 
 // Режимы редактора по умолчанию (настройки) – при загрузке страницы и после
@@ -32,10 +36,13 @@ function applyEditorDefaults(settings) {
   State.autoPlay = settings.default_auto_play !== false;
   State.stopAtSegmentEnd = settings.default_stop_at_end !== false;
   State.skipDeleted = settings.default_skip_deleted !== false;
+  State.linkDefaults = { video: !!settings.default_link_video, audio: settings.default_link_audio !== false };
+  State.linkBounds = State.linkDefaults[State.manifest && State.manifest.video.audio_only ? "audio" : "video"];
   if (typeof App !== "undefined" && App.updateAutoButton) {
     App.updateAutoButton();
     App.updateModeButton();
     App.updateSkipButton();
+    App.updateLinkButton();
     if (State.manifest && currentFragment()) App.renderText(currentFragment(), false);
   }
 }
@@ -111,6 +118,9 @@ const ICONS = {
   // Соседние фразы: удалённые пропускаются (перечёркнутый глаз) / видны (глаз).
   skipOn: '<svg viewBox="0 0 20 20"><path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/><path d="M4 16L16 4"/></svg>',
   skipOff: '<svg viewBox="0 0 20 20"><path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/></svg>',
+  // Связанные границы: соединённые звенья / разорванные.
+  linkOn: '<svg viewBox="0 0 20 20"><path d="M8.5 11.5l3-3"/><path d="M9.5 6.5l1.2-1.2a3 3 0 0 1 4.2 4.2l-1.2 1.2"/><path d="M10.5 13.5l-1.2 1.2a3 3 0 0 1-4.2-4.2l1.2-1.2"/></svg>',
+  linkOff: '<svg viewBox="0 0 20 20"><path d="M9.5 6.5l1.2-1.2a3 3 0 0 1 4.2 4.2l-1.2 1.2"/><path d="M10.5 13.5l-1.2 1.2a3 3 0 0 1-4.2-4.2l1.2-1.2"/><path d="M4 4l2 2M16 16l-2-2"/></svg>',
   play: '<svg viewBox="0 0 20 20"><path d="M6 4l10 6-10 6z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 20 20"><path d="M6.5 4v12M13.5 4v12" stroke-width="3"/></svg>',
   // Остановка на конце отрезка включена / выключена (играть до конца видео).
@@ -277,6 +287,11 @@ const App = {
     const manifest = await this._call(Api.getManifest());
     if (!manifest) return;
     State.manifest = manifest;
+    // Режим "связанные границы" – по умолчанию для видео или аудио (настройки).
+    if (State.linkDefaults) {
+      State.linkBounds = State.linkDefaults[manifest.video.audio_only ? "audio" : "video"];
+      this.updateLinkButton();
+    }
     FragList.reset();
     let last = -1;
     manifest.fragments.forEach((f, i) => {
@@ -624,13 +639,13 @@ const App = {
 
   // Соседняя фраза (серая) – ближайшая с текстом. Удалённые пользователем
   // пропускаются в режиме skipDeleted (по умолчанию), иначе видны
-  // (зачёркнутыми). Исходники объединения/разделения не показываются никогда.
+  // (зачёркнутыми) – любые, и исходники объединения/разделения тоже.
   _neighbor(direction) {
     const fragments = State.manifest.fragments;
     for (let i = State.fragmentIndex + direction; i >= 0 && i < fragments.length; i += direction) {
       const g = fragments[i];
       const deleted = g.status !== "active";
-      if (deleted && (State.skipDeleted || g.absorbed_into || (g.split_into && g.split_into.length))) continue;
+      if (deleted && State.skipDeleted) continue;
       const text = (g.text || "").trim();
       if (text) return { text, deleted };
     }
@@ -782,9 +797,18 @@ const App = {
   async saveBounds(f) {
     if (!f) return;
     const updated = await this._call(
-      Api.updateFragment(f.id, { algo_start_frame: f.algo_start_frame, algo_end_frame: f.algo_end_frame }),
+      Api.updateFragment(f.id, { algo_start_frame: f.algo_start_frame, algo_end_frame: f.algo_end_frame, link: State.linkBounds }),
     );
-    if (updated) this._applyServer(f, updated);
+    if (updated) {
+      // Соседи, сдвинутые вместе с границей (режим "связанные границы").
+      for (const n of updated.linked || []) {
+        const g = State.manifest.fragments.find((x) => x.id === n.id);
+        if (g) Object.assign(g, n);
+      }
+      delete updated.linked;
+      this._applyServer(f, updated);
+      FragList.schedule();
+    }
     if (f === currentFragment()) this.renderAll();
   },
 
@@ -1207,6 +1231,21 @@ const App = {
       : "Соседние фразы: удалённые тоже видны, зачёркнутыми (нажмите, чтобы пропускать)";
   },
 
+  // Связанные границы.
+  updateLinkButton() {
+    const on = State.linkBounds;
+    $("link-bounds-btn").innerHTML = on ? ICONS.linkOn : ICONS.linkOff;
+    $("link-bounds-btn").classList.toggle("on", on);
+    $("link-bounds-btn").title = on
+      ? "Связанные границы: ВКЛ – граница отрезка, стоящая вплотную к соседу, двигает и его границу (склейка = исходник покадрово)"
+      : "Связанные границы: ВЫКЛ – границы двигаются независимо";
+  },
+
+  toggleLinkBounds() {
+    State.linkBounds = !State.linkBounds;
+    this.updateLinkButton();
+  },
+
   toggleSkipDeleted() {
     State.skipDeleted = !State.skipDeleted;
     this.updateSkipButton();
@@ -1306,9 +1345,11 @@ $("redo-btn").addEventListener("click", () => App.redo());
 $("mode-toggle").addEventListener("click", () => App.toggleMode());
 $("auto-toggle").addEventListener("click", () => App.toggleAuto());
 $("skip-deleted-btn").addEventListener("click", () => App.toggleSkipDeleted());
+$("link-bounds-btn").addEventListener("click", () => App.toggleLinkBounds());
 $("junction-join").addEventListener("click", () => App.joinAtJunction());
 App.updateAutoButton();
 App.updateSkipButton();
+App.updateLinkButton();
 $("reset-btn").addEventListener("click", () => App.reset());
 $("pad-left-minus").addEventListener("click", () => App.changePadding("left", -1));
 $("pad-left-plus").addEventListener("click", () => App.changePadding("left", 1));

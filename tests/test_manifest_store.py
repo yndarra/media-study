@@ -107,6 +107,24 @@ class TestMerge(ManifestStoreTestCase):
             self.store.hard_delete("frag_0001")
 
 
+class TestLinkedBounds(ManifestStoreTestCase):
+    def test_linked_start_moves_left_neighbor_end_in_one_step(self):
+        manifest = self.store.update_fragment("frag_0002", algo_start_frame=80, link=True)
+        self.assertEqual(manifest.by_id("frag_0001").algo_end_frame, 80)
+        self.assertEqual(self.store.last_linked, ["frag_0001"])
+        # Одна отмена возвращает обе границы.
+        manifest, _ = self.store.undo("frag_0002")
+        self.assertEqual((manifest.by_id("frag_0001").algo_end_frame, manifest.by_id("frag_0002").algo_start_frame), (90, 90))
+
+    def test_linked_end_moves_right_neighbor_start(self):
+        manifest = self.store.update_fragment("frag_0001", algo_end_frame=100, link=True)
+        self.assertEqual(manifest.by_id("frag_0002").algo_start_frame, 100)
+
+    def test_without_link_neighbor_untouched(self):
+        manifest = self.store.update_fragment("frag_0002", algo_start_frame=80)
+        self.assertEqual(manifest.by_id("frag_0001").algo_end_frame, 90)
+
+
 class TestSplit(ManifestStoreTestCase):
     def test_current_frame_goes_to_left_part(self):
         manifest, left_id, right_id = self.store.split("frag_0004", 240)

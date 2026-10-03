@@ -194,6 +194,9 @@ DEFAULT_APP_SETTINGS = {
     "default_auto_play": True,
     "default_stop_at_end": True,
     "default_skip_deleted": True,
+    # Связанные границы (граница двигает и соседнюю): видео – выкл, аудио – вкл.
+    "default_link_video": False,
+    "default_link_audio": True,
     # Агент перевода (карточки с флагом "перевод"): модель OpenRouter и файл с ключом.
     "openrouter_model": "google/gemini-3.8-flash",
     # Модель агента поиска источников (с веб-поиском OpenRouter).
