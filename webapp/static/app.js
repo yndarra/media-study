@@ -119,6 +119,8 @@ const ICONS = {
   skipOn: '<svg viewBox="0 0 20 20"><path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/><path d="M4 16L16 4"/></svg>',
   skipOff: '<svg viewBox="0 0 20 20"><path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/></svg>',
   // Связанные границы: соединённые звенья / разорванные.
+  speakersOn: '<svg viewBox="0 0 20 20"><circle cx="8" cy="7" r="3"/><path d="M2.5 16.5c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/><path d="M14 4.5c1 .8 1.5 1.8 1.5 3s-.5 2.2-1.5 3"/><path d="M16 2.5c1.6 1.3 2.4 3 2.4 5s-.8 3.7-2.4 5"/></svg>',
+  speakersOff: '<svg viewBox="0 0 20 20"><circle cx="8" cy="7" r="3"/><path d="M2.5 16.5c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/><path d="M14 6l4 4M18 6l-4 4"/></svg>',
   linkOn: '<svg viewBox="0 0 20 20"><path d="M8.5 11.5l3-3"/><path d="M9.5 6.5l1.2-1.2a3 3 0 0 1 4.2 4.2l-1.2 1.2"/><path d="M10.5 13.5l-1.2 1.2a3 3 0 0 1-4.2-4.2l1.2-1.2"/></svg>',
   linkOff: '<svg viewBox="0 0 20 20"><path d="M9.5 6.5l1.2-1.2a3 3 0 0 1 4.2 4.2l-1.2 1.2"/><path d="M10.5 13.5l-1.2 1.2a3 3 0 0 1-4.2-4.2l1.2-1.2"/><path d="M4 4l2 2M16 16l-2-2"/></svg>',
   play: '<svg viewBox="0 0 20 20"><path d="M6 4l10 6-10 6z" fill="currentColor"/></svg>',
@@ -292,6 +294,7 @@ const App = {
     AudioVisual.enable(!!manifest.video.audio_only);
     // У аудио нет "немых" реплик героя игры – кнопки Rover ("R", "Не озвучено") не нужны.
     document.getElementById("app").classList.toggle("audio-project", !!manifest.video.audio_only);
+    this.updateSpeakersButton();
     // Режим "связанные границы" – по умолчанию для видео или аудио (настройки).
     if (State.linkDefaults) {
       State.linkBounds = State.linkDefaults[manifest.video.audio_only ? "audio" : "video"];
@@ -1289,6 +1292,34 @@ const App = {
     this.updateLinkButton();
   },
 
+  // Говорящие на карточках (режим видео, хранится на сервере).
+  updateSpeakersButton() {
+    const on = !!(State.manifest && State.manifest.video.show_speakers);
+    $("speakers-btn").innerHTML = on ? ICONS.speakersOn : ICONS.speakersOff;
+    $("speakers-btn").classList.toggle("on", on);
+    $("speakers-btn").title = on
+      ? "Говорящие на карточках: ВКЛ – имена персонажей серым в конце карточки (нажмите, чтобы убрать со всех карточек этого видео)"
+      : "Говорящие на карточках: ВЫКЛ (нажмите, чтобы добавить на все карточки этого видео)";
+  },
+
+  // Переключение касается всех карточек видео: уже переданные в Anki
+  // возвращаются (помечаются вернувшимися) и обновятся при следующей передаче.
+  async toggleSpeakers() {
+    if (!State.manifest) return;
+    await this.flushSaves();
+    const on = !State.manifest.video.show_speakers;
+    const result = await this._call(Api.setSpeakers(on));
+    if (!result) return;
+    if (result.manifest) {
+      await this.showFragment(result.manifest, currentFragment() ? currentFragment().id : null);
+    } else {
+      State.manifest.video.show_speakers = on;
+    }
+    this.updateSpeakersButton();
+    this.flash(`Говорящие на карточках: ${on ? "вкл" : "выкл"}` +
+      (result.returned ? ` – ${result.returned} карточек вернулись, передайте их в Anki снова` : ""));
+  },
+
   toggleSkipDeleted() {
     State.skipDeleted = !State.skipDeleted;
     this.updateSkipButton();
@@ -1389,6 +1420,7 @@ $("mode-toggle").addEventListener("click", () => App.toggleMode());
 $("auto-toggle").addEventListener("click", () => App.toggleAuto());
 $("skip-deleted-btn").addEventListener("click", () => App.toggleSkipDeleted());
 $("link-bounds-btn").addEventListener("click", () => App.toggleLinkBounds());
+$("speakers-btn").addEventListener("click", () => App.toggleSpeakers());
 $("junction-join").addEventListener("click", () => App.joinAtJunction());
 App.updateAutoButton();
 App.updateSkipButton();

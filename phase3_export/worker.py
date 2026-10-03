@@ -332,9 +332,17 @@ class Worker:
             clip_path = out_dir / f"{name}{ext}"
             frames = fragment.algo_end_frame - fragment.algo_start_frame
             started = time.time()
-            height = render_clip(master, project / "audio.pcm", clip_path, fragment.algo_start_frame, fragment.algo_end_frame, fps, audio_only)
-            # Скорость кодирования — скользящее среднее, по ней редактор считает оставшееся время.
-            spf = 0.7 * spf + 0.3 * (time.time() - started) / max(frames, 1)
+            # Вернувшийся фрагмент с теми же границами (поменялся только текст –
+            # например, включили/выключили строку говорящих): клип уже готов,
+            # перекодировать не нужно – обновится только карточка.
+            same_clip = bool(redo and redo.get("start_frame") == fragment.algo_start_frame
+                             and redo.get("end_frame") == fragment.algo_end_frame and clip_path.exists())
+            if same_clip:
+                height = redo.get("height")
+            else:
+                height = render_clip(master, project / "audio.pcm", clip_path, fragment.algo_start_frame, fragment.algo_end_frame, fps, audio_only)
+                # Скорость кодирования — скользящее среднее, по ней редактор считает оставшееся время.
+                spf = 0.7 * spf + 0.3 * (time.time() - started) / max(frames, 1)
             (out_dir / f"{name}.txt").write_text(fragment.text + "\n", encoding="utf-8")
             entry = {
                 "clip": f"{name}{ext}",

@@ -1929,3 +1929,6 @@ table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
 .mode-switch button { padding: 0 0 3.5px; }
 /* Над кнопками Журнал / перезапуск / выключение – без разделителя. */
 .server-row { border-top: none; }
+
+/* Говорящие на карточках: включено – голубая, как связанные границы. */
+#speakers-btn.on { color: #79b8ff; }

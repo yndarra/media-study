@@ -1630,7 +1630,40 @@ def get_manifest(project_id: str):
     data["video"]["group"] = library.group_of(p.dir)  # автор – над названием в ссылке меню
     # Аудио без видео: редактор показывает фон с кругом вместо картинки.
     data["video"]["audio_only"] = bool(library.video_info(p.dir).get("audio_only"))
+    # Режим "говорящие на карточках" этого видео (кнопка в редакторе).
+    data["video"]["show_speakers"] = library.show_speakers(p.dir)
     return data
+
+
+class SpeakersRequest(BaseModel):
+    on: bool
+
+
+@app.post("/api/p/{project_id}/speakers")
+def set_speakers(project_id: str, body: SpeakersRequest):
+    """
+    Режим "говорящие на карточках" видео. Касается всех карточек сразу:
+    уже переданные в Anki (и переведённые) возвращаются на повторную
+    передачу – помечаются вернувшимися, при следующей передаче их карточки
+    обновятся (клип не перекодируется, перевод на обороте остаётся).
+    """
+    p = project(project_id)
+    settings = library.project_settings(p.dir)
+    if bool(settings.get("show_speakers", library.show_speakers(p.dir))) == body.on and "show_speakers" in settings:
+        return {"manifest": None, "returned": 0, "on": body.on}
+    settings["show_speakers"] = body.on
+    library.save_project_settings(p.dir, settings)
+    from common.manifest_schema import STATUS_ACTIVE
+
+    manifest = p.store.load()
+    ids = [f.id for f in manifest.fragments if f.exported and f.status == STATUS_ACTIVE]
+    if ids:
+        p.store.return_from_stage3(ids)
+        try:
+            _pull_texts_from_anki(project_id, ids)
+        except Exception as error:  # Anki закрыт – правки из Anki подтянутся при следующем возврате
+            print(f"Говорящие: тексты из Anki не подтянуты ({error})", flush=True)
+    return {"manifest": get_manifest(project_id), "returned": len(ids), "on": body.on}
 
 
 @app.patch("/api/p/{project_id}/fragments/{fragment_id}")

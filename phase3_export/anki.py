@@ -24,6 +24,7 @@ import json
 import os
 import re
 import urllib.request
+from pathlib import Path
 
 # Адрес можно подменить (для проверок с поддельным AnkiConnect).
 ANKI_CONNECT_URL = os.environ.get("MEDIA_STUDY_ANKI_URL", "http://127.0.0.1:8765")
@@ -133,7 +134,8 @@ def add_clip_note(deck: str, clip_path, media_name: str, text: str, project: str
         note={
             "deckName": deck,
             "modelName": MODEL_NAME,
-            "fields": dict(zip((FRONT_FIELD, BACK_FIELD), decorate(front_html(media_name, text, with_clip=not unvoiced), back, speakers))),
+            "fields": dict(zip((FRONT_FIELD, BACK_FIELD), decorate(front_html(media_name, text, with_clip=not unvoiced), back,
+                                                                   speakers if _speakers_shown([f"{TAG}::{project}::{fragment_id}"], {}) else []))),
             "tags": note_tags(project, fragment_id, speakers, **flags) + list(extra_tags or []),
             "options": {"allowDuplicate": False},
         },
@@ -528,13 +530,34 @@ def decorate(front: str, back: str, speakers: list[str] | None = None, colors: d
     return front, back
 
 
+def _speakers_shown(tags: list[str], cache: dict) -> bool:
+    """
+    Режим "говорящие" видео этой карточки (по метке media-study::<видео>::<фрагмент>):
+    выключен – строки с именами на карточке нет (сами имена остаются в метках).
+    """
+    project = next((t.split("::")[1] for t in tags if t.lower().startswith(TAG + "::") and t.count("::") >= 2), None)
+    if not project:
+        return True
+    if project not in cache:
+        try:
+            from webapp.library import show_speakers
+
+            data_dir = Path(__file__).resolve().parent.parent / "data"
+            cache[project] = show_speakers(data_dir / project)
+        except Exception:  # нет такого видео и т.п. – как раньше, с именами
+            cache[project] = True
+    return cache[project]
+
+
 def recolor_notes(note_ids: list[int], speakers: dict | None = None, colors: dict | None = None, progress=None) -> int:
     """
     Перекрасить карточки приложения (и поставить строку говорящих). speakers –
-    {id заметки: [имена]} (иначе – из прежней строки или из меток).
+    {id заметки: [имена]} (иначе – из прежней строки или из меток). Видео с
+    выключенным режимом "говорящие" – без строки имён.
     Возвращает, сколько заметок изменено.
     """
     c = colors or card_colors()
+    shown: dict = {}
     changed = 0
     ids = list(note_ids)
     for start in range(0, len(ids), 100):
@@ -546,6 +569,8 @@ def recolor_notes(note_ids: list[int], speakers: dict | None = None, colors: dic
             names = (speakers or {}).get(note["noteId"])
             if names is None and not (unmark(front)[1] or unmark(back)[1]):
                 names = speakers_from_tags(note.get("tags", []))
+            if not _speakers_shown(note.get("tags", []), shown):
+                names = []
             new_front, new_back = decorate(front, back, names, c)
             if (new_front, new_back) != (front, back):
                 invoke("updateNoteFields", note={"id": note["noteId"], "fields": {FRONT_FIELD: new_front, BACK_FIELD: new_back}})

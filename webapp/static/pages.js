@@ -2503,6 +2503,8 @@ const Pages = {
             <label class="check"><input id="set-def-skip" type="checkbox" ${s.default_skip_deleted !== false ? "checked" : ""}> Соседние фразы без удалённых</label>
             <label class="check"><input id="set-def-link-video" type="checkbox" ${s.default_link_video ? "checked" : ""}> Связанные границы – видео</label>
             <label class="check"><input id="set-def-link-audio" type="checkbox" ${s.default_link_audio !== false ? "checked" : ""}> Связанные границы – аудио</label>
+            <label class="check"><input id="set-def-speakers-video" type="checkbox" ${s.default_speakers_video !== false ? "checked" : ""}> Говорящие на карточках – видео</label>
+            <label class="check"><input id="set-def-speakers-audio" type="checkbox" ${s.default_speakers_audio ? "checked" : ""}> Говорящие на карточках – аудио</label>
           </div>
         </section>
         <section class="set-card">
@@ -2824,6 +2826,8 @@ const Pages = {
         elevenlabs_proxy: document.getElementById("set-el-proxy").value.trim(),
         elevenlabs_keyterms: document.getElementById("set-el-terms").checked,
         default_link_audio: document.getElementById("set-def-link-audio").checked,
+        default_speakers_video: document.getElementById("set-def-speakers-video").checked,
+        default_speakers_audio: document.getElementById("set-def-speakers-audio").checked,
         new_video_storage: document.getElementById("set-new-storage").value,
         });
       } catch (err) {

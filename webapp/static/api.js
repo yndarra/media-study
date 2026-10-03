@@ -258,6 +258,13 @@ const Api = {
     return res.json();
   },
 
+  // Режим "говорящие на карточках" видео (см. server.set_speakers).
+  async setSpeakers(on) {
+    const res = await fetch(`${Api.base()}/speakers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on }) });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
   async softDelete(id, link = false) {
     const res = await fetch(`${Api.base()}/fragments/${id}/delete${link ? "?link=true" : ""}`, { method: "POST" });
     if (!res.ok) throw new Error(await res.text());

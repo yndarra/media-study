@@ -72,6 +72,16 @@ def group_of(project_dir: Path) -> str:
     return project_settings(project_dir).get("group") or info.get("channel") or info.get("uploader") or "Без автора"
 
 
+def show_speakers(project_dir: Path) -> bool:
+    """Ставить ли на карточки этого видео строку говорящих (свой режим видео или умолчание)."""
+    own = project_settings(project_dir).get("show_speakers")
+    if own is not None:
+        return bool(own)
+    settings = app_settings(Path(project_dir).parent)
+    kind = "audio" if video_info(project_dir).get("audio_only") else "video"
+    return bool(settings.get(f"default_speakers_{kind}", kind == "video"))
+
+
 def agent_mode(value) -> str:
     """
     Режим помощи агента: "", "deep" или "search" (старое True — "search").
@@ -218,6 +228,11 @@ DEFAULT_APP_SETTINGS = {
     "elevenlabs_keyterms": True,  # подсказывать имена/термины из словаря (+20% к цене)
     "elevenlabs_proxy": "",  # http://… или socks5://… – если ElevenLabs недоступен напрямую
     "default_link_audio": True,
+    # Строка говорящих (имена персонажей серым в конце карточки) – по умолчанию
+    # для видео и для аудио; у каждого видео режим свой (project.json,
+    # "show_speakers"), переключается кнопкой в редакторе.
+    "default_speakers_video": True,
+    "default_speakers_audio": False,
     # Агент перевода (карточки с флагом "перевод"): модель OpenRouter и файл с ключом.
     "openrouter_model": "google/gemini-3.8-flash",
     # Модель агента поиска источников (с веб-поиском OpenRouter).
