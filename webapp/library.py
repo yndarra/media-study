@@ -201,7 +201,7 @@ DEFAULT_APP_SETTINGS = {
     # Связанные границы (граница двигает и соседнюю): видео – выкл, аудио – вкл.
     "default_link_video": False,
     # Распознавание речи: "whisper" (локально) или "elevenlabs" (Scribe по API,
-    # см. phase1_ingest/transcribe_elevenlabs.py); ключ – data/elevenlabs_key.txt.
+    # см. phase1_ingest/transcribe_elevenlabs.py); ключ – secrets/elevenlabs_key.txt.
     # Цвета на карточках Anki (см. phase3_export/anki.py, decorate).
     "anki_color_en": "#c9b6ff",
     "anki_color_ru": "#f6edcf",

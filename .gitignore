@@ -6,3 +6,5 @@ __pycache__/
 *.tmp
 *.tmp.*
 .pytest_cache/
+# ключи сервисов (common/secrets.py)
+secrets/

@@ -660,7 +660,8 @@ def process(project_id: str):
 # -- настройки и текущая активность ---------------------------------------------------
 
 
-OPENROUTER_KEY_FILE = "openrouter_key.txt"  # в data/ — в git не попадает
+# Ключ OpenRouter – secrets/openrouter_key.txt в корне проекта (common/secrets.py);
+# путь к действующему – в настройке openrouter_key_file (запасной – _next).
 
 
 def _openrouter_key() -> str:
@@ -761,7 +762,7 @@ def get_settings():
 @app.patch("/api/settings")
 def update_settings(body: dict):
     """
-    Общие настройки. Ключ OpenRouter пишется в data/openrouter_key.txt. Новый
+    Общие настройки. Ключ OpenRouter пишется в secrets/openrouter_key.txt. Новый
     запас до/после отрезка применяется ко всем видео — к фрагментам, которые
     ещё не просмотрены (после скрытой метки); просмотренные не меняются.
     """
@@ -791,17 +792,16 @@ def update_settings(body: dict):
             if path not in paths:
                 paths.append(path)
         body["storages"] = paths
-    # Ключ ElevenLabs – в data/elevenlabs_key.txt (в настройки не пишется).
-    from phase1_ingest.transcribe_elevenlabs import KEY_FILE as EL_KEY_FILE
+    # Ключи – в secrets/ в корне проекта (в настройки не пишутся).
+    from common import secrets
 
     el_key = body.pop("elevenlabs_key", None)
     if el_key is not None:
-        (DATA_DIR / EL_KEY_FILE).write_text(el_key.strip(), encoding="utf-8")
+        secrets.write(secrets.ELEVENLABS_KEY, el_key)
     key = (body.pop("openrouter_key", None) or "").strip()
     if key and key != _openrouter_key():
-        path = DATA_DIR / OPENROUTER_KEY_FILE
-        path.write_text(key, encoding="utf-8")
-        body["openrouter_key_file"] = str(path)
+        secrets.write(secrets.OPENROUTER_KEY, key)
+        body["openrouter_key_file"] = str(secrets.OPENROUTER_KEY)
     old = library.app_settings(DATA_DIR)
     old_padding = old["context_padding_seconds"]
     saved = library.save_app_settings(DATA_DIR, body)

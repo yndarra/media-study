@@ -18,8 +18,8 @@
 
 ElevenLabs недоступен из некоторых стран (запрос уводит на страницу об
 ограничениях) – тогда нужен VPN или прокси (настройка "elevenlabs_proxy":
-http://… или socks5://…). Ключ – data/elevenlabs_key.txt (вписывается в
-"Настройках").
+http://… или socks5://…). Ключ – secrets/elevenlabs_key.txt в корне проекта
+(вписывается в "Настройках").
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from pathlib import Path
 API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 CHECK_URL = "https://api.elevenlabs.io/v1/user"
 DEFAULT_MODEL = "scribe_v2"
-KEY_FILE = "elevenlabs_key.txt"
+from common.secrets import ELEVENLABS_KEY as KEY_PATH
 # Новая фраза (сегмент) – после конца предложения или паузы дольше этого.
 SEGMENT_GAP = 0.8
 MAX_KEYTERMS = 100  # больше 100 – у ElevenLabs минимальная оплата 20 с на запрос
@@ -47,11 +47,10 @@ def settings(data_dir: Path) -> dict:
     return app_settings(Path(data_dir))
 
 
-def api_key(data_dir: Path) -> str:
-    try:
-        return (Path(data_dir) / KEY_FILE).read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
+def api_key(data_dir: Path | None = None) -> str:
+    from common.secrets import read
+
+    return read(KEY_PATH)
 
 
 def _proxies(data_dir: Path) -> dict | None:
