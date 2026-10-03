@@ -288,7 +288,8 @@ body.frag-deleted {
 
 #video {
   width: 100%;
-  max-height: 540px;
+  height: auto;
+  aspect-ratio: auto 16 / 9;
   display: block;
   cursor: pointer;
 }
@@ -1630,13 +1631,35 @@ a.card.started:hover { border-color: rgba(225, 225, 235, 0.16); }
 .batch-chip:hover { background: #26262d; border-color: #55555f; }
 
 /* Хранилища: строка "Хранится" в окнах видео и карточка в настройках. */
-.storage-cell { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .step-btn.small-btn { height: 26px; padding: 0 9px 1px; font-size: 12.5px; min-width: 0; }
-.modal table.storage-table { margin-top: 6px; }
-.modal .storage-row td { vertical-align: middle; }
 table.storages-table td { vertical-align: middle; }
 table.storages-table td:nth-child(2) { text-align: right; }
 table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: right; }
 .storages-add { margin-top: 12px; }
 /* Видео на отключённом диске. */
 .card.offline-card { opacity: 0.5; cursor: default; }
+
+/* Иконки разделов в меню слева. */
+#menu a[data-menu] { display: flex; align-items: center; gap: 10px; }
+.menu-icon { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round; opacity: 0.75; }
+#menu a[data-menu].active .menu-icon, #menu a[data-menu]:hover .menu-icon { opacity: 1; }
+
+/* Ссылка "сейчас правится": видео сейчас править нельзя (переносится и т.п.). */
+#menu-editing-link.locked { opacity: 0.4; pointer-events: none; }
+/* "Пакетом" серая, пока окно занято (перенос / несохранённые изменения). */
+.batch-chip.disabled { opacity: 0.4; pointer-events: none; }
+
+/* Окошко "Хранилище": диски-варианты; выбранный подсвечен. */
+.storage-ask { width: min(460px, 100%); }
+.storage-options { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; }
+.storage-option { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; text-align: left; padding: 9px 12px;
+  border-radius: 7px; border: 1px solid #45454e; background: #1f1f25; color: var(--text); cursor: pointer; }
+.storage-option:hover { background: #26262d; }
+.storage-option.chosen { border-color: #2f5f9e; background: rgba(47, 95, 158, 0.22); }
+.so-name { font-size: 14px; }
+.so-free { font-size: 12px; color: var(--dim); grid-row: span 2; align-self: center; }
+.so-path { font-size: 12px; color: var(--dim); }
+
+/* Полоса переноса на другой диск в «Сейчас идёт». */
+.seg.moving { background: #6b6b78; }

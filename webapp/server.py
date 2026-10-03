@@ -277,6 +277,38 @@ def list_storages():
     return result
 
 
+@app.post("/api/p/{project_id}/move/cancel")
+def cancel_move(project_id: str):
+    """Отменить перенос на другой диск (видео остаётся на старом месте)."""
+    from . import storage
+
+    if not storage.cancel_move(project_id):
+        raise HTTPException(status_code=400, detail="перенос не идёт")
+    return {"ok": True}
+
+
+@app.get("/api/p/{project_id}/edit_state")
+def edit_state(project_id: str):
+    """
+    Можно ли открыть видео в редакторе: нельзя, пока оно переносится на
+    другой диск; и пока идёт передача в Anki или перевод, если править уже
+    нечего (все фрагменты переданы/передаются).
+    """
+    from . import storage
+
+    project_dir = DATA_DIR / project_id
+    if storage.moving(project_id):
+        return {"locked": True, "reason": "Видео переносится на другой диск – править можно после переноса"}
+    if not (project_dir / "manifest.json").exists():
+        return {"locked": False, "reason": ""}
+    item = library.summary(project_dir)
+    busy = _stage3_status(project(project_id))["notes_left"] or project_id in {
+        a["id"] for a in _translation_activity() if a.get("id")}
+    if busy and not item.get("editable"):
+        return {"locked": True, "reason": "Идёт передача в Anki или перевод, а править больше нечего"}
+    return {"locked": False, "reason": ""}
+
+
 class MoveRequest(BaseModel):
     dest: str
 
@@ -980,6 +1012,11 @@ def _card_states(item: dict, flags: dict, translating: set) -> None:
         and item["translated"] < item["cards_total"]
     )
     item["translating"] = item["id"] in translating
+    from . import storage
+
+    # Видео переносится на другой диск: кнопка "Перемещение…" на карточке,
+    # править и запускать процессы нельзя.
+    item["moving"] = storage.moving(item["id"])
 
 
 @app.post("/api/anki/check")

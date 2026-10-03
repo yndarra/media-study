@@ -34,6 +34,10 @@ MOVES: dict[str, dict] = {}
 _lock = threading.Lock()
 
 
+class Cancelled(Exception):
+    """Перенос отменили (кнопка "Отменить" / "Перемещение…")."""
+
+
 def _norm(path) -> str:
     return os.path.normcase(os.path.abspath(str(path)))
 
@@ -208,6 +212,8 @@ def move(data_dir: Path, project_id: str, dest_root: str) -> None:
                             break
                         out.write(chunk)
                         state["done"] += len(chunk)
+                        if state.get("cancel"):
+                            raise Cancelled()
                 shutil.copystat(f, dest)
             for d in (p for p in source.rglob("*") if p.is_dir()):
                 (staging / d.relative_to(source)).mkdir(parents=True, exist_ok=True)
@@ -232,6 +238,8 @@ def move(data_dir: Path, project_id: str, dest_root: str) -> None:
         # 3. Старая копия больше не нужна.
         if not _rmtree(old):
             state["error"] = f"Перенесено, но старую папку удалить не удалось: {old}"
+    except Cancelled:
+        state["cancelled"] = True  # недокопированное уже удалено, видео на старом месте
     except Exception as error:  # показать в окне видео
         state["error"] = str(error)
     finally:
@@ -248,6 +256,23 @@ def start_move(data_dir: Path, project_id: str, dest_root: str) -> None:
     if current and not current["finished"]:
         raise ValueError("Перенос уже идёт")
     threading.Thread(target=move, args=(data_dir, project_id, dest_root), daemon=True).start()
+
+
+def cancel_move(project_id: str) -> bool:
+    """Отменить идущий перенос (пока идёт копирование; дальше – доли секунды)."""
+    st = MOVES.get(project_id)
+    if not st or st["finished"]:
+        return False
+    st["cancel"] = True
+    return True
+
+
+def moving(project_id: str) -> dict | None:
+    """Идущий перенос видео: {"done", "total", "dest"} или None."""
+    st = MOVES.get(project_id)
+    if not st or st["finished"]:
+        return None
+    return {"done": st["done"], "total": st["total"], "dest": st["dest"]}
 
 
 def activity() -> list[dict]:

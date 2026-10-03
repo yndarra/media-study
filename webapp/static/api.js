@@ -76,6 +76,15 @@ const Api = {
     return this.json("/api/storages");
   },
 
+  cancelMove(id) {
+    return this.json(`/api/p/${encodeURIComponent(id)}/move/cancel`, { method: "POST" });
+  },
+
+  // Можно ли открыть видео в редакторе (не переносится ли, есть ли что править).
+  editState(id) {
+    return this.json(`/api/p/${encodeURIComponent(id)}/edit_state`);
+  },
+
   moveProject(id, dest) {
     return this.json(`/api/p/${encodeURIComponent(id)}/move`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dest }),

@@ -81,7 +81,7 @@ function askConfirm({ title, text, yes, no, yesValue = "yes", noValue = "no", da
         <div class="ask-icon">${icon || pen}</div>
         <div class="ask-title">${escapeHtml(title)}</div>
         <div class="ask-text">${text}</div>
-        <div class="ask-actions"><button class="step-btn${danger ? "" : " danger"}" data-a="${noValue}">${escapeHtml(no)}</button>` +
+        <div class="ask-actions">${no ? `<button class="step-btn${danger ? "" : " danger"}" data-a="${noValue}">${escapeHtml(no)}</button>` : ""}` +
         `<button class="step-btn ${danger ? "danger" : "primary"}" data-a="${yesValue}">${escapeHtml(yes)}</button></div>
       </div>`;
     const finish = (answer) => {
@@ -104,6 +104,59 @@ function askConfirm({ title, text, yes, no, yesValue = "yes", noValue = "no", da
     });
     document.body.appendChild(overlay);
     overlay.querySelector(`[data-a="${yesValue}"]`).focus();
+  });
+}
+
+// Окошко "Хранилище" (кнопка в окне видео): где лежит видео и куда его можно
+// перенести (подключённые хранилища из настроек). Возвращает путь выбранного
+// хранилища или null (закрыли / переносить некуда).
+function askStorage(info) {
+  return new Promise((resolve) => {
+    const here = info.here;
+    const targets = info.targets || [];
+    const overlay = document.createElement("div");
+    overlay.className = "ask-overlay";
+    const disk = '<svg viewBox="0 0 20 20"><rect x="3" y="5" width="14" height="10" rx="2"/><path d="M6 12h3"/><circle cx="14" cy="12" r="0.6"/></svg>';
+    const option = (t, k) => `<button class="storage-option" data-k="${k}"><span class="so-name">${escapeHtml(t.label)}</span>` +
+      `<span class="so-path">${escapeHtml(t.path)}</span><span class="so-free">Свободно ${formatSize(t.free)}</span></button>`;
+    overlay.innerHTML = `<div class="ask storage-ask" role="dialog">
+        <div class="ask-icon">${disk}</div>
+        <div class="ask-title">Хранилище</div>
+        <div class="ask-text">Сейчас: <b>${escapeHtml(here.label)}</b>${here.main ? " (основное)" : ""}
+          <div class="muted small">${escapeHtml(here.path)}</div></div>
+        ${targets.length ? `<div class="storage-options">${targets.map(option).join("")}</div>`
+          : '<div class="ask-text muted small">Других хранилищ нет – добавьте папку на другом диске в «Настройках» (Хранилища видео).</div>'}
+        <div class="ask-actions"><button class="step-btn" data-a="close">Закрыть</button>` +
+        `${targets.length ? '<button class="step-btn primary" data-a="move" disabled>Перенести</button>' : ""}</div>
+      </div>`;
+    let chosen = null;
+    const finish = (answer) => {
+      document.removeEventListener("keydown", onKey, true);
+      overlay.classList.add("closing");
+      setTimeout(() => overlay.remove(), 150);
+      resolve(answer);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        finish(null);
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) return finish(null);
+      const opt = e.target.closest(".storage-option");
+      if (opt) {
+        chosen = targets[Number(opt.dataset.k)];
+        overlay.querySelectorAll(".storage-option").forEach((o) => o.classList.toggle("chosen", o === opt));
+        overlay.querySelector('[data-a="move"]').disabled = false;
+        return;
+      }
+      const action = e.target.closest("[data-a]");
+      if (!action) return;
+      finish(action.dataset.a === "move" && chosen ? chosen.path : null);
+    });
+    document.body.appendChild(overlay);
   });
 }
 
@@ -161,6 +214,18 @@ const Router = {
     // Окно подробностей живёт только на своём адресе (#/video/..., #/processing/...).
     if (!(page === "video" || (page === "process" && id))) Modal.close(false);
     if (page === "edit" && id) {
+      // Видео переносится на другой диск (или править нечего, пока идёт
+      // передача в Anki / перевод) – в редактор не пускаем.
+      let lock = { locked: false };
+      try {
+        lock = await Api.editState(id);
+      } catch (_) {}
+      if (lock.locked) {
+        history.replaceState(null, "", "#/videos");
+        askConfirm({ title: "Редактировать нельзя", text: escapeHtml(lock.reason), yes: "Понятно", no: null });
+        if (State.view !== "videos") this.route(true);
+        return;
+      }
       this.show("editor", null); // в редакторе ни один раздел меню не выделен
       await App.openProject(id);
       FragList.reset();
@@ -274,6 +339,12 @@ const Zebra = {
   PARAMS: {
     send: { stripe: 26, speed: 32.5, color: "#1f6b3b" },
     sendBusy: { stripe: 15, speed: 73.125, color: "#1f6b3b" }, // как translateBusy
+    // В окне видео: "Передать в Anki", когда отредактировано всё, и "Перевести",
+    // когда всё в Anki, – как "Редактировать" (чуть быстрее карточных), свой цвет.
+    sendReady: { stripe: 161.5, speed: 48.75, color: "#1f6b3b" },
+    translateReady: { stripe: 161.5, speed: 48.75, color: "#a3407a" },
+    // Перенос на другой диск – быстрая светло-серая.
+    moveBusy: { stripe: 15, speed: 73.125, color: "#5c5c69" },
     translate: { stripe: 323, speed: 32.5, color: "#a3407a" },
     translateBusy: { stripe: 15, speed: 73.125, color: "#a3407a" },
     // "Править" (есть что править) и "Обработать" – синяя; только вернувшиеся
@@ -302,10 +373,12 @@ const Zebra = {
     }
     for (const button of buttons) {
       // Вид полос: кнопки шага на карточках – по классам; остальные – data-zebra.
-      const type = button.dataset.zebra || (button.classList.contains("translate") ? "translate" : "send");
+      const type = button.dataset.zebra ||
+        (button.classList.contains("translate") ? "translate" : button.classList.contains("move") ? "move" : "send");
       const target = this.PARAMS[button.dataset.zebra || type + (button.classList.contains("busy") ? "Busy" : "")];
       if (!target) continue;
-      const key = `${button.dataset.id || button.id}:${type.replace("Busy", "")}`;
+      // Ключ – без Busy/Ready: смена вида кнопки плавно меняет ширину и скорость полос.
+      const key = `${button.dataset.id || button.id}:${type.replace(/Busy|Ready/, "")}`;
       let st = this.state.get(key);
       if (!st) {
         st = { stripe: target.stripe, speed: target.speed, cycles: 0, last: now };
@@ -320,7 +393,11 @@ const Zebra = {
       // Фаза – в долях шага: при смене ширины полосы растягиваются, а не прыгают.
       st.cycles = (st.cycles + (st.speed * dt) / (2 * st.stripe)) % 1;
       this.draw(button, st, target.color);
+      // Текст "… ↔ Отмена" печатается и стирается (занятые кнопки на карточках).
+      const typed = button.querySelector("span[data-type]");
+      if (typed) typed.textContent = Typer.text(key, typed.dataset.type, now);
     }
+    Typer.forget(now);
     requestAnimationFrame((t) => this.frame(t));
   },
 
@@ -356,16 +433,69 @@ const Zebra = {
   },
 };
 
+// Текст занятой кнопки на карточке ("Передаётся в Anki…", "Выполняется
+// перевод…", "Перемещение…"): эти кнопки ещё и отменяют действие, и чтобы это
+// было понятно, текст по кругу посимвольно стирается (как Backspace),
+// печатается "Отмена", держится, стирается, и снова печатается основной.
+// Появилась кнопка – основной текст сначала печатается. Время – от первого
+// показа кнопки, поэтому перерисовка списка (каждые 3 с) текст не сбрасывает.
+const Typer = {
+  CANCEL: "Отмена",
+  TYPE_MS: 55, // на символ при печати
+  ERASE_MS: 32, // на символ при стирании
+  HOLD_MAIN_MS: 3200,
+  HOLD_CANCEL_MS: 1500,
+  starts: new Map(), // ключ кнопки -> {t0, seen}
+
+  text(key, main, now) {
+    let st = this.starts.get(key);
+    if (!st) {
+      st = { t0: now, seen: now };
+      this.starts.set(key, st);
+    }
+    st.seen = now;
+    const c = this.CANCEL;
+    const typeIn = (s, t) => s.slice(0, Math.min(s.length, Math.floor(t / this.TYPE_MS) + 1));
+    const eraseOut = (s, t) => s.slice(0, Math.max(0, s.length - Math.floor(t / this.ERASE_MS) - 1));
+    let t = now - st.t0;
+    if (t < main.length * this.TYPE_MS) return typeIn(main, t);
+    t -= main.length * this.TYPE_MS;
+    // Круг: держим основной -> стираем -> печатаем "Отмена" -> держим -> стираем -> печатаем основной.
+    const parts = [
+      [this.HOLD_MAIN_MS, () => main],
+      [main.length * this.ERASE_MS, (x) => eraseOut(main, x)],
+      [c.length * this.TYPE_MS, (x) => typeIn(c, x)],
+      [this.HOLD_CANCEL_MS, () => c],
+      [c.length * this.ERASE_MS, (x) => eraseOut(c, x)],
+      [main.length * this.TYPE_MS, (x) => typeIn(main, x)],
+    ];
+    t %= parts.reduce((sum, [d]) => sum + d, 0);
+    for (const [d, f] of parts) {
+      if (t < d) return f(t) || "\u00a0"; // пустая строка не схлопывает кнопку
+      t -= d;
+    }
+    return main;
+  },
+
+  // Кнопка пропала (дольше секунды не рисовалась) – при новом появлении текст снова печатается.
+  forget(now) {
+    for (const [key, st] of this.starts) if (now - st.seen > 1000) this.starts.delete(key);
+  },
+};
+
 function cardAction(v) {
   const pressed = Pages.pressedActions.get(v.id);
   const just = pressed && Date.now() - pressed.at < 8000 ? pressed.action : null; // нажали, сервер ещё не успел
   const id = escapeHtml(v.id);
+  // Идущие действия – нажатие отменяет (текст сам подсказывает: "… ↔ Отмена").
+  if (v.moving || just === "move") {
+    return `<button class="card-action move busy" data-action="cancel-move" data-id="${id}" title="Отменить перенос"><canvas class="zebra"></canvas><span data-type="Перемещение…"></span></button>`;
+  }
   if (v.sending || just === "send") {
-    return `<button class="card-action send busy" data-action="none" data-id="${id}" disabled><canvas class="zebra"></canvas><span>Передаётся в Anki…</span></button>`;
+    return `<button class="card-action send busy" data-action="cancel-send" data-id="${id}" title="Отменить передачу в Anki"><canvas class="zebra"></canvas><span data-type="Передаётся в Anki…"></span></button>`;
   }
   if (v.translating || just === "translate") {
-    // Нажатие – остановить перевод.
-    return `<button class="card-action translate busy" data-action="stop" data-id="${id}" title="Остановить перевод"><canvas class="zebra"></canvas><span>Выполняется перевод…</span></button>`;
+    return `<button class="card-action translate busy" data-action="stop" data-id="${id}" title="Отменить перевод"><canvas class="zebra"></canvas><span data-type="Выполняется перевод…"></span></button>`;
   }
   if (v.ready_to_send) {
     return `<button class="card-action send" data-action="send" data-id="${id}"><canvas class="zebra"></canvas><span>Передать в Anki</span></button>`;
@@ -799,58 +929,6 @@ function processingBar(v) {
   return segmentBar([{ n: v.percent, cls, title: `${Math.floor(v.percent)}%` }], 100, cap(v.status), null, `${Math.floor(v.percent)}%`);
 }
 
-// Строка "Хранится" в окнах видео: диск и кнопки "Перенести на …" (другие
-// подключённые хранилища из настроек). Пока идёт перенос – его ход.
-function storageCell(info) {
-  if (!info) return "";
-  const here = escapeHtml(info.here.label) + (info.here.main ? ' <span class="muted small">(основное)</span>' : "");
-  const m = info.move;
-  if (m && !m.finished) {
-    const pct = m.total ? Math.floor((100 * m.done) / m.total) : 0;
-    return `${here} <span class="muted small">→ ${escapeHtml(m.dest)}: ${pct}% – ${(m.done / 2 ** 30).toFixed(1)}/${(m.total / 2 ** 30).toFixed(1)} ГБ</span>`;
-  }
-  const error = m && m.error ? ` <span class="flagged-text small">${escapeHtml(m.error)}</span>` : "";
-  const buttons = (info.targets || []).map((t) =>
-    `<button class="step-btn small-btn storage-move" data-dest="${escapeHtml(t.path)}" title="Свободно ${formatSize(t.free)}">Перенести на ${escapeHtml(t.label)}</button>`).join("");
-  return `<span class="storage-cell">${here}${error}${buttons}</span>`;
-}
-
-// Подключить кнопки переноса в окне видео: нажали – перенос, строка обновляется до конца.
-function bindStorage(body, id, info) {
-  const row = body.querySelector(".storage-row td:last-child");
-  if (!row) return;
-  const draw = (i) => {
-    row.innerHTML = storageCell(i);
-    row.querySelectorAll(".storage-move").forEach((b) => b.addEventListener("click", async () => {
-      b.disabled = true;
-      try {
-        await Api.moveProject(id, b.dataset.dest);
-      } catch (err) {
-        let message = err.message;
-        try {
-          message = JSON.parse(message).detail;
-        } catch (_) {}
-        draw({ ...i, move: { finished: true, error: cap(message) } });
-        return;
-      }
-      poll();
-    }));
-  };
-  const poll = async () => {
-    if (!body.isConnected) return;
-    let fresh;
-    try {
-      fresh = (await Api.projectDisk(id)).storage;
-    } catch (_) {
-      return;
-    }
-    draw(fresh);
-    if (fresh.move && !fresh.move.finished) setTimeout(poll, 1500);
-  };
-  draw(info);
-  if (info && info.move && !info.move.finished) poll();
-}
-
 // Строка "Потрачено": всего и по видам (OpenRouter).
 function spentLine(costs) {
   const c = costs || {};
@@ -1092,12 +1170,14 @@ const Pages = {
         e.stopPropagation();
         const id = button.dataset.id;
         if (button.dataset.action === "none") return;
-        if (button.dataset.action === "stop") {
-          // "Выполняется перевод…" – остановить перевод.
+        if (["stop", "cancel-send", "cancel-move"].includes(button.dataset.action)) {
+          // Занятая кнопка – отменить её действие.
           button.disabled = true;
           Pages.pressedActions.delete(id);
           try {
-            await Api.agentStop(id);
+            if (button.dataset.action === "stop") await Api.agentStop(id);
+            else if (button.dataset.action === "cancel-send") await Api.stopStage3(id);
+            else await Api.cancelMove(id);
           } catch (err) {
             console.error(err);
           }
@@ -1108,7 +1188,7 @@ const Pages = {
         // Сразу – вид "идёт" (другой текст и полосы); перерисовка подхватит.
         button.disabled = true;
         button.classList.add("busy");
-        button.querySelector("span").textContent = button.dataset.action === "send" ? "Передаётся в Anki…" : "Выполняется перевод…";
+        button.querySelector("span").dataset.type = button.dataset.action === "send" ? "Передаётся в Anki…" : "Выполняется перевод…";
         try {
           if (button.dataset.action === "send") await Api.queueProject(id);
           else await Api.agentRun({ project: id, batch: false });
@@ -1352,19 +1432,18 @@ const Pages = {
           ${row("Всего", `<b>${formatSize(d.total)}</b>`)}
         </table>
       </div>
-      ${data.storage ? `<table class="stats storage-table"><tr class="storage-row"><td>Хранится</td><td></td></tr></table>` : ""}
       <div class="modal-actions">
         <a id="info-edit" class="step-btn${editZebra ? " primary" : ""} zebra-host" href="#/edit/${encodeURIComponent(v.id)}"
           ${editZebra ? `data-zebra="${editZebra}"` : ""}><canvas class="zebra"></canvas><span>Редактировать</span></a>
-        <button id="info-anki" class="step-btn fold">Передать в Anki</button>
-        <button id="info-translate" class="step-btn fold" title="${v.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Переводить нечего"}">Перевести</button>
-        <label class="batch-chip batch-check fold${untranslated > 0 || v.translating ? "" : " gone"}" title="Пакетом (OpenRouter Batch API): вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"><span class="batch-dot"></span>Пакетом</label>
+        <button id="info-anki" class="step-btn fold zebra-host gone"><canvas class="zebra"></canvas><span>Передать в Anki</span></button>
+        <button id="info-translate" class="step-btn fold zebra-host gone"><canvas class="zebra"></canvas><span>Перевести</span></button>
+        <label class="batch-chip batch-check fold gone" title="Пакетом (OpenRouter Batch API): вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"><span class="batch-dot"></span>Пакетом</label>
         <span id="info-note" class="muted small"></span>
-        <button id="info-save" class="step-btn fold">Сохранить</button>
+        <button id="info-storage" class="step-btn fold zebra-host" title="Где хранится видео; перенос на другой диск"><canvas class="zebra"></canvas><span>Хранилище</span></button>
+        <button id="info-save" class="step-btn fold gone">Сохранить</button>
       </div>`;
     autoGrow(body.querySelector("#title-input"));
     singleLine(body.querySelector("#group-input"));
-    bindStorage(body, id, data.storage);
     animateBars(body.querySelector(".modal-bars"));
     requestAnimationFrame(() => foldLongRows(body));
     const saveButton = body.querySelector("#info-save");
@@ -1372,7 +1451,9 @@ const Pages = {
       Pages.flashId = id;
       Modal.close();
     };
-    watcher = formWatch(body.querySelector(".modal-head"), [saveButton]);
+    // "Сохранить" появляется вместо "Хранилище", только когда есть изменения (см. render).
+    watcher = formWatch(body.querySelector(".modal-head"), []);
+    body.querySelector(".modal-head").addEventListener("input", () => render());
     save = async () => {
       const title = body.querySelector("#title-input").value.trim();
       const group = body.querySelector("#group-input").value.trim();
@@ -1392,6 +1473,9 @@ const Pages = {
     });
     Zebra.start();
 
+    const storageButton = body.querySelector("#info-storage");
+    let storageInfo = data.storage;
+    let moving = !!(v.moving || (storageInfo && storageInfo.move && !storageInfo.move.finished));
     const ankiButton = body.querySelector("#info-anki");
     const translateButton = body.querySelector("#info-translate");
     const batchBox = body.querySelector("#info-batch");
@@ -1406,33 +1490,61 @@ const Pages = {
       batchBox.checked = localStorage.getItem(batchKey) === "1";
     } catch (_) {}
 
-    // Вид строки кнопок. Пока над видео идёт процесс: лишнее (вторая кнопка
-    // шага, "Сохранить", пояснение к "Пакетом") плавно сворачивается, кнопка
-    // процесса становится "Остановить" и прижимается к "Править", справа –
-    // ход процесса; название и автор не меняются. Остановили – всё обратно.
+    // Вид строки кнопок по состоянию видео:
+    //  - "Передать в Anki" – только если есть что передать (зебра, когда
+    //    отредактировано всё); "Перевести" – только если есть что переводить
+    //    (зебра, когда всё в Anki); идёт действие – на её месте "Отменить" с
+    //    быстрой зеброй;
+    //  - справа "Хранилище" (окошко: где лежит, перенос на другой диск); идёт
+    //    перенос – "Отменить" с быстрой серой зеброй, остальное серое;
+    //  - изменили название/автора – вместо "Хранилище" "Сохранить", остальное серое;
+    //  - "Редактировать" серая, пока идёт перенос, и пока идёт передача/перевод,
+    //    если править уже нечего (в редактор тогда не пускает и роутер).
     let sending = !!v.sending;
     let running = !!v.translating;
     let waitingBatch = false;
+    let last = v;
     const fold = (el, gone) => el && el.classList.toggle("gone", gone);
-    const render = (s = v) => {
+    const zebra = (el, kind) => (kind ? el.setAttribute("data-zebra", kind) : el.removeAttribute("data-zebra"));
+    const label = (el, text) => (el.querySelector("span").textContent = text);
+    const render = (s = last) => {
+      last = s;
+      const dirty = watcher.isDirty();
       const busy = sending || running;
-      body.querySelectorAll(".modal-head input, .modal-head textarea").forEach((field) => (field.disabled = busy));
-      fold(saveButton, busy);
-      fold(ankiButton, running);
-      fold(translateButton, sending);
-      fold(body.querySelector(".batch-check"), sending || !(untranslated > 0 || running));
-      ankiButton.textContent = sending ? "Остановить" : "Передать в Anki";
-      const canSend = sending || (s.sendable || 0) > 0;
-      ankiButton.disabled = !canSend;
-      ankiButton.classList.toggle("send-ready", canSend && !sending);
-      ankiButton.title = sending ? "" : canSend ? `Передать отредактированные: ${s.sendable}` : "Передавать нечего – отредактированное уже в Anki";
-      translateButton.textContent = running ? "Остановить" : "Перевести";
-      translateButton.title = s.to_translate === null ? "Anki закрыт" : untranslated > 0 ? `Без перевода: ${untranslated}` : "Всё переданное в Anki уже переведено";
-      translateButton.disabled = !running && untranslated <= 0;
-      translateButton.classList.toggle("translate-ready", !running && untranslated > 0);
-      note.classList.toggle("busy", busy);
-      if (!busy) setNote("");
+      body.querySelectorAll(".modal-head input, .modal-head textarea").forEach((field) => (field.disabled = busy || moving));
+      // Передать в Anki
+      const canSend = (s.sendable || 0) > 0;
+      fold(ankiButton, running || !(sending || canSend));
+      label(ankiButton, sending ? "Отменить" : "Передать в Anki");
+      zebra(ankiButton, sending ? "sendBusy" : canSend && s.ready_to_send ? "sendReady" : "");
+      ankiButton.classList.toggle("send-ready", !sending && canSend);
+      ankiButton.disabled = moving || dirty;
+      ankiButton.title = sending ? "Отменить передачу в Anki" : `Передать отредактированные: ${s.sendable || 0}`;
+      // Перевести
+      const canTranslate = untranslated > 0;
+      fold(translateButton, sending || !(running || canTranslate));
+      label(translateButton, running ? "Отменить" : "Перевести");
+      zebra(translateButton, running ? "translateBusy" : canTranslate && s.ready_to_translate ? "translateReady" : "");
+      translateButton.classList.toggle("translate-ready", !running && canTranslate);
+      translateButton.disabled = moving || dirty;
+      translateButton.title = running ? "Отменить перевод" : s.to_translate === null ? "Anki закрыт" : `Без перевода: ${untranslated}`;
+      fold(body.querySelector(".batch-check"), sending || !(canTranslate || running));
+      body.querySelector(".batch-check").classList.toggle("disabled", moving || dirty);
+      // Хранилище / Сохранить / Отменить перенос
+      fold(saveButton, !dirty || moving);
+      fold(storageButton, dirty && !moving);
+      label(storageButton, moving ? "Отменить" : "Хранилище");
+      zebra(storageButton, moving ? "moveBusy" : "");
+      storageButton.disabled = !moving && busy;
+      storageButton.title = moving ? "Отменить перенос на другой диск" : busy ? "Перенести можно после передачи в Anki / перевода" : "Где хранится видео; перенос на другой диск";
+      // Редактировать
+      const editLocked = moving || dirty || (busy && !(s.editable > 0));
+      editLink.classList.toggle("disabled", editLocked);
+      editLink.title = moving ? "Видео переносится на другой диск" : busy && !(s.editable > 0) ? "Править нечего, пока идёт передача / перевод" : "";
+      note.classList.toggle("busy", busy || moving);
+      if (!busy && !moving) setNote("");
     };
+    const editLink = body.querySelector("#info-edit");
     render();
 
     const refresh = async () => {
@@ -1442,13 +1554,19 @@ const Pages = {
         const s = stats.summary;
         const st = state.status || {};
         sending = !!s.sending;
+        storageInfo = stats.storage;
+        const mv = storageInfo && storageInfo.move;
+        moving = !!(mv && !mv.finished);
         untranslated = s.sending ? 0 : s.to_translate === null ? 1 : s.to_translate || 0;
         waitingBatch = (state.batches || []).some((j) => j.project === id);
         if (waitingBatch) batchBox.checked = true; // ждёт пакетная заявка – значит, пакетом
         running = waitingBatch || (st.state === "running" && st.project === id && Date.now() / 1000 - st.updated < 300);
         render(s);
         paint(s);
-        if (sending) setNote(`Передача в Anki: ${s.in_anki}/${s.active_total}`);
+        if (moving) setNote(`Перенос на ${mv.dest}: ${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}% – ` +
+          `${(mv.done / 2 ** 30).toFixed(1)}/${(mv.total / 2 ** 30).toFixed(1)} ГБ`);
+        else if (mv && mv.error) setNote(mv.error);
+        else if (sending) setNote(`Передача в Anki: ${s.in_anki}/${s.active_total}`);
         else if (st.state === "running" && st.project === id && st.cards_total) {
           setNote(`Перевод: ${Math.floor(100 * (st.cards_done || 0) / st.cards_total)}% – ${st.cards_done || 0}/${st.cards_total} ` +
             plural(st.cards_total, "фрагмент", "фрагмента", "фрагментов"));
@@ -1459,9 +1577,40 @@ const Pages = {
       } catch (_) {
         return;
       }
-      if (sending || running) setTimeout(refresh, 3000);
+      if (moving) setTimeout(refresh, 1200);
+      else if (sending || running) setTimeout(refresh, 3000);
     };
-    if (sending || running) refresh();
+    if (sending || running || moving) refresh();
+
+    // "Хранилище": окошко с дисками; выбрали – перенос (ход – справа и на карточке).
+    // Идёт перенос – эта же кнопка его отменяет.
+    storageButton.addEventListener("click", async () => {
+      if (moving) {
+        storageButton.disabled = true;
+        try {
+          await Api.cancelMove(id);
+        } catch (err) {
+          setNote("Ошибка", err.message);
+        }
+        setTimeout(refresh, 300);
+        return;
+      }
+      const dest = await askStorage(storageInfo || { here: { label: "?", path: "" }, targets: [] });
+      if (!dest) return;
+      try {
+        await Api.moveProject(id, dest);
+      } catch (err) {
+        let message = err.message;
+        try {
+          message = JSON.parse(message).detail;
+        } catch (_) {}
+        setNote(cap(message));
+        return;
+      }
+      moving = true;
+      render();
+      refresh();
+    });
 
     // Кнопки шагов: действие – и окно сразу закрывается (ход виден на карточке).
     ankiButton.addEventListener("click", async () => {
@@ -1571,18 +1720,17 @@ const Pages = {
       </div>
       ${disk ? `<h2>Место на диске</h2><table class="stats">
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
-        ${disk.storage ? '<tr class="storage-row"><td>Хранится</td><td></td></tr>' : ""}
       </table>` : ""}
       <div class="modal-actions">
         ${v.state === "processing" ? '<button class="step-btn process-cancel">Отменить</button>'
           : `<button class="step-btn primary process-go zebra-host" data-zebra="process" id="process-go"><canvas class="zebra"></canvas><span>${escapeHtml(v.next_step || "Обработать")}</span></button>`}
         <span class="muted small note"></span>
         ${v.state === "processing" ? '<span class="process-status"></span>' : ""}
-        <button class="step-btn info-save">Сохранить</button>
+        <button id="process-storage" class="step-btn zebra-host${v.state === "processing" ? " hidden" : ""}" title="Где хранится видео; перенос на другой диск"><canvas class="zebra"></canvas><span>Хранилище</span></button>
+        <button class="step-btn info-save hidden">Сохранить</button>
       </div>`;
     body.querySelectorAll("textarea.grow:not(.fixed)").forEach(autoGrow);
     singleLine(body.querySelector("#group-input"));
-    if (disk) bindStorage(body, id, disk.storage);
     requestAnimationFrame(() => foldLongRows(body));
     // Градиент окна – по этапу, как у карточки в "Обработке" (рыжий – скачивание,
     // синий – шаг с процентом, жёлтый – сверка/поиск агентом/нарезка, зелёный – начало).
@@ -1649,7 +1797,69 @@ const Pages = {
     search.addEventListener("change", () => syncModes(search));
     syncModes(null);
     const saveButton = body.querySelector(".info-save");
-    watcher = formWatch(body.querySelector(".process-form"), [saveButton]);
+    watcher = formWatch(body.querySelector(".process-form"), []);
+    // "Сохранить" – вместо "Хранилище", только когда есть изменения; во время
+    // переноса "Хранилище" – "Отменить" с быстрой серой зеброй, остальное серое.
+    const storageBtn = body.querySelector("#process-storage");
+    let storageInfo = disk && disk.storage;
+    let moving = !!(storageInfo && storageInfo.move && !storageInfo.move.finished);
+    const procNote = body.querySelector(".note");
+    const renderProc = () => {
+      if (v.state === "processing") return;
+      const dirty = watcher.isDirty();
+      saveButton.classList.toggle("hidden", !dirty || moving);
+      storageBtn.classList.toggle("hidden", dirty && !moving);
+      storageBtn.querySelector("span").textContent = moving ? "Отменить" : "Хранилище";
+      if (moving) storageBtn.setAttribute("data-zebra", "moveBusy");
+      else storageBtn.removeAttribute("data-zebra");
+      storageBtn.disabled = false;
+      const goBtn = body.querySelector(".process-go");
+      if (goBtn) goBtn.disabled = moving || dirty;
+      body.querySelectorAll(".process-form input, .process-form textarea").forEach((f) => (f.disabled = moving));
+    };
+    body.querySelector(".process-form").addEventListener("input", renderProc);
+    body.querySelector(".process-form").addEventListener("change", renderProc);
+    const pollMove = async () => {
+      if (!body.isConnected) return;
+      try {
+        storageInfo = (await Api.projectDisk(id)).storage;
+      } catch (_) {
+        return;
+      }
+      const mv = storageInfo && storageInfo.move;
+      moving = !!(mv && !mv.finished);
+      procNote.textContent = moving ? `Перенос на ${mv.dest}: ${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}%` : mv && mv.error ? mv.error : "";
+      renderProc();
+      if (moving) setTimeout(pollMove, 1200);
+    };
+    storageBtn.addEventListener("click", async () => {
+      if (moving) {
+        storageBtn.disabled = true;
+        try {
+          await Api.cancelMove(id);
+        } catch (_) {}
+        setTimeout(pollMove, 300);
+        return;
+      }
+      const dest = await askStorage(storageInfo || { here: { label: "?", path: "" }, targets: [] });
+      if (!dest) return;
+      try {
+        await Api.moveProject(id, dest);
+      } catch (err) {
+        let message = err.message;
+        try {
+          message = JSON.parse(message).detail;
+        } catch (_) {}
+        procNote.textContent = cap(message);
+        return;
+      }
+      moving = true;
+      renderProc();
+      pollMove();
+    });
+    Zebra.start();
+    renderProc();
+    if (moving) pollMove();
     save = async () => {
       const title = body.querySelector("#title-input").value.trim();
       const group = body.querySelector("#group-input").value.trim();
@@ -2044,6 +2254,14 @@ const Activity = {
     } catch (_) {
       return;
     }
+    if (State.project) {
+      Api.editState(State.project).then((lock) => {
+        const link = document.getElementById("menu-editing-link");
+        if (!link) return;
+        link.classList.toggle("locked", !!lock.locked);
+        link.title = lock.locked ? lock.reason : "";
+      }).catch(() => {});
+    }
     // Нет фоновых процессов — блок фоновых процессов (с разделителем) не показывается.
     box.closest(".activity").classList.toggle("hidden", !items.length);
     if (!items.length) {
@@ -2055,7 +2273,8 @@ const Activity = {
     box.innerHTML = items.map((a) => {
       const has = a.percent !== null && a.percent !== undefined;
       // Перевод – розовым (как полоса "Переведено"), обработка – синим, Anki – зелёным.
-      const cls = a.kind === "translate" ? "translated" : a.kind === "phase1" ? (a.step === "download" ? "downloading" : "accepted") : "ok";
+      // Перенос на другой диск – серым.
+      const cls = a.kind === "move" ? "moving" : a.kind === "translate" ? "translated" : a.kind === "phase1" ? (a.step === "download" ? "downloading" : "accepted") : "ok";
       const bar = has ? `<div class="progress thin" data-bar="p"><div class="seg ${cls}" data-w="${a.percent}" style="width:${a.percent}%"></div></div>` : "";
       return `<div class="activity-item" data-key="${escapeHtml(`${a.kind}:${a.id}`)}"><div class="activity-name">${escapeHtml(a.title)}</div>` +
         `<div class="activity-line">${escapeHtml(cap(a.label))}${has ? `: ${Math.floor(a.percent)}%` : ""}` +
