@@ -474,12 +474,23 @@ class ManifestStore:
         return manifest
 
     @_locked
-    def restore(self, fragment_id: str) -> Manifest:
-        """Снимает пометку удаления (повторное нажатие кнопки «удалить»)."""
+    def restore(self, fragment_id: str, link: bool = False) -> Manifest:
+        """
+        Снимает пометку удаления (повторное нажатие кнопки «удалить»).
+        link – обратное к soft_delete: если следующий живой фрагмент
+        начинается вплотную к предыдущему живому, захватывая место
+        возвращаемого, его левая граница возвращается на конец возвращаемого.
+        """
         manifest, before = self._begin()
         fragment = self._editable(manifest, fragment_id)
         if fragment.status == STATUS_ACTIVE:
             raise ValueError("фрагмент не удалён")
+        if link and not fragment.split_into and not fragment.absorbed_into:
+            prev, nxt = self._live_around(manifest, manifest.index_of(fragment_id))
+            if (nxt and nxt.algo_start_frame < fragment.algo_end_frame < nxt.algo_end_frame
+                    and nxt.algo_start_frame <= fragment.algo_start_frame
+                    and (prev is None or prev.algo_end_frame == nxt.algo_start_frame)):
+                self._shift_start(manifest, nxt, fragment.algo_end_frame)
         self._undelete(manifest, fragment)
         self._commit(manifest, before, fragment_id)
         return manifest
@@ -521,13 +532,54 @@ class ManifestStore:
         self._commit(manifest, before, fragment_id)
         return manifest
 
+    def _live_around(self, manifest: Manifest, index: int):
+        """Ближайшие живые соседи слева и справа (не переданные в Anki) или None."""
+        k_prev = self._nearest_live_neighbor_index(manifest, index, "prev")
+        k_next = self._nearest_live_neighbor_index(manifest, index, "next")
+        prev = manifest.fragments[k_prev] if k_prev is not None else None
+        nxt = manifest.fragments[k_next] if k_next is not None else None
+        return prev, nxt
+
+    def _seamless_through(self, manifest: Manifest, prev: Fragment, nxt: Fragment, also: Fragment | None = None) -> bool:
+        """
+        Между живыми prev и nxt – только удалённые фрагменты, и вся цепочка
+        шла встык (конец каждого = начало следующего): звук между ними был
+        покадрово сплошным.
+        """
+        a, b = manifest.index_of(prev.id), manifest.index_of(nxt.id)
+        chain = [f for f in manifest.fragments[a:b + 1]
+                 if f is prev or f is nxt or f is also or (f.status != STATUS_ACTIVE and not f.split_into and not f.absorbed_into)]
+        return all(x.algo_end_frame == y.algo_start_frame for x, y in zip(chain, chain[1:]))
+
+    def _shift_start(self, manifest: Manifest, fragment: Fragment, new_start: int) -> None:
+        """Левая граница фрагмента -> new_start (запас при нужде расширяется)."""
+        fragment.algo_start_frame = new_start
+        fragment.context_start_frame = min(fragment.context_start_frame, new_start)
+        fragment.context_custom = (fragment.context_start_frame, fragment.context_end_frame) != self._default_context(manifest, fragment)
+
     @_locked
-    def soft_delete(self, fragment_id: str) -> Manifest:
-        """Помечает status=deleted; редактор остаётся на этом же фрагменте."""
+    def soft_delete(self, fragment_id: str, link: bool = False) -> Manifest:
+        """
+        Помечает status=deleted; редактор остаётся на этом же фрагменте.
+
+        link – режим "связанные границы": если удалённый стоял встык с обоими
+        живыми соседями, левая граница следующего живого сдвигается до правой
+        границы предыдущего живого – склейка остаётся сплошной, а связь
+        границ идёт сквозь удалённый. Если соседи и так стоят встык (части
+        разделённого фрагмента – исходник лежит между ними), ничего не
+        сдвигается: связь и так проходит сквозь удалённый.
+        """
         manifest, before = self._begin()
         fragment = self._editable(manifest, fragment_id)
+        index = manifest.index_of(fragment_id)
+        prev, nxt = self._live_around(manifest, index)
+        chained = bool(link and prev and nxt and prev.algo_end_frame <= fragment.algo_start_frame
+                       and fragment.algo_end_frame <= nxt.algo_start_frame
+                       and self._seamless_through(manifest, prev, nxt, also=fragment))
         fragment.status = STATUS_DELETED
         self._restore_merge_ingredients(manifest, fragment)
+        if chained and prev.algo_end_frame < nxt.algo_start_frame < nxt.algo_end_frame:
+            self._shift_start(manifest, nxt, prev.algo_end_frame)
         self._commit(manifest, before, fragment_id)
         return manifest
 

@@ -1072,7 +1072,9 @@ const App = {
     // Остаёмся на этом же фрагменте — он просто получает пометку «удалено»
     // (или теряет её, если уже был удалён).
     const f = currentFragment();
-    const result = await this._call(f.status === "active" ? Api.softDelete(f.id) : Api.restore(f.id));
+    // В режиме связанных границ следующий фрагмент подтягивается к
+    // предыдущему (удалённый не оставляет дыры) – см. ManifestStore.soft_delete.
+    const result = await this._call(f.status === "active" ? Api.softDelete(f.id, State.linkBounds) : Api.restore(f.id, State.linkBounds));
     if (!result) return;
     // Пока сервер отвечал, могли уже перейти дальше (S, сразу D) – остаёмся там.
     await this.showFragment(result.manifest, currentFragment() ? currentFragment().id : f.id);

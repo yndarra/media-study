@@ -1663,15 +1663,16 @@ def change_padding(project_id: str, fragment_id: str, body: PaddingRequest):
 
 
 @app.post("/api/p/{project_id}/fragments/{fragment_id}/delete")
-def soft_delete_fragment(project_id: str, fragment_id: str):
+def soft_delete_fragment(project_id: str, fragment_id: str, link: bool = False):
+    # link – режим "связанные границы" (см. ManifestStore.soft_delete).
     store = project(project_id).store
-    return {"manifest": _public(_call(lambda: store.soft_delete(fragment_id)))}
+    return {"manifest": _public(_call(lambda: store.soft_delete(fragment_id, link=link)))}
 
 
 @app.post("/api/p/{project_id}/fragments/{fragment_id}/restore")
-def restore_fragment(project_id: str, fragment_id: str):
+def restore_fragment(project_id: str, fragment_id: str, link: bool = False):
     store = project(project_id).store
-    return {"manifest": _public(_call(lambda: store.restore(fragment_id)))}
+    return {"manifest": _public(_call(lambda: store.restore(fragment_id, link=link)))}
 
 
 @app.post("/api/p/{project_id}/fragments/{fragment_id}/delete_final")

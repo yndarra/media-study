@@ -258,14 +258,14 @@ const Api = {
     return res.json();
   },
 
-  async softDelete(id) {
-    const res = await fetch(`${Api.base()}/fragments/${id}/delete`, { method: "POST" });
+  async softDelete(id, link = false) {
+    const res = await fetch(`${Api.base()}/fragments/${id}/delete${link ? "?link=true" : ""}`, { method: "POST" });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
-  async restore(id) {
-    const res = await fetch(`${Api.base()}/fragments/${id}/restore`, { method: "POST" });
+  async restore(id, link = false) {
+    const res = await fetch(`${Api.base()}/fragments/${id}/restore${link ? "?link=true" : ""}`, { method: "POST" });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
