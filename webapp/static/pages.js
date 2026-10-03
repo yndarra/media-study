@@ -194,8 +194,12 @@ const Router = {
     // Открыть / закрыть окно поверх уже показанного списка – список не
     // перерисовывается заново (иначе страница на миг пустеет) и продолжает обновляться.
     const listShown = (view, box) => !full && State.view === view && document.querySelector(`#${box} a.card`);
-    if ((page === "video" || page === "videos") && listShown("videos", "videos-list")) {
-      if (page === "video" && id) Pages.videoModal(id);
+    // Библиотека: "Видео" (#/videos, #/video/<код>) и "Аудио" (#/audio, #/audio/<код>) –
+    // одна страница с разным списком.
+    const lib = page === "audio" ? "audio" : page === "video" || page === "videos" ? "video" : null;
+    const libModal = !!(lib && id && page !== "videos");
+    if (lib && listShown("videos", "videos-list") && Pages.libraryKind === lib) {
+      if (libModal) Pages.videoModal(id);
       else {
         Modal.close(false);
         Pages.videosRender && Pages.videosRender();
@@ -212,7 +216,7 @@ const Router = {
     }
     Pages.stopRefresh();
     // Окно подробностей живёт только на своём адресе (#/video/..., #/processing/...).
-    if (!(page === "video" || (page === "process" && id))) Modal.close(false);
+    if (!(libModal || (page === "process" && id))) Modal.close(false);
     if (page === "edit" && id) {
       // Видео переносится на другой диск (или править нечего, пока идёт
       // передача в Anki / перевод) – в редактор не пускаем.
@@ -233,13 +237,13 @@ const Router = {
       return;
     }
     Player.pauseIfPlaying();
-    if (page === "video" && id) {
-      // Подробности видео – окно поверх списка видео.
-      if (!document.getElementById("modal-overlay")) {
-        this.show("videos", "videos");
-        await Pages.videos();
+    if (lib) {
+      // Подробности – окно поверх списка своего раздела (видео или аудио).
+      if (!(libModal && document.getElementById("modal-overlay") && Pages.libraryKind === lib)) {
+        this.show("videos", lib === "audio" ? "audio" : "videos");
+        await Pages.videos(lib);
       }
-      Pages.videoModal(id);
+      if (libModal) Pages.videoModal(id);
     } else if (page === "process") {
       if (!(id && document.getElementById("modal-overlay"))) {
         this.show("process", "process");
@@ -1193,15 +1197,20 @@ const Pages = {
   },
 
   // -- библиотека (и Anki) -------------------------------------------------------
-  async videos() {
+  async videos(kind = "video") {
+    // Один и тот же раздел для видео и для аудио (список фильтруется по audio_only).
+    this.libraryKind = kind;
+    const audio = kind === "audio";
     const el = document.getElementById("view-videos");
-    el.innerHTML = `<div class="page-head"><h1>Видео</h1>
+    el.innerHTML = `<div class="page-head"><h1>${audio ? "Аудио" : "Видео"}</h1>
         <div class="head-actions">
           <span id="flags-status" class="muted small"></span>
           <button id="open-flags" class="step-btn">Проверка флагов</button>
           <button id="open-translate" class="step-btn">Доводка</button>
         </div></div>
-      <p class="muted small page-note">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
+      <p class="muted small page-note">${audio
+        ? "Обработанные аудио (песни и т.п.), сгруппированные по исполнителю. Полосы – как у видео: докуда дошла правка, сколько фрагментов стали карточками Anki и переведены. Нажмите на аудио, чтобы открыть подробности и перейти к правке."
+        : "Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке."}</p>
       <div id="videos-list"><p class="muted">Загрузка…</p></div>`;
     viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     el.querySelector("#open-flags").addEventListener("click", () => this.checkFlags());
@@ -1211,7 +1220,7 @@ const Pages = {
       if (!box) return;
       let items;
       try {
-        items = await Api.ankiOverview();
+        items = (await Api.ankiOverview()).filter((v) => !!v.audio_only === audio);
       } catch (err) {
         box.innerHTML = `<p class="muted">Не удалось загрузить список: ${escapeHtml(err.message)}</p>`;
         return;
@@ -1221,7 +1230,7 @@ const Pages = {
       const translateButton = document.getElementById("open-translate");
       if (translateButton) translateButton.textContent = toTranslate ? `Доводка (${toTranslate})` : "Доводка";
       if (!items.length) {
-        box.innerHTML = '<p class="muted">Готовых видео пока нет – добавьте их в разделе «Добавить», затем обработайте в «Обработке».</p>';
+        box.innerHTML = `<p class="muted">Готовых ${audio ? "аудио" : "видео"} пока нет – добавьте их в разделе «Добавить», затем обработайте в «Обработке».</p>`;
         return;
       }
       const first = !box.querySelector("a.card");
@@ -1229,7 +1238,7 @@ const Pages = {
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
           v.state === "offline"
             ? `<div class="card offline-card">${cardTitle(v)}<div class="muted small">Диск ${escapeHtml(v.storage)} не подключён</div></div>`
-            : `<a class="card${cardState(v)}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
+            : `<a class="card${cardState(v)}" href="#/${audio ? "audio" : "video"}/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
           // Кнопка следующего шага – вместо строки "Место на диске".
           videoBars(v) + (cardAction(v) ? cardAction(v) + videoNotes(v, false) : videoNotes(v)) +
           "</a>").join("") + "</div>",
@@ -1243,7 +1252,7 @@ const Pages = {
         for (const [vid, html] of now) {
           const was = this.lastActions.get(vid);
           if (!!was === !!html) continue;
-          const card = box.querySelector(`a.card[href="#/video/${CSS.escape(encodeURIComponent(vid))}"]`);
+          const card = box.querySelector(`a.card[href$="/${CSS.escape(encodeURIComponent(vid))}"]`);
           if (!card) continue;
           if (html) {
             const el = card.querySelector(".card-action");
@@ -1469,6 +1478,7 @@ const Pages = {
     let save = async () => {};
     const body = Modal.show('<p class="muted">Загрузка…</p>', () => {
       if (location.hash.startsWith("#/video/")) location.hash = "#/videos";
+      else if (location.hash.startsWith("#/audio/")) location.hash = "#/audio";
     }, { isDirty: () => !!watcher && watcher.isDirty(), save: () => save() });
     let data;
     try {
@@ -1739,16 +1749,43 @@ const Pages = {
   // -- обработка (этап 1) --------------------------------------------------------------
   async process() {
     const el = document.getElementById("view-process");
-    el.innerHTML = `<h1>Обработка</h1>
-      <p class="muted small page-note">Добавленные видео: копия для редактора, распознавание речи, сверка с текстом и нарезка на фразы. Нажмите на видео, чтобы прикрепить ссылки на текст для сверки (например, страницу Notion) и запустить обработку.</p>
+    // "Обработка" – общая для видео и аудио; переключатель вверху справа,
+    // открывается последний выбранный подраздел.
+    let kind = "video";
+    try {
+      kind = localStorage.getItem("process-kind") === "audio" ? "audio" : "video";
+    } catch (_) {}
+    el.innerHTML = `<div class="page-head"><h1>Обработка</h1>
+        <div class="seg-switch" role="tablist">
+          <button data-k="video" class="${kind === "video" ? "active" : ""}">Видео <span class="seg-count"></span></button>
+          <button data-k="audio" class="${kind === "audio" ? "active" : ""}">Аудио <span class="seg-count"></span></button>
+        </div></div>
+      <p class="muted small page-note">Добавленные видео и аудио: копия для редактора, распознавание речи, сверка с текстом и нарезка на фразы. Нажмите на видео (аудио), чтобы прикрепить ссылки на текст для сверки (например, страницу Notion или текст песни) и запустить обработку.</p>
       <div id="process-list"><p class="muted">Загрузка…</p></div>`;
+    el.querySelectorAll(".seg-switch button").forEach((b) => b.addEventListener("click", () => {
+      if (b.dataset.k === kind) return;
+      kind = b.dataset.k;
+      try {
+        localStorage.setItem("process-kind", kind);
+      } catch (_) {}
+      el.querySelectorAll(".seg-switch button").forEach((x) => x.classList.toggle("active", x === b));
+      const box = document.getElementById("process-list");
+      box.innerHTML = "";
+      render();
+    }));
     viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     const render = async () => {
       const box = document.getElementById("process-list");
       if (!box) return;
-      const items = (await Api.projects()).filter((v) => v.state !== "ready");
+      const pending = (await Api.projects()).filter((v) => v.state !== "ready");
+      // Сколько ждёт обработки в каждом подразделе – на переключателе.
+      const counts = { video: pending.filter((v) => !v.audio_only).length, audio: pending.filter((v) => v.audio_only).length };
+      document.querySelectorAll("#view-process .seg-switch button").forEach((b) => {
+        b.querySelector(".seg-count").textContent = counts[b.dataset.k] || "";
+      });
+      const items = pending.filter((v) => !!v.audio_only === (kind === "audio"));
       if (!items.length) {
-        box.innerHTML = '<p class="muted">Нечего обрабатывать – добавьте видео или аудио в разделе «Добавить».</p>';
+        box.innerHTML = `<p class="muted">Нечего обрабатывать – добавьте ${kind === "audio" ? "аудио" : "видео"} в разделе «Добавить».</p>`;
         return;
       }
       const first = !box.querySelector("a.card");
@@ -2119,7 +2156,7 @@ const Pages = {
           ...(other >= 0.005 ? [row("Прочее (не по видео)", money(other))] : []),
         ])}
         ${card("Видео", [
-          row("Готово к правке", num(ready.length)),
+          row("Готово к правке", `${num(ready.length)}${ready.some((v) => v.audio_only) ? ` <span class="muted small">(аудио ${ready.filter((v) => v.audio_only).length})</span>` : ""}`),
           row("В обработке и ждут", num(all.length - ready.length)),
           row("Длительность", formatDuration(sum(all, (v) => v.duration))),
           row("Место на диске", formatSize(sum(all, (v) => v.disk_total))),
@@ -2170,6 +2207,8 @@ const Pages = {
           <h2>Anki</h2>
           ${field("set-deck", "Колода", `<input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}">`,
             "Карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются")}
+          ${field("set-deck-audio", "Колода для аудио", `<input id="set-deck-audio" class="wide" value="${escapeHtml(s.anki_deck_root_audio || "")}">`,
+            "Песни и другие аудио: &lt;колода&gt;::&lt;исполнитель&gt;::&lt;название&gt;")}
           <div id="deck-sync" class="small"></div>
         </section>
         <section class="set-card">
@@ -2208,6 +2247,8 @@ const Pages = {
               "Папка на другом диске (например, внешнем). Видео переносятся кнопкой «Перенести на …» в окне видео; в data/ остаётся ссылка")}
             ${field("set-new-storage", "Новые видео сохранять", '<div class="picker-host" data-for="set-new-storage"></div>',
               "Куда скачиваются и добавляются новые видео")}
+            ${field("set-new-audio-storage", "Новые аудио сохранять", '<div class="picker-host" data-for="set-new-audio-storage"></div>',
+              "Свои аудиофайлы (песни и т.п.); «Как видео» – туда же, куда видео")}
           </div>
         </section>
         <section class="set-card wide-card">
@@ -2254,10 +2295,13 @@ const Pages = {
     storesField.addEventListener("input", () => {
       drawStores();
       newStorePicker.setOptions(storeOptions());
+      newAudioPicker.setOptions(audioStoreOptions());
     });
     const storeOptions = () => [{ value: "", label: `${(stores.find((x) => x.main) || {}).label || "Основное"} (основное)` },
       ...listed().map((p) => ({ value: p, label: `${(stores.find((x) => x.path.toLowerCase() === p.toLowerCase()) || { label: p.slice(0, 2) }).label} – ${p}` }))];
     const newStorePicker = Picker.create(host("set-new-storage"), { id: "set-new-storage", value: s.new_video_storage || "", options: storeOptions() });
+    const audioStoreOptions = () => [{ value: "", label: "Как видео" }, ...storeOptions().filter((o) => o.value)];
+    const newAudioPicker = Picker.create(host("set-new-audio-storage"), { id: "set-new-audio-storage", value: s.new_audio_storage || "", options: audioStoreOptions() });
     drawStores();
     const newInput = el.querySelector("#set-storage-new");
     const addButton = el.querySelector("#set-storage-add");
@@ -2317,6 +2361,8 @@ const Pages = {
       try {
         saved = await Api.saveSettings({
         anki_deck_root: document.getElementById("set-deck").value.trim(),
+        anki_deck_root_audio: document.getElementById("set-deck-audio").value.trim(),
+        new_audio_storage: document.getElementById("set-new-audio-storage").value,
         context_padding_seconds: Number(document.getElementById("set-padding").value),
         download_max_height: Number(document.getElementById("set-quality").value),
         auto_process: document.getElementById("set-auto").checked,

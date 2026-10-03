@@ -149,6 +149,7 @@ const Zoom = {
   },
 
   toggle(e) {
+    if (State.manifest && State.manifest.video.audio_only) return; // у аудио приближать нечего
     if (this.fragmentId && currentFragment() && this.fragmentId === currentFragment().id) return this.reset();
     const wrap = $("video-wrap");
     const rect = wrap.getBoundingClientRect();
@@ -287,6 +288,10 @@ const App = {
     const manifest = await this._call(Api.getManifest());
     if (!manifest) return;
     State.manifest = manifest;
+    // Аудио – вместо картинки фон с кругом по звуку (audiovis.js).
+    AudioVisual.enable(!!manifest.video.audio_only);
+    // У аудио нет "немых" реплик героя игры – кнопки Rover ("R", "Не озвучено") не нужны.
+    document.getElementById("app").classList.toggle("audio-project", !!manifest.video.audio_only);
     // Режим "связанные границы" – по умолчанию для видео или аудио (настройки).
     if (State.linkDefaults) {
       State.linkBounds = State.linkDefaults[manifest.video.audio_only ? "audio" : "video"];

@@ -136,7 +136,7 @@ def remember(data_dir: Path, project_id: str) -> None:
     (Path(data_dir) / INDEX_FILE).write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def new_project_dir(data_dir: Path, project_id: str) -> Path:
+def new_project_dir(data_dir: Path, project_id: str, audio: bool = False) -> Path:
     """
     Папка для нового видео: в хранилище "для новых видео" (настройка
     new_video_storage; пусто – основное). Возвращает data/<код> (ссылку или папку).
@@ -146,7 +146,10 @@ def new_project_dir(data_dir: Path, project_id: str) -> Path:
     link = Path(data_dir) / project_id
     if link.exists() or os.path.isjunction(link):
         return link
-    dest_root = (app_settings(data_dir).get("new_video_storage") or "").strip()
+    settings = app_settings(data_dir)
+    dest_root = (settings.get("new_video_storage") or "").strip()
+    if audio and (settings.get("new_audio_storage") or "").strip():
+        dest_root = settings["new_audio_storage"].strip()
     if dest_root and _norm(dest_root) != _norm(Path(data_dir).resolve()) and dest_root in configured(data_dir):
         try:
             target = Path(dest_root) / project_id

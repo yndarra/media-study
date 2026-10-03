@@ -135,8 +135,34 @@ def _dialogue(lines: list[str]) -> list[str]:
     return result
 
 
-def fetch_lines(url: str, log=print) -> list[str]:
-    """Реплики "Имя: текст" со страницы (Notion — со всеми подстраницами/строками базы)."""
+def _plain(lines) -> list[str]:
+    """
+    Строки текста песни (для аудио): у текстов песен нет "Имя:", поэтому
+    берутся все строки с буквами, кроме пометок частей ("[Chorus]",
+    "(Verse 2)") и слишком длинных абзацев (описания, комментарии). Лишнее
+    вокруг потом отрезает trim_to_video – по совпадению с распознанной речью.
+    """
+    import re as _re
+
+    from common.text_clean import clean_text
+
+    result = []
+    for text in lines:
+        line = clean_text(text).strip()
+        if not line or len(line) > 200 or not _re.search(r"[A-Za-zА-Яа-яЁё]", line):
+            continue
+        if _re.fullmatch(r"[\[(].*[\])]", line):
+            continue  # [Chorus], (Verse 2: …)
+        result.append(line)
+    return result
+
+
+def fetch_lines(url: str, log=print, plain: bool = False) -> list[str]:
+    """
+    Реплики "Имя: текст" со страницы (Notion — со всеми подстраницами/строками
+    базы); plain – просто строки текста (песни у аудио, см. _plain).
+    """
+    pick = _plain if plain else _dialogue
     if "notion.site" in url or "notion.so" in url:
         reader = notion.NotionReader(notion.site_of(url))
         root = notion.page_id_from_url(url)
@@ -146,7 +172,7 @@ def fetch_lines(url: str, log=print) -> list[str]:
             if n % 50 == 0:
                 log(f"  {url[:60]}…: страниц {n}/{len(pages)}")
             lines += reader.page_lines(page_id)
-        return _dialogue(lines)
+        return pick(lines)
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) media-study/1.0"}
     wiki = re.match(r"(https?://[^/]+)/wiki/([^?#]+)", url)
     if wiki:
@@ -165,7 +191,7 @@ def fetch_lines(url: str, log=print) -> list[str]:
     parser = _TextBlocks(player)
     parser.feed(page)
     parser.flush()
-    return _dialogue(html.unescape(line) for line in parser.lines)
+    return pick([html.unescape(line) for line in parser.lines])
 
 
 # -- проверка по распознанной речи ------------------------------------------------------
@@ -328,6 +354,11 @@ def ask_agent(data_dir: Path, project_dir: Path, mode: str, links: list[str], wh
         f"Группа в приложении: {group_of(project_dir)}\nДлительность: {round((info.get('duration') or 0) / 60)} мин\n"
         f"Ссылка: {info.get('webpage_url') or '—'}\n\n"
     )
+    if info.get("audio_only"):
+        # Песня (или подкаст/аудиокнига): нужен её текст – lyrics, по куплетам и
+        # припевам, со всеми повторами; имён говорящих у песни обычно нет.
+        user = ("Тип: АУДИО (скорее всего песня). Нужен полный текст (lyrics) этой записи со всеми повторами "
+                "припевов; формат «Имя: реплика» не обязателен – подойдут строки текста песни.\n" + user)
     if mode == "deep":
         user += "Ссылки пользователя:\n" + ("\n".join(links) or "—") + "\n\n"
     if missing:
@@ -357,10 +388,12 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
     transcript.txt для видео по его настройкам (ссылки, режим агента).
     Возвращает, записан ли текст.
     """
-    from webapp.library import add_cost, agent_mode, project_settings, save_project_settings
+    from webapp.library import add_cost, agent_mode, project_settings, save_project_settings, video_info
 
     project_dir = Path(project_dir)
     data_dir = project_dir.parent
+    # Аудио (песни): текст – строками без "Имя:" (см. _plain).
+    plain = bool(video_info(project_dir).get("audio_only"))
     settings = project_settings(project_dir)
     mode = agent_mode(settings.get("agent"))
     links = [u for u in settings.get("sources", []) if u.strip()]
@@ -387,7 +420,7 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
     checked = []
     for source in candidates:
         try:
-            lines = fetch_lines(source["url"], log)
+            lines = fetch_lines(source["url"], log, plain)
         except Exception as error:
             log(f"  {source['url']}: не скачалось ({error})")
             continue
@@ -430,7 +463,7 @@ def build_transcript(project_dir: Path, whisper_transcript: dict, log=print) -> 
                     if not source.get("url") or any(source["url"] == c["url"] for c in checked + extra):
                         continue
                     try:
-                        extra_lines = fetch_lines(source["url"], log)
+                        extra_lines = fetch_lines(source["url"], log, plain)
                     except Exception as error:
                         log(f"  {source['url']}: не скачалось ({error})")
                         continue

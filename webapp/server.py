@@ -548,7 +548,9 @@ async def import_file(request: Request, name: str):
     project_id = slug_for_file(name, size)
     from . import storage
 
-    project_dir = storage.new_project_dir(DATA_DIR, project_id)
+    from phase1_ingest.acquire import AUDIO_EXTENSIONS
+
+    project_dir = storage.new_project_dir(DATA_DIR, project_id, audio=Path(name).suffix.lower() in AUDIO_EXTENSIONS)
     incoming = project_dir / f"incoming{Path(name).suffix.lower()}"
     with open(incoming, "wb") as out:
         async for chunk in request.stream():
@@ -748,7 +750,7 @@ def update_settings(body: dict):
     old = library.app_settings(DATA_DIR)
     old_padding = old["context_padding_seconds"]
     saved = library.save_app_settings(DATA_DIR, body)
-    if saved["anki_deck_root"] != old["anki_deck_root"]:
+    if saved["anki_deck_root"] != old["anki_deck_root"] or saved.get("anki_deck_root_audio") != old.get("anki_deck_root_audio"):
         _deck_sync_run()
     if saved["context_padding_seconds"] != old_padding:
         for item in library.list_projects(DATA_DIR):

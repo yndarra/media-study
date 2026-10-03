@@ -79,10 +79,17 @@ def import_file(source: Path, project_dir: Path, original_name: str, move: bool 
     streams = media_streams(target)
     if not streams["has_audio"]:
         raise RuntimeError("в файле нет звука — распознавать нечего")
+    title, channel = Path(original_name).stem, "Свои файлы"
+    if not streams["has_video"]:
+        # Аудио обычно называется "Исполнитель — Название" (или через " - "):
+        # исполнитель становится автором (группой в приложении и колодой Anki).
+        parts = re.split(r"\s+[—–-]\s+", title, maxsplit=1)
+        if len(parts) == 2 and all(p.strip() for p in parts):
+            channel, title = parts[0].strip(), parts[1].strip()
     info = {
         "id": project_dir.name,
-        "title": Path(original_name).stem,
-        "channel": "Свои файлы",
+        "title": title,
+        "channel": channel,
         "duration": round(streams["duration"]),
         "audio_only": not streams["has_video"],
         "local_file": original_name,

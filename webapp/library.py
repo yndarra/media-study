@@ -175,6 +175,10 @@ PHASE1_STALE_SECONDS = 600
 # Общие настройки приложения (страница "Настройки") — data/settings.json.
 DEFAULT_APP_SETTINGS = {
     "anki_deck_root": "Claude::2. VIDEOS",  # колода Anki: <корень>::<автор>::<видео>
+    # Для аудио (песни и т.п.) – своя корневая колода: <корень>::<исполнитель>::<название>.
+    "anki_deck_root_audio": "Claude::1. SONGS",
+    # Куда класть новые аудио ("" – как видео: new_video_storage / основное).
+    "new_audio_storage": "",
     # Запас до и после отрезка по умолчанию — для всех видео (кроме уже
     # просмотренных фрагментов — до скрытой метки).
     "context_padding_seconds": 3.0,
@@ -260,6 +264,8 @@ def summary(project_dir: Path) -> dict:
         "title": title_of(project_dir),
         "group": group_of(project_dir),
         "duration": info.get("duration"),
+        # Аудио без видео – свой раздел "Аудио" и свой вид редактора.
+        "audio_only": bool(info.get("audio_only")),
     }
     manifest_path = project_dir / "manifest.json"
     if not manifest_path.exists():
