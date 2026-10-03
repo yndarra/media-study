@@ -40,6 +40,9 @@ const EditTimer = {
         <button class="et-info et-time" title="Время (нажмите – скопировать)"></button>
         <button class="et-info et-frags" title="Отредактировано фрагментов за это время (нажмите – скопировать)"></button>
         <button class="et-info et-speed" title="Скорость (нажмите – скопировать)"></button>
+        <button class="et-btn et-save" title="Сохранить результат (смотреть – в «Статистике»)">
+          <svg viewBox="0 0 20 20"><path d="M4.5 3.5h9l2.5 2.5v10.5h-11.5z"/><path d="M7 3.5v4h6v-4M7 16.5v-5h6v5"/></svg>
+        </button>
       </div>`;
     wrap.appendChild(el);
     // Клики по таймеру не доходят до видео (клик по видео – воспроизведение,
@@ -50,6 +53,7 @@ const EditTimer = {
     el.querySelector(".et-toggle").addEventListener("click", () => this.setOpen(!this.st.open));
     el.querySelector(".et-run").addEventListener("click", () => (this.st.startedAt ? this.pause() : this.start()));
     el.querySelector(".et-reset").addEventListener("click", () => this.reset());
+    el.querySelector(".et-save").addEventListener("click", () => this.saveResult());
     el.querySelectorAll(".et-info").forEach((b) => b.addEventListener("click", () => this.copy(b)));
     // Кнопки не забирают фокус – горячие клавиши редактора продолжают работать.
     el.querySelectorAll("button").forEach((b) => b.addEventListener("mousedown", (e) => e.preventDefault()));
@@ -179,10 +183,27 @@ const EditTimer = {
       : '<svg viewBox="0 0 20 20"><path d="M7 5l8 5-8 5z" fill="currentColor"/></svg>';
     run.title = running ? "Пауза" : "Старт";
     el.querySelector(".et-reset").disabled = this.elapsed() < 1000 && !this.frags();
+    el.querySelector(".et-save").disabled = this.elapsed() < 1000;
     const t = this.texts();
     el.querySelector(".et-time").textContent = t.time;
     el.querySelector(".et-frags").textContent = t.frags;
     el.querySelector(".et-speed").textContent = t.speed;
+  },
+
+  // Сохранить текущий результат (время, фрагменты, видео) – в "Статистике"
+  // потом видны все результаты, средние, лучшие и т.п. Таймер не сбрасывается.
+  async saveResult() {
+    const button = this.el.querySelector(".et-save");
+    const ms = this.elapsed();
+    if (ms < 1000) return;
+    button.disabled = true;
+    try {
+      await Api.saveTimerResult({ ms: Math.round(ms), frags: this.frags(), project: State.project || null });
+      button.classList.remove("copied");
+      void button.offsetWidth;
+      button.classList.add("copied");
+    } catch (_) {}
+    button.disabled = false;
   },
 
   async copy(button) {

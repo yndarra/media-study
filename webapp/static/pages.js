@@ -122,10 +122,10 @@ function askStorage(info) {
     overlay.innerHTML = `<div class="ask storage-ask" role="dialog">
         <div class="ask-icon">${disk}</div>
         <div class="ask-title">Хранилище</div>
-        <div class="ask-text">Сейчас: <b>${escapeHtml(here.label)}</b>${here.main ? " (основное)" : ""}
+        <div class="ask-text"><b>${escapeHtml(here.label)}</b>${here.main ? " (основное)" : ""}
           <div class="muted small">${escapeHtml(here.path)}</div></div>
         ${targets.length ? `<div class="storage-options">${targets.map(option).join("")}</div>`
-          : '<div class="ask-text muted small">Других хранилищ нет – добавьте папку на другом диске в «Настройках» (Хранилища видео).</div>'}
+          : '<div class="ask-text muted small">Других хранилищ нет – добавьте папку на другом диске в «Настройках».</div>'}
         <div class="ask-actions"><button class="step-btn" data-a="close">Закрыть</button>` +
         `${targets.length ? '<button class="step-btn primary" data-a="move" disabled>Перенести</button>' : ""}</div>
       </div>`;
@@ -929,17 +929,126 @@ function processingBar(v) {
   return segmentBar([{ n: v.percent, cls, title: `${Math.floor(v.percent)}%` }], 100, cap(v.status), null, `${Math.floor(v.percent)}%`);
 }
 
+// Скорость правки (результаты таймера в редакторе): итоги, лучшая/средняя/
+// медиана, последняя против средней, прогноз оставшейся правки, график по
+// результатам и разбивка по видео. remaining – сколько фрагментов ещё не
+// отредактировано во всех видео.
+const speedOf = (r) => (r.ms ? r.frags / (r.ms / 60000) : 0); // фрагментов в минуту
+const formatMinutes = (ms) => {
+  const m = Math.round(ms / 60000);
+  return m >= 60 ? `${Math.floor(m / 60)} ч ${m % 60} мин` : `${m} мин`;
+};
+const shortDate = (iso) => {
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+};
+
+function speedSection(results, remaining) {
+  const head = (extra = "") => `<div class="speed-head"><h2>Скорость правки</h2>${extra}</div>`;
+  if (!results || !results.length) {
+    return `<section class="set-card wide-card">${head()}<p class="muted small">Результатов пока нет – запустите таймер над видео в редакторе и сохраните результат (иконка рядом со скоростью).</p></section>`;
+  }
+  const list = [...results].sort((a, b) => String(a.saved_at).localeCompare(String(b.saved_at))); // старые – первыми
+  const totalMs = list.reduce((s, r) => s + r.ms, 0);
+  const totalFrags = list.reduce((s, r) => s + r.frags, 0);
+  const avg = totalMs ? totalFrags / (totalMs / 60000) : 0; // взвешенная по времени
+  const speeds = list.map(speedOf);
+  const best = list[speeds.indexOf(Math.max(...speeds))];
+  const sorted = [...speeds].sort((a, b) => a - b);
+  const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+  const last = list[list.length - 1];
+  const vsAvg = avg ? Math.round(((speedOf(last) - avg) / avg) * 100) : 0;
+  const sp = (x) => `${x.toFixed(2)}/мин <span class="muted small">(${Math.round(x * 60)}/ч)</span>`;
+  const row = (name, value) => `<tr><td>${name}</td><td>${value}</td></tr>`;
+  const left = [
+    row("Результатов", list.length),
+    row("Всего времени", formatMinutes(totalMs)),
+    row("Всего фрагментов", totalFrags.toLocaleString("ru-RU")),
+    row("Средняя скорость", sp(avg)),
+  ].join("");
+  const right = [
+    row("Лучшая", `${sp(speedOf(best))} <span class="muted small">· ${shortDate(best.saved_at)}</span>`),
+    row("Медиана", sp(median)),
+    row("Последняя", `${sp(speedOf(last))} <span class="${vsAvg >= 0 ? "ok-text" : "flagged-text"} small">${vsAvg >= 0 ? "+" : ""}${vsAvg}% к средней</span>`),
+    row("Осталось править", remaining && avg ? `${remaining.toLocaleString("ru-RU")} фрагм. ≈ ${formatMinutes((remaining / avg) * 60000)}` : "–"),
+  ].join("");
+  // График: столбец – результат (по порядку), высота – скорость; лучшая – зелёная,
+  // пунктир – средняя.
+  const shown = list.slice(-40);
+  const max = Math.max(...shown.map(speedOf), avg) * 1.15 || 1;
+  const W = 1000;
+  const H = 150;
+  const step = W / shown.length;
+  const bars = shown.map((r, k) => {
+    const h = (speedOf(r) / max) * (H - 22);
+    const bw = Math.min(step * 0.64, 46); // мало результатов – столбцы не во всю ширину
+    return `<rect class="bar${r === best ? " best" : ""}" x="${k * step + (step - bw) / 2}" y="${H - 18 - h}" width="${bw}" height="${h}" rx="2">` +
+      `<title>${escapeHtml(shortDate(r.saved_at))}: ${speedOf(r).toFixed(2)}/мин, ${r.frags} фрагм. за ${formatMinutes(r.ms)}</title></rect>`;
+  }).join("");
+  const avgY = H - 18 - (avg / max) * (H - 22);
+  const chart = `<svg class="speed-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${bars}` +
+    `<line class="avg" x1="0" x2="${W}" y1="${avgY}" y2="${avgY}"/>` +
+    `<text x="4" y="${H - 4}">${escapeHtml(shortDate(shown[0].saved_at))}</text>` +
+    `<text x="${W - 4}" y="${H - 4}" text-anchor="end">${escapeHtml(shortDate(last.saved_at))}</text></svg>`;
+  // По видео.
+  const byVideo = new Map();
+  for (const r of list) {
+    const key = r.title || "Не указано";
+    const v = byVideo.get(key) || { n: 0, ms: 0, frags: 0 };
+    v.n += 1;
+    v.ms += r.ms;
+    v.frags += r.frags;
+    byVideo.set(key, v);
+  }
+  const videoRows = [...byVideo.entries()].sort((a, b) => b[1].ms - a[1].ms).map(([title, v]) =>
+    `<tr><td>${escapeHtml(title)}</td><td>${v.n}</td><td>${v.frags.toLocaleString("ru-RU")}</td><td>${formatMinutes(v.ms)}</td>` +
+    `<td>${(v.frags / (v.ms / 60000)).toFixed(2)}/мин</td></tr>`).join("");
+  return `<section class="set-card wide-card">
+      ${head(`<button id="speed-all" class="step-btn">Все результаты (${list.length})</button>`)}
+      <div class="disk-grid"><table class="stats">${left}</table><table class="stats">${right}</table></div>
+      ${chart}
+      <table class="stats grid-table"><tr><th>Видео</th><th>Результатов</th><th>Фрагментов</th><th>Время</th><th>Скорость</th></tr>${videoRows}</table>
+    </section>`;
+}
+
+// Окно со всеми результатами таймера (новые – первыми): удалить лишние.
+// Закрыли окно, что-то удалив, – статистика перерисовывается (onChange).
+function resultsModal(results, onChange) {
+  let changed = false;
+  const list = [...results].sort((a, b) => String(b.saved_at).localeCompare(String(a.saved_at)));
+  const body = Modal.show(`<h2 class="modal-title">Результаты таймера</h2>
+    <table class="stats grid-table results-list"><tr><th>Дата</th><th>Видео</th><th>Время</th><th>Фрагментов</th><th>Скорость</th><th></th></tr>
+    ${list.map((r) => `<tr data-id="${escapeHtml(r.id)}"><td>${escapeHtml(shortDate(r.saved_at))}</td>` +
+      `<td>${escapeHtml(r.title || "Не указано")}${r.note ? ` <span class="muted small">(${escapeHtml(r.note)})</span>` : ""}</td>` +
+      `<td>${formatMinutes(r.ms)}</td><td>${r.frags}</td><td>${speedOf(r).toFixed(2)}/мин</td>` +
+      `<td><button class="step-btn result-del">Удалить</button></td></tr>`).join("")}
+    </table>`, () => changed && onChange());
+  body.querySelectorAll(".result-del").forEach((button) => button.addEventListener("click", async () => {
+    const tr = button.closest("tr");
+    button.disabled = true;
+    try {
+      await Api.deleteTimerResult(tr.dataset.id);
+    } catch (_) {
+      button.disabled = false;
+      return;
+    }
+    changed = true;
+    tr.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).onfinish = () => tr.remove();
+  }));
+}
+
 // Строка "Потрачено": всего и по видам (OpenRouter).
 function spentLine(costs) {
   const c = costs || {};
   const money = (x) => `$${(Number(x) || 0).toFixed(2)}`;
   const total = costTotal(c);
-  return `${money(total)} всего (${money(c.search)} поиск, ` + (c.fix ? `${money(c.fix)} доводка ИИ, ` : "") +
-    `${money(c.translate)} перевод, ${money(c.retranslate)} повторный перевод)`;
+  return `${money(total)} всего (${money(c.search)} поиск, ${money(translateCost(c))} перевод и доводка)`;
 }
 
 // Сумма расходов видео.
 const costTotal = (c) => (c && ((c.search || 0) + (c.fix || 0) + (c.translate || 0) + (c.retranslate || 0))) || 0;
+// "Перевод и доводка": перевод, повторный перевод (доводка по флагам) и ИИ-доводка текста – одной суммой.
+const translateCost = (c) => (c && ((c.translate || 0) + (c.retranslate || 0) + (c.fix || 0))) || 0;
 
 // Форма слова по числу: plural(n, "фрагмент", "фрагмента", "фрагментов").
 function plural(n, one, few, many) {
@@ -1090,7 +1199,7 @@ const Pages = {
         <div class="head-actions">
           <span id="flags-status" class="muted small"></span>
           <button id="open-flags" class="step-btn">Проверка флагов</button>
-          <button id="open-translate" class="step-btn">Перевод</button>
+          <button id="open-translate" class="step-btn">Доводка</button>
         </div></div>
       <p class="muted small page-note">Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке.</p>
       <div id="videos-list"><p class="muted">Загрузка…</p></div>`;
@@ -1110,7 +1219,7 @@ const Pages = {
       // Кнопка "Перевод" показывает, сколько карточек ждут перевода.
       const toTranslate = items.reduce((sum, v) => sum + (v.flag_translation || 0), 0);
       const translateButton = document.getElementById("open-translate");
-      if (translateButton) translateButton.textContent = toTranslate ? `Перевод (${toTranslate})` : "Перевод";
+      if (translateButton) translateButton.textContent = toTranslate ? `Доводка (${toTranslate})` : "Доводка";
       if (!items.length) {
         box.innerHTML = '<p class="muted">Готовых видео пока нет – добавьте их в разделе «Добавить», затем обработайте в «Обработке».</p>';
         return;
@@ -1437,7 +1546,6 @@ const Pages = {
           ${editZebra ? `data-zebra="${editZebra}"` : ""}><canvas class="zebra"></canvas><span>Редактировать</span></a>
         <button id="info-anki" class="step-btn fold zebra-host gone"><canvas class="zebra"></canvas><span>Передать в Anki</span></button>
         <button id="info-translate" class="step-btn fold zebra-host gone"><canvas class="zebra"></canvas><span>Перевести</span></button>
-        <label class="batch-chip batch-check fold gone" title="Пакетом (OpenRouter Batch API): вдвое дешевле, результат – в течение минут или часов (до 24 ч)"><input type="checkbox" id="info-batch" data-watch="no"><span class="batch-dot"></span>Пакетом</label>
         <span id="info-note" class="muted small"></span>
         <button id="info-storage" class="step-btn fold zebra-host" title="Где хранится видео; перенос на другой диск"><canvas class="zebra"></canvas><span>Хранилище</span></button>
         <button id="info-save" class="step-btn fold gone">Сохранить</button>
@@ -1478,17 +1586,11 @@ const Pages = {
     let moving = !!(v.moving || (storageInfo && storageInfo.move && !storageInfo.move.finished));
     const ankiButton = body.querySelector("#info-anki");
     const translateButton = body.querySelector("#info-translate");
-    const batchBox = body.querySelector("#info-batch");
     const note = body.querySelector("#info-note");
     const setNote = (text, hint = "") => {
       note.textContent = text;
       note.title = hint || text;
     };
-    // "Пакетом" запоминается сразу (без "Сохранить") – для этого видео.
-    const batchKey = `batch-translate:${id}`;
-    try {
-      batchBox.checked = localStorage.getItem(batchKey) === "1";
-    } catch (_) {}
 
     // Вид строки кнопок по состоянию видео:
     //  - "Передать в Anki" – только если есть что передать (зебра, когда
@@ -1528,8 +1630,6 @@ const Pages = {
       translateButton.classList.toggle("translate-ready", !running && canTranslate);
       translateButton.disabled = moving || dirty;
       translateButton.title = running ? "Отменить перевод" : s.to_translate === null ? "Anki закрыт" : `Без перевода: ${untranslated}`;
-      fold(body.querySelector(".batch-check"), sending || !(canTranslate || running));
-      body.querySelector(".batch-check").classList.toggle("disabled", moving || dirty);
       // Хранилище / Сохранить / Отменить перенос
       fold(saveButton, !dirty || moving);
       fold(storageButton, dirty && !moving);
@@ -1559,7 +1659,6 @@ const Pages = {
         moving = !!(mv && !mv.finished);
         untranslated = s.sending ? 0 : s.to_translate === null ? 1 : s.to_translate || 0;
         waitingBatch = (state.batches || []).some((j) => j.project === id);
-        if (waitingBatch) batchBox.checked = true; // ждёт пакетная заявка – значит, пакетом
         running = waitingBatch || (st.state === "running" && st.project === id && Date.now() / 1000 - st.updated < 300);
         render(s);
         paint(s);
@@ -1628,24 +1727,12 @@ const Pages = {
       translateButton.disabled = true;
       try {
         if (running) await Api.agentStop(id);
-        else await Api.agentRun({ project: id, batch: batchBox.checked });
+        else await Api.agentRun({ project: id, batch: false }); // пакетом не переводим – слишком долго
       } catch (err) {
         setNote("Ошибка", err.message);
         return;
       }
       closeAndFlash();
-    });
-    // "Пакетом": запомнить; во время перевода – переключить его (снять – заявка
-    // отменяется и перевод идёт сразу; поставить – остальное уходит заявкой).
-    batchBox.addEventListener("change", async () => {
-      try {
-        localStorage.setItem(batchKey, batchBox.checked ? "1" : "0");
-      } catch (_) {}
-      if (!running) return;
-      await Api.agentStop(id);
-      await Api.agentRun({ project: id, batch: batchBox.checked });
-      setNote(batchBox.checked ? "Заявка отправлена" : "Перевожу сразу");
-      setTimeout(refresh, 1500);
     });
   },
 
@@ -1973,6 +2060,7 @@ const Pages = {
     let data;
     try {
       data = await Api.overallStats();
+      data.results = await Api.timerResults().catch(() => []);
     } catch (err) {
       el.innerHTML = `<h1>Статистика</h1><p class="muted">Не удалось загрузить: ${escapeHtml(err.message)}</p>`;
       return;
@@ -1984,11 +2072,15 @@ const Pages = {
     const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : "0%");
     const num = (n) => Number(n || 0).toLocaleString("ru-RU");
     const edited = (v) => { const e = v.edit_bar || {}; return (e.accepted || 0) + (e.unvoiced || 0) + (e.changed || 0) + (e.deleted || 0); };
-    const anyEst = (list) => list.some((v) => (v.costs.estimated || []).length);
-    const kinds = { search: "Поиск источников", fix: "Доводка ИИ", translate: "Перевод", retranslate: "Повторный перевод" };
-    const kindTotal = (k, list = all) => sum(list, (v) => v.costs[k]);
-    const kindEst = (k, list = all) => list.some((v) => (v.costs.estimated || []).includes(k));
-    const spentAll = sum(all, (v) => costTotal(v.costs));
+    const kinds = { search: "Поиск источников", translate: "Перевод и доводка" };
+    const kindOf = (c, k) => (k === "translate" ? translateCost(c) : c[k] || 0);
+    const kindTotal = (k, list = all) => sum(list, (v) => kindOf(v.costs, k));
+    const spentVideos = sum(all, (v) => costTotal(v.costs));
+    // Итог – по счётчику OpenRouter (если доступен): туда входят и расходы не
+    // по видео (эксперименты, проверки, траты до появления учёта).
+    const usage = data.openrouter_usage;
+    const spentAll = usage !== null && usage !== undefined ? Math.max(usage, spentVideos) : spentVideos;
+    const other = spentAll - spentVideos;
     const cards = sum(ready, (v) => v.cards_total);
     const translated = sum(ready, (v) => v.translated);
     const barTotal = sum(ready, (v) => v.bar_total || v.fragments_total);
@@ -1998,10 +2090,9 @@ const Pages = {
 
     // Расходы по видео – дорогие сверху; итог внизу.
     const byCost = [...all].filter((v) => costTotal(v.costs) > 0 || v.state === "ready").sort((a, b) => costTotal(b.costs) - costTotal(a.costs));
-    const est = (v, k) => (v.costs.estimated || []).includes(k);
     const costRows = byCost.map((v) =>
       `<tr><td><a href="#/${v.state === "ready" ? "video" : "process"}/${encodeURIComponent(v.id)}">${escapeHtml(v.title)}</a></td>` +
-      Object.keys(kinds).map((k) => `<td>${money(v.costs[k], est(v, k))}</td>`).join("") +
+      Object.keys(kinds).map((k) => `<td>${money(kindOf(v.costs, k))}</td>`).join("") +
       `<td><b>${money(costTotal(v.costs))}</b></td></tr>`).join("");
 
     // По авторам.
@@ -2015,14 +2106,17 @@ const Pages = {
       return `<tr><td>${escapeHtml(group)}</td><td>${list.length}</td><td>${formatDuration(sum(list, (v) => v.duration))}</td>` +
         `<td>${pct(sum(r, edited), sum(r, (v) => v.bar_total || v.fragments_total))}</td>` +
         `<td>${num(sum(r, (v) => v.in_anki))}</td><td>${num(sum(r, (v) => v.translated))}</td>` +
-        `<td>${money(sum(list, (v) => costTotal(v.costs)), anyEst(list))}</td><td>${formatSize(sum(list, (v) => v.disk_total))}</td></tr>`;
+        `<td>${money(sum(list, (v) => costTotal(v.costs)))}</td><td>${formatSize(sum(list, (v) => v.disk_total))}</td></tr>`;
     }).join("");
+
+    const speedCard = speedSection(data.results, Math.max(0, barTotal - editedAll));
 
     el.innerHTML = `<h1>Статистика</h1>
       <div class="page-grid stats-grid">
         ${card("Расходы", [
-          row("Всего", `<b>${money(spentAll, anyEst(all))}</b>`),
-          ...Object.entries(kinds).map(([k, name]) => row(name, money(kindTotal(k), kindEst(k)))),
+          row("Всего", `<b>${money(spentAll)}</b>`),
+          ...Object.entries(kinds).map(([k, name]) => row(name, money(kindTotal(k)))),
+          ...(other >= 0.005 ? [row("Прочее (не по видео)", money(other))] : []),
         ])}
         ${card("Видео", [
           row("Готово к правке", num(ready.length)),
@@ -2042,16 +2136,19 @@ const Pages = {
           row("Переведено", `${num(translated)} (${pct(translated, cards)})`),
           row("Вернулись на правку", num(sum(ready, (v) => v.flagged))),
         ])}
+        ${speedCard}
         <section class="set-card wide-card"><h2>Расходы по видео</h2>
           <table class="stats grid-table"><tr><th>Видео</th>${Object.values(kinds).map((k) => `<th>${k}</th>`).join("")}<th>Всего</th></tr>
           ${costRows}
-          <tr class="total-row"><td>Итого</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k), kindEst(k))}</td>`).join("")}<td><b>${money(spentAll)}</b></td></tr></table>
+          <tr class="total-row"><td>Итого по видео</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k))}</td>`).join("")}<td><b>${money(spentVideos)}</b></td></tr></table>
         </section>
         <section class="set-card wide-card"><h2>По авторам</h2>
           <table class="stats grid-table"><tr><th>Автор</th><th>Видео</th><th>Длительность</th><th>Отредактировано</th><th>В Anki</th><th>Переведено</th><th>Потрачено</th><th>Место</th></tr>
           ${groupRows}</table>
         </section>
       </div>`;
+    const all_ = el.querySelector("#speed-all");
+    if (all_) all_.addEventListener("click", () => resultsModal(data.results, () => this.stats()));
     viewEnter(el);
   },
 
@@ -2330,9 +2427,23 @@ const LogViewer = {
   },
 };
 
-// Кнопки внизу меню: журнал и остановка сервера.
+// Кнопки внизу меню: журнал, перезапуск и остановка сервера.
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("server-log").addEventListener("click", () => LogViewer.open());
+  // Перезапуск: сервер поднимает свою копию и выходит; вкладка, заметив новый
+  // сервер, перезагружается сама (Heartbeat).
+  document.getElementById("server-restart").addEventListener("click", async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    button.classList.add("spinning");
+    try {
+      await Api.json("/api/restart", { method: "POST" });
+    } catch (_) {}
+    setTimeout(() => {
+      button.disabled = false;
+      button.classList.remove("spinning");
+    }, 15000);
+  });
   document.getElementById("server-stop").addEventListener("click", async () => {
     const answer = await askConfirm({
       title: "Остановить сервер?",

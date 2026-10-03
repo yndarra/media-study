@@ -147,6 +147,21 @@ const Api = {
     return this.json("/api/anki/overview");
   },
 
+  // Результаты таймера правки.
+  timerResults() {
+    return this.json("/api/timer");
+  },
+
+  saveTimerResult(result) {
+    return this.json("/api/timer", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(result),
+    });
+  },
+
+  deleteTimerResult(id) {
+    return this.json(`/api/timer/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+
   // Раздел "Статистика": все видео с расходами, правкой, Anki и местом.
   overallStats() {
     return this.json("/api/stats");

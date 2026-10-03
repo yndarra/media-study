@@ -201,6 +201,29 @@ def read_log(name: str = "server", since: int | None = None):
     return {"text": text, "next": start + len(data)}
 
 
+@app.post("/api/restart")
+def restart():
+    """
+    Перезапустить сервер (кнопка внизу меню): запускается новая копия (без
+    окна, тот же журнал), которая ждёт, пока эта освободит порт, и эта выходит.
+    """
+    import sys as _sys
+
+    pythonw = Path(_sys.executable).with_name("pythonw.exe")
+    exe = str(pythonw if pythonw.exists() else _sys.executable)
+    args = [a for a in _sys.argv[1:]]
+    if "--log-file" not in args:
+        args += ["--log-file", str(DATA_DIR / "server.log")]
+    code = ("import sys, time, runpy; time.sleep(1.5); "
+            f"sys.argv = ['webapp.run'] + {args!r}; runpy.run_module('webapp.run', run_name='__main__')"
+            # метка для open_editor.bat (закрывает прежний сервер по "-m webapp.run" в командной строке)
+            "  # -m webapp.run")
+    subprocess.Popen([exe, "-c", code], cwd=str(REPO_DIR), close_fds=True,
+                     creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS)
+    threading.Timer(0.4, lambda: os._exit(0)).start()
+    return {"ok": True}
+
+
 @app.post("/api/shutdown")
 def shutdown():
     """
@@ -998,7 +1021,76 @@ def overall_stats():
         row["translated"] = translated.get(item["id"], 0) if item["state"] == "ready" else 0
         row["disk_total"] = _disk_total(item["id"])
         videos.append(row)
-    return {"videos": videos}
+    return {"videos": videos, "openrouter_usage": _openrouter_usage()}
+
+
+# Сколько всего потрачено по ключу OpenRouter (его собственный счётчик) – для
+# "Статистики": итог совпадает с OpenRouter, а не только с учтёнными по видео
+# расходами. Спрашивается не чаще раза в 5 минут.
+_usage_cache: dict = {"at": 0.0, "value": None}
+
+
+def _openrouter_usage() -> float | None:
+    if time.time() - _usage_cache["at"] < 300:
+        return _usage_cache["value"]
+    from phase3_export.translator import _post
+
+    try:
+        reply = _post(DATA_DIR, "/key", None, "GET")
+        value = float((reply.get("data") or reply).get("usage") or 0)
+    except Exception:  # нет сети / ключа – покажем только учтённое
+        value = _usage_cache["value"]
+    _usage_cache.update(at=time.time(), value=value)
+    return value
+
+
+# -- результаты таймера правки (кнопка "Сохранить" у таймера, раздел "Статистика") --
+TIMER_FILE = "timer_results.json"
+
+
+def _timer_results() -> list[dict]:
+    return library.read_json(DATA_DIR / TIMER_FILE, [])
+
+
+def _save_timer_results(items: list[dict]) -> None:
+    from phase3_export.agent import save_json
+
+    save_json(DATA_DIR / TIMER_FILE, items)
+
+
+@app.get("/api/timer")
+def timer_results():
+    """Сохранённые результаты таймера (новые – первыми)."""
+    return sorted(_timer_results(), key=lambda r: r.get("saved_at", ""), reverse=True)
+
+
+class TimerResult(BaseModel):
+    ms: int  # время работы таймера
+    frags: int  # отредактировано фрагментов за это время
+    project: str | None = None  # видео, открытое в редакторе
+
+
+@app.post("/api/timer")
+def save_timer_result(body: TimerResult):
+    if body.ms < 1000:
+        raise HTTPException(status_code=400, detail="Таймер ещё не запускали")
+    from datetime import datetime
+
+    item = {"id": uuid.uuid4().hex[:12], "saved_at": datetime.now().isoformat(timespec="seconds"),
+            "ms": body.ms, "frags": body.frags, "project": body.project,
+            "title": library.title_of(DATA_DIR / body.project) if body.project and (DATA_DIR / body.project).is_dir() else ""}
+    _save_timer_results(_timer_results() + [item])
+    return item
+
+
+@app.delete("/api/timer/{result_id}")
+def delete_timer_result(result_id: str):
+    items = _timer_results()
+    left = [r for r in items if r.get("id") != result_id]
+    if len(left) == len(items):
+        raise HTTPException(status_code=404, detail="нет такого результата")
+    _save_timer_results(left)
+    return {"ok": True}
 
 
 @app.get("/api/anki/overview")
