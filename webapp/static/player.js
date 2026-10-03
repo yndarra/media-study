@@ -295,7 +295,11 @@ const Player = {
     this._planStop();
     // Видео меняет скорость, когда новый звук становится слышен.
     setTimeout(() => {
-      if (this.source === source) this.video.playbackRate = speed;
+      if (this.source !== source) return;
+      this.video.playbackRate = speed;
+      // Скорость сменили, пока видео ещё не тронулось (Shift сразу после
+      // перехода к фрагменту), – картинка не должна остаться стоять.
+      if (this.playing && this.video.paused && !this.frozen) this.video.play().catch(() => {});
     }, Math.max(0, (when + AudioEngine.latency() - ctx.currentTime) * 1000));
   },
 
@@ -500,7 +504,9 @@ const Player = {
     // Видео трогается, когда звук становится слышен (часы звука плюс
     // задержка вывода), иначе картинка убегает вперёд звука.
     setTimeout(() => {
-      if (this.playing && this.source === source) this.video.play().catch(() => {});
+      // По номеру запуска, а не по источнику звука: Shift (2×) мог уже
+      // подменить источник – раньше тогда видео так и не трогалось.
+      if (this.playing && token === this.startToken) this.video.play().catch(() => {});
     }, Math.max(0, (when + AudioEngine.latency() - ctx.currentTime) * 1000));
     this._tick();
     this._prepareSpeeds(f);

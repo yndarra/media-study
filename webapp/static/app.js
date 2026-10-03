@@ -680,9 +680,8 @@ const App = {
       $(id).textContent = n.text;
       $(id).classList.toggle("deleted-neighbor", n.deleted);
     }
-    // Кнопка "Склеить в одну фразу" – только у только что объединённого фрагмента.
-    const j = this.junction;
-    $("junction-row").classList.toggle("hidden", !(j && j.id === f.id && j.joinable !== null));
+    // Стык объединённого фрагмента: кнопка "Склеить в одну фразу" и мигание.
+    this.updateJunction(f);
     this.fitTextBox();
   },
 
@@ -836,6 +835,7 @@ const App = {
     TextEditor.render(el);
     TextEditor.setCaret(el, caret);
     this._scheduleTextSave(f);
+    this.updateJunction(f); // правка у стыка – кнопка и мигание по новому тексту
   },
 
   // Составной ввод (IME) браузер не даёт перехватить — после него
@@ -1091,37 +1091,73 @@ const App = {
     const result = await this._call(Api.merge(currentFragment().id, direction));
     if (!result) return;
     State.manifest = result.manifest;
-    const merged = State.manifest.fragments.find((g) => g.id === result.merged_fragment_id);
-    const at = result.junction;
-    // ". Заглавная" на стыке – можно склеить в одну фразу (кнопка под текстом).
-    const joinable = merged && at > 0 && /^\. [A-ZА-ЯЁ]$/.test(merged.text.slice(at - 1, at + 2)) ? true : null;
-    this.junction = merged ? { id: merged.id, at, joinable } : null;
-    $("junction-join").disabled = false;
-    await this.openById(result.merged_fragment_id);
-    if (merged) this.flashJunction(at);
+    await this.openById(result.merged_fragment_id); // стык подсветится сам (renderText -> updateJunction)
   },
 
-  // Стык двух бывших фраз: пара символов вокруг подчёркивается и плавно
-  // гаснет – три раза (CSS Custom Highlight API: ::highlight(junction)).
-  flashJunction(at) {
-    if (!window.CSS || !CSS.highlights || typeof Highlight === "undefined") return;
+  // Стык объединённого фрагмента (f.junction – позиция в исходном тексте).
+  // По токенам редактора (исходные символы идут по порядку, удалённые –
+  // красные, набранные – новые) находится, где стык сейчас и цел ли он:
+  //   - "сильно изменён" – удалён сам пробел/перенос стыка или два и больше
+  //     из соседних исходных символов (тогда не мигает, кнопка серая);
+  //   - "можно склеить" – на стыке сейчас видно ". Заглавная".
+  // Возвращает {at – видимая позиция стыка, intact, joinable} или null.
+  junctionState(f) {
+    if (!f || f.junction === null || f.junction === undefined) return null;
+    const tokens = TextEditor.tokens;
+    const orig = []; // индексы токенов исходных символов
+    tokens.forEach((t, k) => t.kind !== INS && orig.push(k));
+    const j = f.junction;
+    if (j < 0 || j >= orig.length) return null;
+    const isDel = (i) => i >= 0 && i < orig.length && tokens[orig[i]].kind === DEL;
+    const around = [j - 2, j - 1, j + 1, j + 2].filter(isDel).length;
+    const intact = !isDel(j) && around < 2;
+    let at = 0; // видимых символов до стыка
+    for (let k = 0; k < orig[j]; k++) if (tokens[k].kind !== DEL) at++;
+    const text = TextEditor.text();
+    const joinable = intact && /^\. [A-ZА-ЯЁ]$/.test(text.slice(at - 1, at + 2));
+    return { at, intact, joinable };
+  },
+
+  // Кнопка "Склеить в одну фразу" (видна у объединённого фрагмента; серая,
+  // если склеивать нечего) и мигание стыка – пока не вошли в поле текста.
+  updateJunction(f) {
+    const st = this.junctionState(f);
+    $("junction-row").classList.toggle("hidden", !st);
+    $("junction-join").disabled = !(st && st.joinable);
+    this._junction = st && st.intact ? { id: f.id, at: st.at } : null;
+    this._junctionRange = null;
+    if (this._junction && !this._junctionLoop) {
+      this._junctionLoop = true;
+      requestAnimationFrame((t) => this._junctionFrame(t));
+    }
+  },
+
+  // Мигание стыка: символы вокруг (по 4–5 с каждой стороны) подчёркиваются и
+  // плавно гаснут, по кругу; в поле текста – не мигает (CSS Custom Highlight API).
+  _junctionFrame(now) {
     const el = $("cur-text");
-    const range = this._visibleRange(el, Math.max(0, at - 3), at + 4);
-    if (!range) return;
-    CSS.highlights.set("junction", new Highlight(range));
-    const start = performance.now();
-    const PULSE = 700;
-    const step = (now) => {
-      const t = (now - start) / PULSE;
-      if (t >= 3) {
-        el.style.setProperty("--junction", "0");
-        CSS.highlights.delete("junction");
-        return;
-      }
-      el.style.setProperty("--junction", String(Math.sin(Math.PI * (t % 1))));
-      requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
+    const j = this._junction;
+    const f = currentFragment();
+    const supported = window.CSS && CSS.highlights && typeof Highlight !== "undefined";
+    if (!supported || !j || !f || f.id !== j.id || State.view !== "editor") {
+      this._junctionLoop = false;
+      if (supported) CSS.highlights.delete("junction");
+      el.style.setProperty("--junction", "0");
+      return;
+    }
+    requestAnimationFrame((t) => this._junctionFrame(t));
+    if (document.activeElement === el) {
+      el.style.setProperty("--junction", "0");
+      return;
+    }
+    // Разметку поля перерисовывают – диапазон строится заново.
+    const r = this._junctionRange;
+    if (!r || !r.startContainer.isConnected || !r.endContainer.isConnected) {
+      this._junctionRange = this._visibleRange(el, Math.max(0, j.at - 4), j.at + 5);
+      if (!this._junctionRange) return;
+      CSS.highlights.set("junction", new Highlight(this._junctionRange));
+    }
+    el.style.setProperty("--junction", String(Math.pow(Math.sin(Math.PI * ((now / 900) % 1)), 2)));
   },
 
   // DOM-диапазон видимых символов [from, to) текста фразы (удалённые красные
@@ -1162,8 +1198,8 @@ const App = {
   // "I" и имён говорящих). Обычная правка текста – видна и отменяется Ctrl+Z.
   joinAtJunction() {
     const f = currentFragment();
-    const j = this.junction;
-    if (!f || !j || j.id !== f.id || isLocked(f)) return;
+    const j = this.junctionState(f);
+    if (!f || !j || !j.joinable || isLocked(f)) return;
     const text = TextEditor.text();
     if (!/^\. [A-ZА-ЯЁ]$/.test(text.slice(j.at - 1, j.at + 2))) return;
     const word = (text.slice(j.at + 1).match(/^[\w'’]+/) || [""])[0];
@@ -1189,7 +1225,7 @@ const App = {
     f.text_marks = TextEditor.marks();
     TextEditor.render($("cur-text"));
     this._scheduleTextSave(f);
-    $("junction-join").disabled = true; // склеено – кнопка серая
+    this.updateJunction(f); // склеено – кнопка серая, стык больше не мигает
   },
 
   // Имена говорящих видео (с заглавной – их не делаем строчными).

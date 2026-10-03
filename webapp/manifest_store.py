@@ -581,7 +581,7 @@ class ManifestStore:
 
         merged_id = self._new_fragment_ids(manifest, 1)[0]
         text, junction, _, _ = join_texts(first.text, second.text)
-        original_text, _, offset, dropped = join_texts(first.original_text, second.original_text)
+        original_text, original_junction, offset, dropped = join_texts(first.original_text, second.original_text)
         # Отметки "на слух" (по исходному тексту) второго сдвигаются на его место
         # в склеенном; убранное имя говорящего отметку теряет.
         heard = [*first.heard_ranges, *shift_ranges(clip_ranges(second.heard_ranges, dropped), offset - dropped)]
@@ -602,6 +602,7 @@ class ManifestStore:
             review_note=" / ".join(n for n in (first.review_note, second.review_note) if n),
             source_segment_ids=[*first.source_segment_ids, *second.source_segment_ids],
             merged_from=[first.id, second.id],
+            junction=original_junction if first.original_text and second.original_text else None,
             context_custom=first.context_custom or second.context_custom,
             heard_ranges=heard,
         )
