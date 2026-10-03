@@ -339,6 +339,8 @@ def project_stats(project_id: str):
         summary["translated"] = translator.in_anki_text_count(p.dir) - summary["to_translate"]
     except (anki.AnkiUnavailable, RuntimeError):
         summary["to_translate"] = None  # Anki закрыт — неизвестно
+        # Переведено – последнее известное (иначе при закрытом Anki было бы 0).
+        summary["translated"] = _anki_flags_cache.get("translated", {}).get(project_id, 0)
     summary["id"] = project_id
     _card_states(summary, _anki_flag_counts(), {a["id"] for a in _translation_activity() if a.get("id")})
     from . import storage
@@ -1092,10 +1094,32 @@ def queue_stage3(project_id: str, body: QueueRequest):
 # каждые 5 с); если Anki закрыт — последнее известное.
 ANKI_FLAGS_TTL = 60
 _anki_flags_cache: dict = {"at": 0.0, "counts": {}}
+# (при запуске – последние известные числа с диска, см. _load_anki_cache)
 # Флаги карточек: 1 красный — править и обрезку/текст, и перевод; 2 оранжевый
 # ("жёлтый") — обрезку/текст; 3 зелёный — перевод.
 INTERVAL_FLAGS = (1, 2)
 TRANSLATION_FLAGS = (1, 3)
+
+
+# Последние известные числа из Anki (флаги, переведено) – и на диске: после
+# перезапуска сервера при закрытом Anki полосы "Переведено" не обнуляются.
+ANKI_CACHE_FILE = "anki_cache.json"
+
+
+def _load_anki_cache() -> None:
+    saved = library.read_json(DATA_DIR / ANKI_CACHE_FILE, {})
+    if saved:
+        _anki_flags_cache.update(counts=saved.get("counts", {}), translated=saved.get("translated", {}))
+
+
+def _save_anki_cache() -> None:
+    from phase3_export.agent import save_json
+
+    try:
+        save_json(DATA_DIR / ANKI_CACHE_FILE, {"counts": _anki_flags_cache.get("counts", {}),
+                                               "translated": _anki_flags_cache.get("translated", {}), "saved_at": time.time()})
+    except OSError:
+        pass
 
 
 def _anki_flag_counts() -> dict:
@@ -1125,6 +1149,7 @@ def _anki_flag_counts() -> dict:
         _anki_flags_cache["at"] = _time.time()
         return _anki_flags_cache["counts"]
     _anki_flags_cache.update(at=_time.time(), counts=counts, translated=translated)
+    _save_anki_cache()
     return counts
 
 
@@ -1170,17 +1195,22 @@ _usage_cache: dict = {"at": 0.0, "value": None}
 
 
 def _openrouter_usage() -> float | None:
-    if time.time() - _usage_cache["at"] < 300:
-        return _usage_cache["value"]
-    from phase3_export.translator import _post
+    """Последнее известное значение сразу; устарело – обновляется в фоне (страница не ждёт сеть)."""
+    if time.time() - _usage_cache["at"] >= 300 and not _usage_cache.get("busy"):
+        _usage_cache["busy"] = True
 
-    try:
-        reply = _post(DATA_DIR, "/key", None, "GET")
-        value = float((reply.get("data") or reply).get("usage") or 0)
-    except Exception:  # нет сети / ключа – покажем только учтённое
-        value = _usage_cache["value"]
-    _usage_cache.update(at=time.time(), value=value)
-    return value
+        def refresh():
+            from phase3_export.translator import _post
+
+            try:
+                reply = _post(DATA_DIR, "/key", None, "GET")
+                _usage_cache["value"] = float((reply.get("data") or reply).get("usage") or 0)
+            except Exception:  # нет сети / ключа – покажем только учтённое
+                pass
+            _usage_cache.update(at=time.time(), busy=False)
+
+        threading.Thread(target=refresh, daemon=True).start()
+    return _usage_cache["value"]
 
 
 # -- результаты таймера правки (кнопка "Сохранить" у таймера, раздел "Статистика") --
@@ -1700,6 +1730,9 @@ def favicon():
     return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
 
 
+_load_anki_cache()  # последние известные числа из Anki
+# Сводки всех медиа – в кэш сразу при запуске, в фоне (первый заход в раздел не ждёт).
+threading.Thread(target=lambda: library.list_projects(DATA_DIR), daemon=True).start()
 app.mount("/media", StaticFiles(directory=str(DATA_DIR)), name="media")
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 

@@ -268,7 +268,37 @@ def phase1_status(project_dir: Path) -> dict:
     return {"label": "Скачиваю видео", "percent": None}
 
 
+# Сводка готового медиа читает большой manifest.json – это дорого (раньше
+# списки и "Сейчас идёт" каждые 2–3 с перечитывали все манифесты: по 0,7–1,6 с
+# на запрос). Готовую сводку держим в памяти, пока не изменились файлы, от
+# которых она зависит.
+_SUMMARY_FILES = ("manifest.json", "project.json", "video_info.json", "export/index.json", "export/translations.json")
+_summary_cache: dict = {}
+
+
 def summary(project_dir: Path) -> dict:
+    import copy
+
+    project_dir = Path(project_dir)
+    if not (project_dir / "manifest.json").exists():
+        return _summary(project_dir)  # ещё обрабатывается – дёшево и меняется со временем
+    sig = []
+    for name in _SUMMARY_FILES:
+        try:
+            st = (project_dir / name).stat()
+            sig.append((st.st_mtime_ns, st.st_size))
+        except OSError:
+            sig.append(None)
+    key = str(project_dir)
+    cached = _summary_cache.get(key)
+    if cached and cached[0] == sig:
+        return copy.deepcopy(cached[1])
+    result = _summary(project_dir)
+    _summary_cache[key] = (sig, result)
+    return copy.deepcopy(result)
+
+
+def _summary(project_dir: Path) -> dict:
     project_dir = Path(project_dir)
     info = video_info(project_dir)
     base = {
