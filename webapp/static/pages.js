@@ -1344,6 +1344,7 @@ const Pages = {
       }
       this.lastActions = now;
       flashCard(box);
+      this.prefetchStats(items.filter((v) => v.state === "ready").map((v) => v.id));
       Zebra.start();
     };
     // Кнопки на карточке ("Передать в Anki", "Перевести"): действие сразу, окно
@@ -1498,6 +1499,26 @@ const Pages = {
   // флагом обрезки/текста (оранжевый, красный); зелёные (и красные) ждут
   // перевода – их готовит окно "Перевод". Итог – слева от кнопки.
   pressedActions: new Map(), // видео, где только что нажали кнопку на карточке: {id: время}
+  statsCache: new Map(), // данные окна медиа по коду (для мгновенного открытия)
+
+  // Пока виден список – данные окон его медиа подгружаются заранее, по одному,
+  // каждое не чаще раза в минуту (окно тогда открывается без ожидания).
+  async prefetchStats(ids) {
+    if (this._prefetching) return;
+    this._prefetching = true;
+    try {
+      for (const id of ids) {
+        const c = this.statsCache.get(id);
+        if (c && Date.now() - c._at < 60000) continue;
+        if (State.view !== "videos" || document.hidden) break;
+        try {
+          this.statsCache.set(id, { ...(await Api.projectStats(id)), _at: Date.now() });
+        } catch (_) {}
+      }
+    } finally {
+      this._prefetching = false;
+    }
+  },
 
   async checkFlags() {
     const status = document.getElementById("flags-status");
@@ -1543,19 +1564,44 @@ const Pages = {
 
   // Подробности видео – окно поверх списка (#/video/<код>): статистика, место
   // на диске, правка названия и автора (колода Anki переименуется вслед).
-  async videoModal(id) {
+  // Окно открывается сразу: если данные этого медиа уже есть (подгружены
+  // заранее, пока виден список, или с прошлого открытия) – с ними, а свежие
+  // запрашиваются параллельно и, если что-то поменялось, окно тут же
+  // перерисовывается на месте (reuse – то же окно, без анимации появления).
+  // Не перерисовывается, пока правят название/автора.
+  async videoModal(id, reuse = null) {
     let watcher = null;
     let save = async () => {};
-    const body = Modal.show('<p class="muted">Загрузка…</p>', () => {
+    const guard = { isDirty: () => !!watcher && watcher.isDirty(), save: () => save() };
+    const body = reuse ? reuse.body : Modal.show('<p class="muted">Загрузка…</p>', () => {
       if (location.hash.startsWith("#/video/")) location.hash = "#/videos";
       else if (location.hash.startsWith("#/audio/")) location.hash = "#/audio";
-    }, { isDirty: () => !!watcher && watcher.isDirty(), save: () => save() });
-    let data;
-    try {
-      data = await Api.projectStats(id);
-    } catch (err) {
-      body.innerHTML = `<p class="muted">Видео не найдено или ещё обрабатывается.</p>`;
-      return;
+    }, guard);
+    if (reuse) Modal.guard = guard;
+    // Поколение содержимого окна: старые циклы обновления после перерисовки затихают.
+    const gen = (body.dataset.gen = String(Number(body.dataset.gen || 0) + 1));
+    const cached = reuse ? reuse.data : Pages.statsCache.get(id);
+    const fresh = reuse ? null : Api.projectStats(id).then((d) => {
+      Pages.statsCache.set(id, { ...d, _at: Date.now() });
+      return d;
+    });
+    let data = cached;
+    if (!data) {
+      try {
+        data = await fresh;
+      } catch (err) {
+        body.innerHTML = `<p class="muted">Видео не найдено или ещё обрабатывается.</p>`;
+        return;
+      }
+    } else if (fresh) {
+      fresh.then((d) => {
+        if (!body.isConnected || body.dataset.gen !== gen) return;
+        const strip = (x) => JSON.stringify({ ...x, _at: 0 });
+        if (strip(d) === strip(cached)) return;
+        const head = body.querySelector(".modal-head");
+        if ((watcher && watcher.isDirty()) || (head && head.contains(document.activeElement))) return;
+        this.videoModal(id, { body, data: d });
+      }).catch(() => {});
     }
     const v = data.summary;
     const s = data.stats;
@@ -1728,9 +1774,10 @@ const Pages = {
     render();
 
     const refresh = async () => {
-      if (!body.isConnected) return;
+      if (!body.isConnected || body.dataset.gen !== gen) return;
       try {
         const [stats, state] = await Promise.all([Api.projectStats(id), Api.agentState()]);
+        Pages.statsCache.set(id, { ...stats, _at: Date.now() });
         const s = stats.summary;
         const st = state.status || {};
         sending = !!s.sending;
