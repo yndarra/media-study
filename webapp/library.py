@@ -200,6 +200,13 @@ DEFAULT_APP_SETTINGS = {
     "default_skip_deleted": True,
     # Связанные границы (граница двигает и соседнюю): видео – выкл, аудио – вкл.
     "default_link_video": False,
+    # Распознавание речи: "whisper" (локально) или "elevenlabs" (Scribe по API,
+    # см. phase1_ingest/transcribe_elevenlabs.py); ключ – data/elevenlabs_key.txt.
+    "asr_engine": "whisper",
+    "elevenlabs_model": "scribe_v2",
+    "elevenlabs_language": "en",  # пусто – язык определяется сам
+    "elevenlabs_keyterms": True,  # подсказывать имена/термины из словаря (+20% к цене)
+    "elevenlabs_proxy": "",  # http://… или socks5://… – если ElevenLabs недоступен напрямую
     "default_link_audio": True,
     # Агент перевода (карточки с флагом "перевод"): модель OpenRouter и файл с ключом.
     "openrouter_model": "google/gemini-3.8-flash",

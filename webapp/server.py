@@ -706,7 +706,10 @@ def openrouter_models():
 @app.get("/api/settings")
 def get_settings():
     # Ключ OpenRouter отдаётся только локальной странице настроек (поле со "скрыть/показать").
-    return {**library.app_settings(DATA_DIR), "openrouter_key": _openrouter_key(), "deck_sync": _deck_sync_state()}
+    from phase1_ingest.transcribe_elevenlabs import api_key as elevenlabs_key
+
+    return {**library.app_settings(DATA_DIR), "openrouter_key": _openrouter_key(), "elevenlabs_key": elevenlabs_key(DATA_DIR),
+            "deck_sync": _deck_sync_state()}
 
 
 @app.patch("/api/settings")
@@ -742,6 +745,12 @@ def update_settings(body: dict):
             if path not in paths:
                 paths.append(path)
         body["storages"] = paths
+    # Ключ ElevenLabs – в data/elevenlabs_key.txt (в настройки не пишется).
+    from phase1_ingest.transcribe_elevenlabs import KEY_FILE as EL_KEY_FILE
+
+    el_key = body.pop("elevenlabs_key", None)
+    if el_key is not None:
+        (DATA_DIR / EL_KEY_FILE).write_text(el_key.strip(), encoding="utf-8")
     key = (body.pop("openrouter_key", None) or "").strip()
     if key and key != _openrouter_key():
         path = DATA_DIR / OPENROUTER_KEY_FILE
@@ -756,7 +765,41 @@ def update_settings(body: dict):
         for item in library.list_projects(DATA_DIR):
             if item["state"] == "ready":
                 project(item["id"]).store.set_default_padding(saved["context_padding_seconds"])
-    return {**saved, "openrouter_key": _openrouter_key(), "deck_sync": _deck_sync_state()}
+    from phase1_ingest.transcribe_elevenlabs import api_key as elevenlabs_key
+
+    return {**saved, "openrouter_key": _openrouter_key(), "elevenlabs_key": elevenlabs_key(DATA_DIR), "deck_sync": _deck_sync_state()}
+
+
+class ElevenLabsCheck(BaseModel):
+    key: str | None = None  # не задан – сохранённый
+    proxy: str | None = None
+
+
+@app.post("/api/elevenlabs/check")
+def elevenlabs_check(body: ElevenLabsCheck):
+    """Кнопка "Проверить" в настройках: ключ и доступ к ElevenLabs (с введёнными, ещё не сохранёнными значениями)."""
+    import requests
+
+    from phase1_ingest import transcribe_elevenlabs as el
+
+    key = (body.key or "").strip() or el.api_key(DATA_DIR)
+    if not key:
+        return {"ok": False, "message": "Ключ не задан"}
+    proxy = (body.proxy if body.proxy is not None else library.app_settings(DATA_DIR).get("elevenlabs_proxy") or "").strip()
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    try:
+        r = requests.get(el.CHECK_URL, headers={"xi-api-key": key}, proxies=proxies, timeout=20, allow_redirects=False)
+    except requests.RequestException as error:
+        return {"ok": False, "message": f"Нет связи: {error}"[:300]}
+    if el._blocked(r):
+        return {"ok": False, "message": "ElevenLabs недоступен из вашей страны – включите VPN или укажите прокси"}
+    if r.status_code == 401:
+        return {"ok": False, "message": "Ключ не подходит"}
+    if r.status_code != 200:
+        return {"ok": False, "message": f"Ответ {r.status_code}: {r.text[:200]}"}
+    sub = r.json().get("subscription") or {}
+    left = (sub.get("character_limit") or 0) - (sub.get("character_count") or 0)
+    return {"ok": True, "message": f"Работает: тариф {sub.get('tier') or '?'}, осталось кредитов {left:,}".replace(",", " ")}
 
 
 # Счётчики разделов меню (Медиа, Обработка) по режимам – раз в 10 с, не чаще.

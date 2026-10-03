@@ -139,6 +139,13 @@ const Api = {
     return this.json("/api/openrouter/models");
   },
 
+  // Проверка ключа и доступа ElevenLabs (настройки).
+  elevenlabsCheck(key, proxy) {
+    return this.json("/api/elevenlabs/check", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, proxy }),
+    });
+  },
+
   // Сколько медиа в разделах меню (по режимам видео/аудио).
   counts() {
     return this.json("/api/counts");

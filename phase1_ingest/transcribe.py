@@ -70,7 +70,19 @@ def transcribe_and_save(video_path: Path, output_path: Path, model_size: str = "
     if output_path.exists():
         print("Распознавание уже сделано — беру готовый результат.", flush=True)
         return json.loads(output_path.read_text(encoding="utf-8"))
-    result = transcribe(video_path, model_size=model_size)
+    result = None
+    # Движок – из настроек: "whisper" (локально, по умолчанию) или
+    # "elevenlabs" (Scribe по API, точнее). ElevenLabs не сработал (нет
+    # ключа/сети/доступа) – не падаем, распознаём локально.
+    from .transcribe_elevenlabs import ElevenLabsError, settings, transcribe as transcribe_el
+
+    if settings(Path(video_path).parent.parent).get("asr_engine") == "elevenlabs":
+        try:
+            result = transcribe_el(Path(video_path), log=lambda m: print(m, flush=True))
+        except (ElevenLabsError, OSError) as error:
+            print(f"ElevenLabs не смог: {error} — распознаю локально (whisper).", flush=True)
+    if result is None:
+        result = transcribe(video_path, model_size=model_size)
     tmp_path = output_path.with_suffix(".json.tmp")
     tmp_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp_path.replace(output_path)

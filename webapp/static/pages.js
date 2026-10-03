@@ -2355,6 +2355,23 @@ const Pages = {
           </div>
         </section>
         <section class="set-card wide-card">
+          <h2>Распознавание речи</h2>
+          <div class="field-row">
+            ${field("set-asr", "Движок", '<div class="picker-host" data-for="set-asr"></div>',
+              "Whisper – локально и бесплатно; ElevenLabs Scribe – по API, заметно точнее (платно, ключ ниже)")}
+            ${field("set-el-key", "Ключ ElevenLabs", `<div class="secret-row"><input id="set-el-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.elevenlabs_key || "")}" placeholder="sk_…"><button id="set-el-key-eye" class="icon-btn" title="Показать / скрыть"><svg viewBox="0 0 20 20"><path d="M1.8 10s3-5.5 8.2-5.5S18.2 10 18.2 10s-3 5.5-8.2 5.5S1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6"/></svg></button></div>`,
+              "elevenlabs.io → профиль → API Keys; нужен доступ «Speech to Text»")}
+          </div>
+          <div class="field-row">
+            ${field("set-el-model", "Модель", `<input id="set-el-model" class="wide" value="${escapeHtml(s.elevenlabs_model || "scribe_v2")}">`, "scribe_v2 – самая точная")}
+            ${field("set-el-lang", "Язык", `<input id="set-el-lang" class="wide" value="${escapeHtml(s.elevenlabs_language || "")}" placeholder="авто">`, "Код языка (en); пусто – определяется сам")}
+          </div>
+          ${field("set-el-proxy", "Прокси для ElevenLabs", `<input id="set-el-proxy" class="wide" value="${escapeHtml(s.elevenlabs_proxy || "")}" placeholder="socks5://127.0.0.1:1080 или http://127.0.0.1:10809">`,
+            "ElevenLabs недоступен из некоторых стран – укажите прокси вашего VPN (или включите VPN на весь компьютер и оставьте пустым)")}
+          <div class="field"><label class="check"><input id="set-el-terms" type="checkbox" ${s.elevenlabs_keyterms !== false ? "checked" : ""}> Подсказывать имена и термины из словаря <span class="muted small">(+20% к цене распознавания)</span></label></div>
+          <div class="el-check-row"><button id="set-el-check" class="step-btn">Проверить подключение</button><span id="set-el-result" class="muted small"></span></div>
+        </section>
+        <section class="set-card wide-card">
           <h2>Агенты (OpenRouter)</h2>
           ${field("set-key", "Ключ", `<div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть"><svg viewBox="0 0 20 20"><path d="M1.8 10s3-5.5 8.2-5.5S18.2 10 18.2 10s-3 5.5-8.2 5.5S1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6"/></svg></button></div>`,
             "Для перевода и поиска источников")}
@@ -2414,6 +2431,31 @@ const Pages = {
       if (path && !listed().some((p) => p.toLowerCase() === path.toLowerCase())) setStores([...listed(), path]);
       newInput.value = "";
       addButton.disabled = true;
+    });
+    Picker.create(host("set-asr"), {
+      id: "set-asr",
+      value: s.asr_engine || "whisper",
+      options: [{ value: "whisper", label: "Whisper (локально)" }, { value: "elevenlabs", label: "ElevenLabs Scribe (API)" }],
+    });
+    // Ключ ElevenLabs: показать/скрыть и проверка (с введёнными, ещё не сохранёнными значениями).
+    el.querySelector("#set-el-key-eye").addEventListener("click", () => {
+      const input = el.querySelector("#set-el-key");
+      input.type = input.type === "password" ? "text" : "password";
+    });
+    el.querySelector("#set-el-check").addEventListener("click", async (e) => {
+      const out = el.querySelector("#set-el-result");
+      const button = e.currentTarget; // после await currentTarget уже пуст
+      button.disabled = true;
+      out.textContent = "Проверяю…";
+      out.className = "muted small";
+      try {
+        const r = await Api.elevenlabsCheck(el.querySelector("#set-el-key").value.trim(), el.querySelector("#set-el-proxy").value.trim());
+        out.textContent = r.message;
+        out.className = `small ${r.ok ? "ok-text" : "flagged-text"}`;
+      } catch (err) {
+        out.textContent = err.message;
+      }
+      button.disabled = false;
     });
     Picker.create(host("set-quality"), {
       id: "set-quality",
@@ -2479,6 +2521,12 @@ const Pages = {
         default_stop_at_end: document.getElementById("set-def-stop").checked,
         default_skip_deleted: document.getElementById("set-def-skip").checked,
         default_link_video: document.getElementById("set-def-link-video").checked,
+        asr_engine: document.getElementById("set-asr").value,
+        elevenlabs_key: document.getElementById("set-el-key").value.trim(),
+        elevenlabs_model: document.getElementById("set-el-model").value.trim() || "scribe_v2",
+        elevenlabs_language: document.getElementById("set-el-lang").value.trim(),
+        elevenlabs_proxy: document.getElementById("set-el-proxy").value.trim(),
+        elevenlabs_keyterms: document.getElementById("set-el-terms").checked,
         default_link_audio: document.getElementById("set-def-link-audio").checked,
         new_video_storage: document.getElementById("set-new-storage").value,
         });
