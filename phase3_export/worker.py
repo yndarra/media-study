@@ -14,11 +14,13 @@
      карточка с меткой без_текста), которого ещё нет в export/index.json,
      превращается в клип (phase3_export.export_clips.render_clip) и запись
      в index.json;
-  2. для каждой записи без карточки создаётся карточка в Anki — или
-     переиспользуется карточка фрагмента, из которого он получился
-     (вернувшийся из Anki фрагмент объединили/разделили: его карточка
-     остаётся на своём месте с новым клипом). Карточки фрагментов, которые
-     удалили, удаляются из Anki;
+  2. для каждой записи без карточки создаётся карточка в Anki. Правка
+     вернувшегося фрагмента (границы, текст, говорящие) обновляет ЕГО ЖЕ
+     карточку (поля заметки, история повторений сохраняется). Если же
+     вернувшийся фрагмент объединили или разделили, у результата – новые
+     карточки (старая удаляется, когда все её преемники переданы), и они
+     встают на место старой по порядку фрагментов (resequence, п. 3).
+     Карточки фрагментов, которые удалили, удаляются из Anki;
   3. после изменений новые карточки всех видео выстраиваются по порядку
      фрагментов (anki.resequence): вставка в середину сдвигает последующие.
   Если Anki закрыт, клипы продолжают резаться, а карточки создаются, как
@@ -214,25 +216,6 @@ class Worker:
             self.anki_down_until = time.time() + ANKI_RETRY_SECONDS
             return False
 
-    def _adopt_note(self, manifest: Manifest, index: list[dict], entry: dict):
-        """
-        Карточка для нового фрагмента от удалённого предшественника: первый
-        по порядку преемник объединения/разделения забирает карточку
-        предшественника (её место в колоде и история повторений сохраняются).
-        """
-        by_id = {f.id: f for f in manifest.fragments}
-        for old in index:
-            fragment = by_id.get(old["fragment_id"])
-            if old is entry or not old.get("anki_note_id") or fragment is None or fragment.status == STATUS_ACTIVE:
-                continue
-            successors = active_successors(manifest, old["fragment_id"])
-            if successors and successors[0].id == entry["fragment_id"]:
-                note = (old["anki_note_id"], old.get("anki_deck"))
-                old["anki_note_id"] = None  # карточка передана преемнику
-                old["orphan"] = True
-                return note
-        return None
-
     def _drop_orphans(self, project: Path, manifest: Manifest, index: list[dict], index_path: Path) -> bool:
         """Записи удалённых фрагментов: карточку (если осталась) — из Anki, запись и клип — прочь."""
         by_id = {f.id: f for f in manifest.fragments}
@@ -370,12 +353,9 @@ class Worker:
             write_json(index_path, index)
             first_line = fragment.text.splitlines()[0][:50] if fragment.text.strip() else "(без текста)"
             print(f"{project.name}: {name}{ext} ({frames} кадров, {clip_path.stat().st_size / 2**20:.1f} МБ) {first_line}", flush=True)
-            if not redo:
-                # Получился из вернувшегося фрагмента (объединение/разделение) —
-                # берёт его карточку, она остаётся на своём месте.
-                adopted = self._adopt_note(manifest, index, entry)
-                if adopted:
-                    entry["anki_note_id"], entry["anki_deck"] = adopted
+            # Получился из вернувшегося фрагмента объединением/разделением –
+            # карточка новая (старую не переиспользуем); встанет на место
+            # старой по порядку фрагментов (reorder -> anki.resequence).
             if entry.get("anki_note_id"):
                 entry["anki_update_pending"] = True
                 self._update_note(project, entry)

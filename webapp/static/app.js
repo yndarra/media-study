@@ -1722,6 +1722,21 @@ document.addEventListener("keyup", (e) => {
 }, true);
 window.addEventListener("blur", () => State.boost && Player.setBoost(false));
 
+// Идёт перекраска карточек Anki (State.ankiLocked, см. Activity в pages.js):
+// в редакторе работают только просмотр и переходы – воспроизведение,
+// повтор, соседние фрагменты; клавиши правки не срабатывают (иначе правка
+// применилась бы на экране, а сервер её отклонил).
+const VIEW_ONLY_KEYS = new Set(["Space", "KeyW", "KeyA", "KeyD", "ShiftLeft", "ShiftRight", "Escape", "ControlLeft", "ControlRight", "AltLeft", "AltRight"]);
+document.addEventListener("keydown", (e) => {
+  if (!State.ankiLocked || State.view !== "editor" || !State.manifest) return;
+  const typing = e.target.isContentEditable || ["TEXTAREA", "INPUT", "SELECT"].includes(e.target.tagName);
+  if (!typing && VIEW_ONLY_KEYS.has(e.code) && !e.ctrlKey) return;
+  if (e.code === "Escape") return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (!e.repeat) App.flash("Идёт перекраска карточек Anki – правка недоступна, подождите");
+}, true);
+
 // Буфер имён и Alt+R – раньше остальных обработчиков (работают и в поле текста).
 document.addEventListener("keydown", (e) => {
   if (State.view !== "editor" || !State.manifest) return;

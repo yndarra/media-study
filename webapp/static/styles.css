@@ -1985,3 +1985,12 @@ table.stats td, table.stats th { padding-top: 5px; padding-bottom: 7px; }
 .stats-grid table.grid-table.fit-table, table.stats.fit-table { table-layout: fixed; }
 .stats-grid table.grid-table.fit-table th:first-child, .stats-grid table.grid-table.fit-table td:first-child,
 table.stats.fit-table th:first-child, table.stats.fit-table td:first-child { width: auto; }
+
+/* Идёт перекраска карточек Anki: кнопки передачи и перевода, правка в
+   редакторе – серые и не нажимаются (подсказка – в "Сейчас идёт"). */
+body.anki-locked #stage3-btn, body.anki-locked .card-action, body.anki-locked #info-anki,
+body.anki-locked #info-translate, body.anki-locked #set-recolor, body.anki-locked #edit-row,
+body.anki-locked #cur-text, body.anki-locked #timeline, body.anki-locked #speakers-btn, body.anki-locked #unvoiced-btn,
+body.anki-locked #reset-btn, body.anki-locked #undo-btn, body.anki-locked #redo-btn, body.anki-locked #merge-prev,
+body.anki-locked #merge-next, body.anki-locked #split-btn, body.anki-locked #delete-soft, body.anki-locked #delete-hard {
+  pointer-events: none; opacity: 0.45; }

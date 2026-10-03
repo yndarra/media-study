@@ -3012,6 +3012,11 @@ const Activity = {
         link.title = lock.locked ? lock.reason : "";
       }).catch(() => {});
     }
+    // Перекраска карточек Anki: правка и всё, что пишет в Anki, недоступны
+    // (сервер такие запросы тоже отклоняет).
+    const locked = items.some((a) => a.lock);
+    document.body.classList.toggle("anki-locked", locked);
+    State.ankiLocked = locked;
     // Нет фоновых процессов — блок фоновых процессов (с разделителем) не показывается.
     box.closest(".activity").classList.toggle("hidden", !items.length);
     if (!items.length) {

@@ -64,6 +64,25 @@ async def no_cache_for_ui(request, call_next):
     return response
 
 
+# Пока идёт перекраска карточек Anki (кнопка в настройках) – правка видео и
+# всё, что пишет в Anki (передача, перевод, возврат на правку), запрещены:
+# иначе перекраска и эти действия меняли бы одни и те же заметки вперемешку.
+# Перенос на другой диск Anki не трогает – его можно.
+_recolor: dict = {}
+_ANKI_LOCK_PATHS = ("/api/agent/run", "/api/agent/apply", "/api/anki/return", "/api/anki/check")
+
+
+@app.middleware("http")
+async def lock_while_recolor(request, call_next):
+    path = request.url.path
+    if (request.method in ("POST", "PATCH", "PUT", "DELETE") and _recolor.get("running")
+            and ((path.startswith("/api/p/") and not path.endswith(("/move", "/move/cancel"))) or path in _ANKI_LOCK_PATHS)):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"detail": "Идёт перекраска карточек Anki – правка и передача в Anki недоступны, подождите"}, status_code=423)
+    return await call_next(request)
+
+
 # -- видео (проекты) ---------------------------------------------------------------
 
 
@@ -817,7 +836,7 @@ def update_settings(body: dict):
 
 
 # Перекраска готовых карточек (кнопка в настройках) – в фоне, ход в "Сейчас идёт".
-_recolor: dict = {"running": False, "done": 0, "total": 0, "changed": 0, "error": ""}
+_recolor.update({"running": False, "done": 0, "total": 0, "changed": 0, "error": ""})
 
 
 @app.post("/api/anki/recolor")
@@ -826,6 +845,10 @@ def anki_recolor():
 
     if _recolor["running"]:
         raise HTTPException(status_code=409, detail="Перекраска уже идёт")
+    # Идёт передача в Anki или перевод – они сами пишут в те же карточки.
+    busy = [a for a in activity() if a.get("kind") in ("anki", "translate")]
+    if busy:
+        raise HTTPException(status_code=409, detail=f"Сейчас идёт {busy[0]['label'].lower()} – перекрасить можно после")
 
     def run():
         _recolor.update(running=True, done=0, total=0, changed=0, error="")
@@ -941,7 +964,7 @@ def activity():
     items += _translation_activity()
     if _recolor["running"]:
         total = _recolor["total"] or 0
-        items.append({"kind": "anki", "id": None, "title": "Карточки Anki", "label": "Перекраска",
+        items.append({"kind": "anki", "id": None, "title": "Карточки Anki", "label": "Перекраска", "lock": True,
                       "detail": f"{_recolor['done']}/{total}" if total else "",
                       "percent": round(100 * _recolor["done"] / total, 1) if total else None, "eta_seconds": None})
     from . import storage
