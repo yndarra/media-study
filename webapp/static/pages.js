@@ -2177,6 +2177,11 @@ const Pages = {
           ${field("set-padding", "Запас до и после отрезка",
             `<div class="with-unit"><input id="set-padding" type="number" min="0" step="0.5" value="${s.context_padding_seconds}"><span>сек</span></div>`,
             "По умолчанию для всех видео; уже отредактированные фрагменты не меняются")}
+          <div class="field"><div class="field-label">Режимы при открытии</div>
+            <label class="check"><input id="set-def-auto" type="checkbox" ${s.default_auto_play !== false ? "checked" : ""}> Автозапуск</label>
+            <label class="check"><input id="set-def-stop" type="checkbox" ${s.default_stop_at_end !== false ? "checked" : ""}> Остановка на конце отрезка</label>
+            <label class="check"><input id="set-def-skip" type="checkbox" ${s.default_skip_deleted !== false ? "checked" : ""}> Соседние фразы без удалённых</label>
+          </div>
         </section>
         <section class="set-card">
           <h2>Добавление видео</h2>
@@ -2319,6 +2324,9 @@ const Pages = {
         reserve_cpu_cores: Math.max(0, Number(document.getElementById("set-reserve").value) || 0),
         low_priority: document.getElementById("set-priority").checked,
         storages: JSON.parse(document.getElementById("set-storages").value || "[]"),
+        default_auto_play: document.getElementById("set-def-auto").checked,
+        default_stop_at_end: document.getElementById("set-def-stop").checked,
+        default_skip_deleted: document.getElementById("set-def-skip").checked,
         new_video_storage: document.getElementById("set-new-storage").value,
         });
       } catch (err) {
@@ -2332,6 +2340,7 @@ const Pages = {
       }
       note.classList.remove("error");
       watcher.snapshot();
+      applyEditorDefaults(saved); // режимы редактора – сразу
       watchDeckSync(saved.deck_sync);
     };
     // Ошибка (например, модели нет на OpenRouter) уже показана слева от кнопок.

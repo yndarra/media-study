@@ -189,6 +189,11 @@ DEFAULT_APP_SETTINGS = {
     # и куда класть новые видео ("" – в основное, data/).
     "storages": [],
     "new_video_storage": "",
+    # Режимы редактора при открытии (кнопки в редакторе меняют их до перезагрузки):
+    # автозапуск, остановка на конце отрезка, соседние фразы без удалённых.
+    "default_auto_play": True,
+    "default_stop_at_end": True,
+    "default_skip_deleted": True,
     # Агент перевода (карточки с флагом "перевод"): модель OpenRouter и файл с ключом.
     "openrouter_model": "google/gemini-3.8-flash",
     # Модель агента поиска источников (с веб-поиском OpenRouter).

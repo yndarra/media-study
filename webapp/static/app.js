@@ -17,14 +17,26 @@ const State = {
   translatedIds: new Set(), // фрагменты открытого видео, переведённые в Anki (розовый фон в списке)
   // Автозапуск: переход к фрагменту, клик/протяжка по дорожке и левая граница
   // отрезка сразу запускают воспроизведение (кнопка справа от режима остановки).
-  autoPlay: loadAutoPlay(),
+  // Режимы при открытии – из "Настроек" (default_*); кнопки в редакторе
+  // меняют их до перезагрузки страницы.
+  autoPlay: true,
+  // Соседние фразы (серые): удалённые фрагменты пропускаются – видна ближайшая
+  // живая; выключено – видна и удалённая (зачёркнутой).
+  skipDeleted: true,
 };
 
-function loadAutoPlay() {
-  try {
-    return localStorage.getItem("auto-play") !== "off";
-  } catch (_) {
-    return true;
+// Режимы редактора по умолчанию (настройки) – при загрузке страницы и после
+// сохранения настроек.
+function applyEditorDefaults(settings) {
+  if (!settings) return;
+  State.autoPlay = settings.default_auto_play !== false;
+  State.stopAtSegmentEnd = settings.default_stop_at_end !== false;
+  State.skipDeleted = settings.default_skip_deleted !== false;
+  if (typeof App !== "undefined" && App.updateAutoButton) {
+    App.updateAutoButton();
+    App.updateModeButton();
+    App.updateSkipButton();
+    if (State.manifest && currentFragment()) App.renderText(currentFragment(), false);
   }
 }
 
@@ -96,6 +108,9 @@ function formatClock(seconds) {
 }
 
 const ICONS = {
+  // Соседние фразы: удалённые пропускаются (перечёркнутый глаз) / видны (глаз).
+  skipOn: '<svg viewBox="0 0 20 20"><path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/><path d="M4 16L16 4"/></svg>',
+  skipOff: '<svg viewBox="0 0 20 20"><path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/></svg>',
   play: '<svg viewBox="0 0 20 20"><path d="M6 4l10 6-10 6z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 20 20"><path d="M6.5 4v12M13.5 4v12" stroke-width="3"/></svg>',
   // Остановка на конце отрезка включена / выключена (играть до конца видео).
@@ -427,7 +442,8 @@ const App = {
     // Цвет правки (удалён – красный, изменён – жёлтый, не озвучен – бирюзовый,
     // принят без правок – синий) важнее фона этапа Anki (зелёный/розовый);
     // вернувшийся из Anki – фиолетовый.
-    let editKind = stage === "bg-returned" ? "" : FragList.editClass(f, State.fragmentIndex, FragList._reviewed());
+    // Переведённый (розовый) и переданный в Anki (зелёный) фон – важнее всего.
+    let editKind = ["bg-returned", "bg-anki", "bg-translated"].includes(stage) ? "" : FragList.editClass(f, State.fragmentIndex, FragList._reviewed());
     if (editKind && editKind !== "deleted" && isUnvoiced(f)) editKind = "unvoiced"; // бирюзовый важнее жёлтого и синего
     for (const kind of ["accepted", "changed", "unvoiced"]) {
       document.body.classList.toggle(`frag-edit-${kind}`, inEditor && !deleted && editKind === kind);
@@ -606,15 +622,23 @@ const App = {
     FragList.schedule();
   },
 
-  _neighborText(direction) {
+  // Соседняя фраза (серая) – ближайшая с текстом. Удалённые пользователем
+  // пропускаются в режиме skipDeleted (по умолчанию), иначе видны
+  // (зачёркнутыми). Исходники объединения/разделения не показываются никогда.
+  _neighbor(direction) {
     const fragments = State.manifest.fragments;
     for (let i = State.fragmentIndex + direction; i >= 0 && i < fragments.length; i += direction) {
       const g = fragments[i];
-      if (g.status !== "active") continue;
+      const deleted = g.status !== "active";
+      if (deleted && (State.skipDeleted || g.absorbed_into || (g.split_into && g.split_into.length))) continue;
       const text = (g.text || "").trim();
-      if (text) return text;
+      if (text) return { text, deleted };
     }
-    return "";
+    return { text: "", deleted: false };
+  },
+
+  _neighborText(direction) {
+    return this._neighbor(direction).text;
   },
 
   renderText(f, force) {
@@ -631,8 +655,14 @@ const App = {
       TextEditor.render(cur);
     }
     cur.contentEditable = isLocked(f) ? "false" : "plaintext-only";
-    $("prev-text").textContent = this._neighborText(-1);
-    $("next-text").textContent = this._neighborText(1);
+    for (const [id, dir] of [["prev-text", -1], ["next-text", 1]]) {
+      const n = this._neighbor(dir);
+      $(id).textContent = n.text;
+      $(id).classList.toggle("deleted-neighbor", n.deleted);
+    }
+    // Кнопка "Склеить в одну фразу" – только у только что объединённого фрагмента.
+    const j = this.junction;
+    $("junction-row").classList.toggle("hidden", !(j && j.id === f.id && j.joinable !== null));
     this.fitTextBox();
   },
 
@@ -1032,7 +1062,117 @@ const App = {
     const result = await this._call(Api.merge(currentFragment().id, direction));
     if (!result) return;
     State.manifest = result.manifest;
+    const merged = State.manifest.fragments.find((g) => g.id === result.merged_fragment_id);
+    const at = result.junction;
+    // ". Заглавная" на стыке – можно склеить в одну фразу (кнопка под текстом).
+    const joinable = merged && at > 0 && /^\. [A-ZА-ЯЁ]$/.test(merged.text.slice(at - 1, at + 2)) ? true : null;
+    this.junction = merged ? { id: merged.id, at, joinable } : null;
+    $("junction-join").disabled = false;
     await this.openById(result.merged_fragment_id);
+    if (merged) this.flashJunction(at);
+  },
+
+  // Стык двух бывших фраз: пара символов вокруг подчёркивается и плавно
+  // гаснет – три раза (CSS Custom Highlight API: ::highlight(junction)).
+  flashJunction(at) {
+    if (!window.CSS || !CSS.highlights || typeof Highlight === "undefined") return;
+    const el = $("cur-text");
+    const range = this._visibleRange(el, Math.max(0, at - 3), at + 4);
+    if (!range) return;
+    CSS.highlights.set("junction", new Highlight(range));
+    const start = performance.now();
+    const PULSE = 700;
+    const step = (now) => {
+      const t = (now - start) / PULSE;
+      if (t >= 3) {
+        el.style.setProperty("--junction", "0");
+        CSS.highlights.delete("junction");
+        return;
+      }
+      el.style.setProperty("--junction", String(Math.sin(Math.PI * (t % 1))));
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  },
+
+  // DOM-диапазон видимых символов [from, to) текста фразы (удалённые красные
+  // символы в счёт не идут: каждый токен – один символ разметки).
+  _visibleRange(el, from, to) {
+    const tokens = TextEditor.tokens;
+    const tokenOf = (visible) => {
+      let seen = 0;
+      for (let k = 0; k < tokens.length; k++) {
+        if (tokens[k].kind === DEL) continue;
+        if (seen === visible) return k;
+        seen++;
+      }
+      return tokens.length;
+    };
+    const a = tokenOf(from);
+    const b = tokenOf(Math.min(to, TextEditor.text().length));
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let pos = 0;
+    const range = document.createRange();
+    let started = false;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const len = node.textContent.length;
+      if (!started && a < pos + len) {
+        range.setStart(node, a - pos);
+        started = true;
+      }
+      if (started && b <= pos + len) {
+        range.setEnd(node, b - pos);
+        return range;
+      }
+      pos += len;
+    }
+    return started ? range : null;
+  },
+
+  // "Склеить в одну фразу": на стыке ". Заглавная" -> " строчная" (кроме
+  // "I" и имён говорящих). Обычная правка текста – видна и отменяется Ctrl+Z.
+  joinAtJunction() {
+    const f = currentFragment();
+    const j = this.junction;
+    if (!f || !j || j.id !== f.id || isLocked(f)) return;
+    const text = TextEditor.text();
+    if (!/^\. [A-ZА-ЯЁ]$/.test(text.slice(j.at - 1, j.at + 2))) return;
+    const word = (text.slice(j.at + 1).match(/^[\w'’]+/) || [""])[0];
+    const keep = /^I(['’](m|ll|ve|d))?$/.test(word) || this._speakerNames().has(word);
+    const tokens = TextEditor.tokens;
+    const tokenOf = (visible) => {
+      let seen = 0;
+      for (let k = 0; k < tokens.length; k++) {
+        if (tokens[k].kind === DEL) continue;
+        if (seen === visible) return k;
+        seen++;
+      }
+      return tokens.length;
+    };
+    TextEditor.remember(tokenOf(j.at));
+    if (!keep) {
+      const k = tokenOf(j.at + 1);
+      TextEditor.replaceRange(k, k + 1, text[j.at + 1].toLowerCase());
+    }
+    const dot = tokenOf(j.at - 1);
+    TextEditor.deleteRange(dot, dot + 1);
+    f.text = TextEditor.text();
+    f.text_marks = TextEditor.marks();
+    TextEditor.render($("cur-text"));
+    this._scheduleTextSave(f);
+    $("junction-join").disabled = true; // склеено – кнопка серая
+  },
+
+  // Имена говорящих видео (с заглавной – их не делаем строчными).
+  _speakerNames() {
+    const names = new Set();
+    for (const g of State.manifest.fragments) {
+      for (const line of (g.text || "").split("\n")) {
+        const p = speakerPrefix(line);
+        if (p) for (const w of p.name.split(/\s+/)) names.add(w);
+      }
+    }
+    return names;
   },
 
   async split() {
@@ -1055,10 +1195,22 @@ const App = {
 
   toggleAuto() {
     State.autoPlay = !State.autoPlay;
-    try {
-      localStorage.setItem("auto-play", State.autoPlay ? "on" : "off");
-    } catch (_) {}
     this.updateAutoButton();
+  },
+
+  // Соседние фразы: пропускать удалённые (по умолчанию) или показывать их.
+  updateSkipButton() {
+    const on = State.skipDeleted;
+    $("skip-deleted-btn").innerHTML = on ? ICONS.skipOn : ICONS.skipOff;
+    $("skip-deleted-btn").title = on
+      ? "Соседние фразы: удалённые пропускаются – видна ближайшая живая (нажмите, чтобы показывать удалённые)"
+      : "Соседние фразы: удалённые тоже видны, зачёркнутыми (нажмите, чтобы пропускать)";
+  },
+
+  toggleSkipDeleted() {
+    State.skipDeleted = !State.skipDeleted;
+    this.updateSkipButton();
+    if (currentFragment()) this.renderText(currentFragment(), false);
   },
 
   // Имя из буфера (Alt+F) или Rover (Alt+R): "prefix" – говорящим в начало
@@ -1153,7 +1305,10 @@ $("stage3-btn").addEventListener("click", () =>
 $("redo-btn").addEventListener("click", () => App.redo());
 $("mode-toggle").addEventListener("click", () => App.toggleMode());
 $("auto-toggle").addEventListener("click", () => App.toggleAuto());
+$("skip-deleted-btn").addEventListener("click", () => App.toggleSkipDeleted());
+$("junction-join").addEventListener("click", () => App.joinAtJunction());
 App.updateAutoButton();
+App.updateSkipButton();
 $("reset-btn").addEventListener("click", () => App.reset());
 $("pad-left-minus").addEventListener("click", () => App.changePadding("left", -1));
 $("pad-left-plus").addEventListener("click", () => App.changePadding("left", 1));
@@ -1637,6 +1792,7 @@ const Heartbeat = {
 };
 
 window.addEventListener("DOMContentLoaded", () => {
+  Api.settings().then(applyEditorDefaults).catch(() => {});
   Heartbeat.start();
   Player.init();
   Letterbox.init();

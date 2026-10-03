@@ -521,10 +521,15 @@ class ManifestStore:
     @_locked
     def merge(self, fragment_id: str, direction: str) -> tuple[Manifest, str]:
         """
-        Объединяет с ближайшим живым соседом. Берутся НЕобработанные версии
-        обоих фрагментов (original_* границы и original_text), даже если они
-        правились, — исходное разбиение непрерывно, поэтому
-        [original_start(A), original_end(B)) это бесшовный кусок видео.
+        Объединяет с ближайшим живым соседом. Правки переходят в новый
+        фрагмент: внешние границы – как их поправили (левая граница левого,
+        правая – правого), исходные – original_* тех же фрагментов, поэтому
+        разница видна на дорожке и Reset возвращает исходное; внутренние
+        границы (стык) исчезают. Текст – текущие тексты подряд, исходный –
+        исходные тексты подряд (правки текста тоже видны и откатываются).
+        Реплики одного говорящего на стыке сливаются в одну строку
+        ("A: x" + "A: y" -> "A: x y"). Где стык – self.last_junction
+        (позиция в новом тексте, для подсветки в редакторе).
         Исходники остаются в массиве как deleted, новый встаёт между ними.
         """
         if direction not in ("next", "prev"):
@@ -540,21 +545,23 @@ class ManifestStore:
         first, second = manifest.fragments[first_index], manifest.fragments[second_index]
 
         merged_id = self._new_fragment_ids(manifest, 1)[0]
-        text = "\n".join(t for t in (first.original_text, second.original_text) if t)
-        # Отметки "на слух" второго сдвигаются на длину первого текста (+ перенос).
-        offset = len(first.original_text) + 1 if first.original_text else 0
-        heard = [*first.heard_ranges, *shift_ranges(second.heard_ranges, offset)]
+        text, junction, _, _ = join_texts(first.text, second.text)
+        original_text, _, offset, dropped = join_texts(first.original_text, second.original_text)
+        # Отметки "на слух" (по исходному тексту) второго сдвигаются на его место
+        # в склеенном; убранное имя говорящего отметку теряет.
+        heard = [*first.heard_ranges, *shift_ranges(clip_ranges(second.heard_ranges, dropped), offset - dropped)]
+        self.last_junction = junction
         merged = Fragment(
             id=merged_id,
             status=STATUS_ACTIVE,
-            algo_start_frame=first.original_algo_start_frame,
-            algo_end_frame=second.original_algo_end_frame,
+            algo_start_frame=first.algo_start_frame,
+            algo_end_frame=second.algo_end_frame,
             context_start_frame=first.context_start_frame,
             context_end_frame=second.context_end_frame,
             original_algo_start_frame=first.original_algo_start_frame,
             original_algo_end_frame=second.original_algo_end_frame,
             text=text,
-            original_text=text,
+            original_text=original_text,
             source_text="\n".join(t for t in (first.source_text, second.source_text) if t),
             needs_review=first.needs_review or second.needs_review,
             review_note=" / ".join(n for n in (first.review_note, second.review_note) if n),
@@ -580,6 +587,12 @@ class ManifestStore:
         частей вышла бы пустой или из одного кадра). Исходник помечается
         deleted (split_into) и остаётся открытым в редакторе; части встают
         слева и справа от него.
+
+        Правки переходят в части: поправленная левая граница – в левую часть,
+        правая – в правую (исходные – original_* исходника: разница видна,
+        Reset возвращает). Текст из двух и больше предложений делится: первое
+        предложение – левой части, остальное – правой (одно предложение –
+        обеим целиком, как раньше); у исходника остаётся весь текст.
         """
         manifest, before = self._begin()
         index = manifest.index_of(fragment_id)
@@ -595,18 +608,15 @@ class ManifestStore:
         right_end = original.algo_end_frame
 
         left_id, right_id = self._new_fragment_ids(manifest, 2)
+        parts = split_texts(original.original_text, original.text, original.heard_ranges)
         common = dict(
             status=STATUS_ACTIVE,
-            text=original.text,
-            original_text=original.text,
             source_text=original.source_text,
             needs_review=original.needs_review,
             review_note=original.review_note,
             source_segment_ids=list(original.source_segment_ids),
             split_from=original.id,
             context_custom=original.context_custom,
-            # Части начинают с текущего текста — отметки "на слух" переносятся на него.
-            heard_ranges=carry_ranges(original.original_text, original.text, original.heard_ranges),
         )
         left = Fragment(
             id=left_id,
@@ -614,8 +624,9 @@ class ManifestStore:
             algo_end_frame=boundary,
             context_start_frame=original.context_start_frame,
             context_end_frame=min(total_frames, boundary + padding),
-            original_algo_start_frame=left_start,
+            original_algo_start_frame=original.original_algo_start_frame,
             original_algo_end_frame=boundary,
+            **parts["left"],
             **common,
         )
         right = Fragment(
@@ -625,7 +636,8 @@ class ManifestStore:
             context_start_frame=max(0, boundary - padding),
             context_end_frame=original.context_end_frame,
             original_algo_start_frame=boundary,
-            original_algo_end_frame=right_end,
+            original_algo_end_frame=original.original_algo_end_frame,
+            **parts["right"],
             **common,
         )
         original.status = STATUS_DELETED
@@ -703,3 +715,98 @@ class ManifestStore:
             tmp_path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
             replace_file(tmp_path, index_path)
         return manifest
+
+
+# -- текст при объединении и разделении ------------------------------------------------
+
+import re as _re
+
+# Говорящий в начале строки: до первого ":" не больше 3 слов (как в редакторе).
+_SPEAKER_RE = _re.compile(r"^([^:\n]{1,40}?):\s*")
+# Конец предложения: . ! ? … (и закрывающие кавычки/скобки), дальше – новое
+# предложение с заглавной буквы (или кавычки) – "Well... if" не делится.
+_SENTENCE_END_RE = _re.compile(r"(?<=[.!?…])[\"'”’)\]]*\s+(?=[\"'“‘(\[]?[A-ZА-ЯЁ0-9])")
+
+
+def _speaker(line: str) -> str | None:
+    match = _SPEAKER_RE.match(line)
+    if not match or len(match.group(1).split()) > 3:
+        return None
+    return match.group(1).strip()
+
+
+def join_texts(a: str, b: str) -> tuple[str, int, int, int]:
+    """
+    Тексты подряд для объединения. Последняя реплика первого и первая
+    второго у одного говорящего – одна строка через пробел (имя второй
+    реплики убирается), иначе – перенос строки. Возвращает (текст, стык –
+    позиция пробела/переноса между фразами, с какой позиции в тексте идёт
+    второй текст, сколько символов в начале второго текста убрано).
+    """
+    if not a:
+        return b, 0, 0, 0
+    if not b:
+        return a, len(a), len(a), 0
+    first_line = b.split("\n", 1)[0]
+    speaker = _speaker(a.split("\n")[-1])
+    if speaker and speaker == _speaker(first_line):
+        dropped = _SPEAKER_RE.match(first_line).end()
+        return f"{a} {b[dropped:]}", len(a), len(a) + 1, dropped
+    return f"{a}\n{b}", len(a), len(a) + 1, 0
+
+
+def clip_ranges(ranges: list[list[int]], start: int, end: int | None = None) -> list[list[int]]:
+    """Части диапазонов внутри [start, end) (end=None – до конца)."""
+    result = []
+    for a, b in ranges:
+        a, b = max(a, start), b if end is None else min(b, end)
+        if a < b:
+            result.append([a, b])
+    return result
+
+
+def _split_one(text: str) -> tuple[str, str, int, int] | None:
+    """
+    Делит текст после первого предложения: (левая часть, правая часть, с
+    какой позиции текста начинается правая, длина повторённого в правой
+    части имени говорящего). Одно предложение – None.
+    """
+    lines = text.split("\n")
+    first = lines[0]
+    match = _SPEAKER_RE.match(first)
+    prefix = first[: match.end()] if match and _speaker(first) else ""
+    body = first[len(prefix):]
+    cut = _SENTENCE_END_RE.search(body)
+    if cut:
+        left = (prefix + body[: cut.start()]).rstrip()
+        rest = body[cut.end():]
+        right = "\n".join([prefix + rest, *lines[1:]])
+        return left, right, len(prefix) + cut.end(), len(prefix)
+    if len(lines) > 1:
+        return first, "\n".join(lines[1:]), len(first) + 1, 0
+    return None
+
+
+def split_texts(original_text: str, text: str, heard: list[list[int]]) -> dict:
+    """
+    Тексты частей при разделении: {"left": {...}, "right": {...}} с text,
+    original_text и heard_ranges. Исходный текст делится так же, как текущий
+    (правки остаются видны); не делится одинаково – исходным частям берутся
+    текущие (правки текста до разделения тогда не подсвечиваются).
+    """
+    cur = _split_one(text)
+    if cur is None:
+        carried = carry_ranges(original_text, text, heard)
+        same = {"text": text, "original_text": text, "heard_ranges": carried}
+        return {"left": dict(same), "right": {**same, "heard_ranges": list(carried)}}
+    orig = _split_one(original_text) if original_text != text else cur
+    if orig is not None:
+        base, base_heard = orig, heard
+    else:
+        base, base_heard = cur, carry_ranges(original_text, text, heard)
+    left_heard = clip_ranges(base_heard, 0, len(base[0]))
+    right_heard = shift_ranges(clip_ranges(base_heard, base[2]), base[3] - base[2])
+    return {
+        "left": {"text": cur[0], "original_text": base[0], "heard_ranges": left_heard},
+        "right": {"text": cur[1], "original_text": base[1], "heard_ranges": right_heard},
+    }

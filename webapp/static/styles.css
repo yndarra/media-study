@@ -1742,3 +1742,10 @@ table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: 
 .modal table.results-list { width: 100%; }
 .modal .results-list td:nth-child(2), .modal .results-list th:nth-child(2) { white-space: normal; text-align: left; width: 100%; }
 .modal .results-list td:first-child, .modal .results-list th:first-child { padding-right: 14px; }
+
+/* Стык после объединения: подчёркивание вспыхивает и гаснет (--junction 0..1). */
+#cur-text::highlight(junction) { text-decoration: underline 2px rgba(121, 184, 255, var(--junction, 0)); text-underline-offset: 4px; }
+#junction-row { display: flex; justify-content: center; margin-top: 10px; }
+/* Соседняя фраза удалённого фрагмента (режим "показывать удалённые"). */
+.ctx.deleted-neighbor { text-decoration: line-through; text-decoration-color: rgba(248, 81, 73, 0.55); }
+.speaker-btns + .sep, #nav-mid-right .sep, .stage3 .sep { align-self: center; }

@@ -65,14 +65,25 @@ class TestMerge(ManifestStoreTestCase):
         self.assertLess(ids.index("frag_0001"), ids.index(merged_id))
         self.assertLess(ids.index(merged_id), ids.index("frag_0002"))
 
-    def test_merge_ignores_prior_edits_of_bounds_and_text(self):
+    def test_merge_keeps_outer_bound_and_text_edits_reversibly(self):
+        # Правки внешних границ и текста переходят в новый фрагмент и видны как
+        # разница с исходным (Reset вернёт); внутренние границы – стык – пропадают.
         self.store.update_fragment("frag_0001", algo_start_frame=40, algo_end_frame=80, text="edited")
         self.store.update_fragment("frag_0002", algo_start_frame=100, algo_end_frame=140)
         manifest, merged_id = self.store.merge("frag_0001", "next")
         merged = manifest.by_id(merged_id)
-        self.assertEqual((merged.algo_start_frame, merged.algo_end_frame), (30, 150))
-        self.assertEqual(merged.text, "hello\nworld")
-        self.assertFalse(merged.edited)
+        self.assertEqual((merged.algo_start_frame, merged.algo_end_frame), (40, 140))
+        self.assertEqual((merged.original_algo_start_frame, merged.original_algo_end_frame), (30, 150))
+        self.assertEqual(merged.text, "edited\nworld")
+        self.assertEqual(merged.original_text, "hello\nworld")
+        self.assertTrue(merged.edited)
+        self.assertEqual(self.store.last_junction, len("edited"))
+
+    def test_merge_same_speaker_lines_join(self):
+        self.store.update_fragment("frag_0001", text="Anna: Hello.")
+        self.store.update_fragment("frag_0002", text="Anna: World.")
+        manifest, merged_id = self.store.merge("frag_0001", "next")
+        self.assertEqual(manifest.by_id(merged_id).text, "Anna: Hello. World.")
 
     def test_soft_delete_of_merge_result_restores_ingredients(self):
         _, merged_id = self.store.merge("frag_0001", "next")
@@ -110,6 +121,16 @@ class TestSplit(ManifestStoreTestCase):
         ids = [f.id for f in manifest.fragments]
         position = ids.index("frag_0004")
         self.assertEqual(ids[position - 1:position + 2], [left_id, "frag_0004", right_id])
+
+    def test_split_keeps_outer_bound_edits_and_divides_sentences(self):
+        self.store.update_fragment("frag_0004", algo_start_frame=190, algo_end_frame=290, text="Bob: One here. Two there.")
+        manifest, left_id, right_id = self.store.split("frag_0004", 240)
+        left, right = manifest.by_id(left_id), manifest.by_id(right_id)
+        self.assertEqual((left.algo_start_frame, left.original_algo_start_frame), (190, 180))
+        self.assertEqual((right.algo_end_frame, right.original_algo_end_frame), (290, 300))
+        self.assertEqual((left.text, right.text), ("Bob: One here.", "Bob: Two there."))
+        self.assertTrue(left.edited and right.edited)
+        self.assertEqual(manifest.by_id("frag_0004").text, "Bob: One here. Two there.")
 
     def test_split_only_strictly_inside_segment(self):
         # frag_0004 — отрезок 180..300: нельзя в запасе и на кадрах 180 и 299.

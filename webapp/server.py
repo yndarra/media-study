@@ -1485,7 +1485,8 @@ def hard_delete_fragment(project_id: str, fragment_id: str):
 def merge_fragment(project_id: str, fragment_id: str, body: MergeRequest):
     store = project(project_id).store
     manifest, merged_id = _call(lambda: store.merge(fragment_id, body.direction))
-    return {"manifest": _public(manifest), "merged_fragment_id": merged_id}
+    # junction – где в новом тексте стык двух фраз (подсветка в редакторе).
+    return {"manifest": _public(manifest), "merged_fragment_id": merged_id, "junction": store.last_junction}
 
 
 @app.post("/api/p/{project_id}/fragments/{fragment_id}/split")

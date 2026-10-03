@@ -160,6 +160,8 @@
         <div id="cur-text" class="ctx cur" contenteditable="plaintext-only" spellcheck="false" title="Нажмите, чтобы исправить текст"></div>
         <div id="next-text" class="ctx dim"></div>
       </div>
+      <!-- После объединения: на стыке ". Заглавная" – склеить в одну фразу. -->
+      <div id="junction-row" class="hidden"><button id="junction-join" class="step-btn small-btn">Склеить в одну фразу</button></div>
     </div>
 
     <!-- Ряд навигации: половины слева и справа от "1 / N" – в каждой кнопки у края
@@ -173,6 +175,9 @@
       <div class="nav-mid group stage3">
         <span id="stage3-eta" class="readout hidden"></span>
         <button id="stage3-btn" class="step-btn" title="Передать в Anki все фрагменты с первого по текущий включительно">Передать в Anki</button>
+        <span class="sep"></span>
+        <!-- Соседние фразы (серые сверху и снизу): удалённые пропускаются (по умолчанию) или видны. -->
+        <button id="skip-deleted-btn" class="icon-btn"></button>
       </div>
       </div>
       <div class="group center">
@@ -189,6 +194,7 @@
           <button id="speaker-rover" class="step-btn speaker-btn" title="Говорящий – Rover (ещё раз – как было), клавиша R">R</button>
           <button id="speaker-next" class="step-btn speaker-btn" title="Говорящий из следующих фрагментов (ещё раз – более поздний)">›</button>
         </div>
+        <span class="sep"></span>
         <button id="unvoiced-btn" class="step-btn unvoiced-btn" title="Реплика не озвучена: в Anki – без видео">Не озвучено</button>
       </div>
       <div class="group right">
