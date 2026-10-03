@@ -179,7 +179,11 @@ const Mode = {
 
   init() {
     document.querySelectorAll("#mode-switch button").forEach((b) => b.addEventListener("click", () => this.set(b.dataset.k)));
+    // Первая отрисовка – без переезда пилюли; дальше переключения плавные.
+    const sw = document.getElementById("mode-switch");
+    sw.classList.add("no-anim");
     this.paint();
+    requestAnimationFrame(() => requestAnimationFrame(() => sw.classList.remove("no-anim")));
     this.refreshCounts();
     setInterval(() => this.refreshCounts(), 5000);
   },
@@ -1037,6 +1041,14 @@ function hbars(items, legend = "") {
   }).join("") || '<p class="muted small">Нет данных</p>'}</div>`;
 }
 
+// Таблица статистики, которая не вылезает за блок: ширина колонок по долям –
+// первая (название) занимает nameUnits долей, каждая из остальных n – одну.
+// Длинное название обрезается многоточием (целиком – в подсказке).
+function fitCols(nameUnits, n) {
+  const unit = 100 / (nameUnits + n);
+  return `<colgroup><col style="width:${(unit * nameUnits).toFixed(3)}%">${`<col style="width:${unit.toFixed(3)}%">`.repeat(n)}</colgroup>`;
+}
+
 const legendItem = (cls, text) => `<span class="hbar-key"><i class="hbar-seg ${cls}"></i>${text}</span>`;
 
 // Название результата таймера: видео или пометка для замеров без видео.
@@ -1129,7 +1141,11 @@ function speedTab(results, remaining) {
     <div id="speed-chart" class="chart-box"></div>
     <h3 class="tab-sub">Скорость по видео</h3>
     ${hbars(videos.map((v) => ({ label: v.title, segs: [{ value: v.speed, cls: "c-blue", title: `${v.frags} фрагм. за ${formatMinutes(v.ms)}` }],
-      text: `${v.speed.toFixed(2)}/мин <span class="muted small">· ${v.n} рез., ${formatMinutes(v.ms)}</span>` })))}`;
+      text: `${v.speed.toFixed(2)}/мин` })))}
+    <table class="stats grid-table fit-table">${fitCols(3, 4)}<tr><th>Видео</th><th>Результатов</th><th>Время</th><th>Фрагментов</th><th>Скорость</th></tr>
+    ${videos.map((v) => `<tr><td title="${escapeHtml(v.title)}">${escapeHtml(v.title)}</td><td>${v.n}</td><td>${formatMinutes(v.ms)}</td>` +
+      `<td>${v.frags.toLocaleString("ru-RU")}</td><td><b>${v.speed.toFixed(2)}/мин</b></td></tr>`).join("")}
+    <tr class="total-row"><td>Итого</td><td>${list.length}</td><td>${formatMinutes(totalMs)}</td><td>${totalFrags.toLocaleString("ru-RU")}</td><td><b>${avg.toFixed(2)}/мин</b></td></tr></table>`;
 }
 
 // Окно со всеми результатами таймера (новые – первыми): удалить лишние.
@@ -1695,7 +1711,9 @@ const Pages = {
     // процесс (передача в Anki) – кнопка серая.
     // Пересчитывается при каждом обновлении окна (см. refresh): перевод
     // закончился – кнопка сразу становится серой.
-    let untranslated = v.sending ? 0 : v.to_translate === null ? 1 : v.to_translate || 0;
+    // Anki закрыт (to_translate = null) – переводить нечего: перевод идёт только
+    // по карточкам в Anki, кнопку не показываем.
+    let untranslated = v.sending ? 0 : v.to_translate || 0;
     // "Править": есть что править – синяя зебра; осталось только вернувшееся
     // из Anki – фиолетовая; править нечего – просто синяя.
     const editZebra = !v.awaiting ? "" : (v.flagged || 0) >= v.awaiting ? "editReturned" : "edit";
@@ -1847,7 +1865,7 @@ const Pages = {
         storageInfo = stats.storage;
         const mv = storageInfo && storageInfo.move;
         moving = !!(mv && !mv.finished);
-        untranslated = s.sending ? 0 : s.to_translate === null ? 1 : s.to_translate || 0;
+        untranslated = s.sending ? 0 : s.to_translate || 0;
         waitingBatch = (state.batches || []).some((j) => j.project === id);
         running = waitingBatch || (st.state === "running" && st.project === id && Date.now() / 1000 - st.updated < 300);
         render(s);
@@ -2351,8 +2369,8 @@ const Pages = {
               { value: translateCost(v.costs), cls: "c-pink", title: `Перевод и доводка: ${money(translateCost(v.costs))}` }],
             text: `<b>${money(costTotal(v.costs))}</b>`,
           })), legendItem("c-blue", "Поиск источников") + legendItem("c-pink", "Перевод и доводка")) +
-            `<table class="stats grid-table"><tr><th>${audioMode ? "Аудио" : "Видео"}</th>${Object.values(kinds).map((k) => `<th>${k}</th>`).join("")}<th>Всего</th></tr>
-            ${byCost.map((v) => `<tr><td><a href="${mediaLink(v)}">${escapeHtml(v.title)}</a></td>` +
+            `<table class="stats grid-table fit-table">${fitCols(3, Object.keys(kinds).length + 1)}<tr><th>${audioMode ? "Аудио" : "Видео"}</th>${Object.values(kinds).map((k) => `<th>${k}</th>`).join("")}<th>Всего</th></tr>
+            ${byCost.map((v) => `<tr><td title="${escapeHtml(v.title)}"><a href="${mediaLink(v)}">${escapeHtml(v.title)}</a></td>` +
               Object.keys(kinds).map((k) => `<td>${money(kindOf(v.costs, k))}</td>`).join("") + `<td><b>${money(costTotal(v.costs))}</b></td></tr>`).join("")}
             <tr class="total-row"><td>Итого</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k))}</td>`).join("")}<td><b>${money(spentVideos)}</b></td></tr></table>`;
         },
@@ -2368,8 +2386,8 @@ const Pages = {
           const th = (key, label) => `<th class="sortable${ui.sort === key ? " sorted" : ""}" data-sort="${key}">${label}${ui.sort === key ? (ui.dir < 0 ? " ↓" : " ↑") : ""}</th>`;
           return `<div class="tab-head"><span class="field-label">График по</span><div class="picker-host" data-for="info-metric"></div></div>` +
             hbars(chart.map((v) => ({ label: v.title, href: mediaLink(v), segs: [{ value: m.get(v), cls: "c-blue" }], text: m.fmt(m.get(v)) }))) +
-            `<table class="stats grid-table info-table"><tr>${th("title", audioMode ? "Аудио" : "Видео")}${metrics.map((x) => th(x.key, x.label)).join("")}</tr>` +
-            rows.map((v) => `<tr><td><a href="${mediaLink(v)}">${escapeHtml(v.title)}</a></td>${metrics.map((x) => `<td>${x.fmt(x.get(v))}</td>`).join("")}</tr>`).join("") +
+            `<table class="stats grid-table info-table fit-table">${fitCols(3, metrics.length)}<tr>${th("title", audioMode ? "Аудио" : "Видео")}${metrics.map((x) => th(x.key, x.label)).join("")}</tr>` +
+            rows.map((v) => `<tr><td title="${escapeHtml(v.title)}"><a href="${mediaLink(v)}">${escapeHtml(v.title)}</a></td>${metrics.map((x) => `<td>${x.fmt(x.get(v))}</td>`).join("")}</tr>`).join("") +
             "</table>";
         },
       },
@@ -2389,8 +2407,8 @@ const Pages = {
           const entries = [...groups.entries()].sort((a, b) => agg(b[1], m) - agg(a[1], m));
           return `<div class="tab-head"><span class="field-label">График по</span><div class="picker-host" data-for="author-metric"></div></div>` +
             hbars(entries.map(([g, list]) => ({ label: g, segs: [{ value: agg(list, m), cls: "c-violet" }], text: m.fmt(agg(list, m)) }))) +
-            `<table class="stats grid-table"><tr><th>${audioMode ? "Исполнитель" : "Автор"}</th><th>${audioMode ? "Аудио" : "Видео"}</th>${metrics.map((x) => `<th>${x.label}</th>`).join("")}</tr>` +
-            entries.map(([g, list]) => `<tr><td>${escapeHtml(g)}</td><td>${list.length}</td>${metrics.map((x) => `<td>${x.fmt(agg(list, x))}</td>`).join("")}</tr>`).join("") +
+            `<table class="stats grid-table fit-table">${fitCols(2, metrics.length + 1)}<tr><th>${audioMode ? "Исполнитель" : "Автор"}</th><th>${audioMode ? "Аудио" : "Видео"}</th>${metrics.map((x) => `<th>${x.label}</th>`).join("")}</tr>` +
+            entries.map(([g, list]) => `<tr><td title="${escapeHtml(g)}">${escapeHtml(g)}</td><td>${list.length}</td>${metrics.map((x) => `<td>${x.fmt(agg(list, x))}</td>`).join("")}</tr>`).join("") +
             "</table>";
         },
       },

@@ -6,7 +6,7 @@
 //   «Кольца» – почти чёрный фон с зерном и виньетированием, посередине
 //     светящиеся "жидкие" кольца (замкнутые кривые из нескольких гармоник,
 //     изгиб – от громкости; каждое следующее кольцо берёт громкость чуть
-//     более ранних кадров – эхо расходится от центра), мягкое ядро, искры;
+//     более ранних кадров – эхо расходится от центра) и мягкое ядро;
 //
 //   «Хребты» – по мотивам обложки Joy Division "Unknown Pleasures"
 //     (пульсар CP 1919): десятки горизонтальных линий друг над другом,
@@ -30,7 +30,6 @@ const AudioVisual = {
   canvas: null,
   active: false,
   RINGS: 6,
-  SPARKS: 140,
   // Цвета колец: розовый -> фиолетовый -> голубой (оттенок HSL).
   HUES: [328, 305, 282, 262, 236, 205],
   STYLES: [
@@ -172,7 +171,7 @@ const AudioVisual = {
   },
 
   // ---------------------------------------------------------------- «Кольца»
-  drawRings({ ctx, w, h, frame, rate, t }) {
+  drawRings({ ctx, w, h, frame, t }) {
     const cx = w / 2;
     const cy = h / 2;
     const base = Math.min(w, h) * 0.2;
@@ -180,24 +179,6 @@ const AudioVisual = {
     const energy = Math.pow(level, 1.3);
     this.background(ctx, w, h, energy);
     ctx.globalCompositeOperation = "lighter";
-
-    // -- искры: летят из центра наружу, каждая по своему лучу -------------------
-    for (let i = 0; i < this.SPARKS; i++) {
-      const angle = this.rand(i) * Math.PI * 2 + t * 0.05;
-      const speed = 0.12 + this.rand(i + 1000) * 0.35;
-      const phase = (t * speed + this.rand(i + 2000)) % 1; // 0 – у колец, 1 – у края
-      const born = Math.max(0, Math.round(frame - phase / speed * rate));
-      const loud = this.level(born); // громкость, когда искра "родилась"
-      const r = base * (1.05 + phase * 2.4);
-      const x = cx + Math.cos(angle) * r;
-      const y = cy + Math.sin(angle) * r * 0.92;
-      const alpha = (1 - phase) * (0.15 + 0.85 * loud);
-      if (alpha < 0.03) continue;
-      ctx.fillStyle = `hsla(${this.HUES[i % this.HUES.length]}, 90%, 72%, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(x, y, 0.8 + 2.2 * loud * (1 - phase), 0, Math.PI * 2);
-      ctx.fill();
-    }
 
     // -- ядро ---------------------------------------------------------------------
     const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, base * (0.85 + 0.25 * energy));

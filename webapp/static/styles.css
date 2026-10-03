@@ -1942,3 +1942,46 @@ table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
 
 /* Таблицы: под последней строкой разделителя нет. */
 table.stats tr:last-child > td, table.stats tr:last-child > th { border-bottom: none; }
+
+/* Таблицы статистики по ширине блока: колонки по долям (fitCols), длинное
+   название – многоточием, заголовки колонок могут переноситься. */
+table.stats.fit-table { table-layout: fixed; width: 100%; }
+table.stats.fit-table td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.stats.fit-table th { white-space: normal; vertical-align: bottom; }
+table.stats.fit-table td { overflow: hidden; text-overflow: ellipsis; }
+.info-table td, .info-table th { font-size: 13px; }
+/* Бары статистики одной ширины на всех вкладках: колонка значения – постоянная. */
+.hbar-row { grid-template-columns: minmax(140px, 30%) 1fr 96px; }
+/* Строка таблицы: по замеру на 100% текст сидел ~1,5 px выше середины между
+   разделителями (5/7 вместо 4/8). */
+table.stats td, table.stats th { padding-top: 5px; padding-bottom: 7px; }
+
+/* Переключатель Видео/Аудио: выбранный режим – "пилюля" под кнопками.
+   При переключении она плавно переезжает к другой кнопке, а градиент
+   видео (голубой -> фиолетовый) плавно сменяется градиентом аудио
+   (розовый -> фиолетовый) – оба слоя переливаются всё время, анимация не
+   прерывается. Градиент повторяется по горизонтали (первый цвет = последний),
+   поэтому перелив бесшовный; полоса широкая – 520 px на цикл. */
+.mode-switch.seg-switch { position: relative; }
+.mode-switch.seg-switch button,
+.mode-switch.seg-switch button.active,
+.mode-switch.video.seg-switch button.active,
+.mode-switch.audio.seg-switch button.active { position: relative; z-index: 1; background: none; animation: none; box-shadow: none; }
+.mode-switch.seg-switch button.active { color: #fff; }
+.mode-pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 8px) / 2); border-radius: 6px;
+  overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1); }
+.mode-switch.audio .mode-pill { transform: translateX(calc(100% + 2px)); }
+.mode-pill i { position: absolute; inset: 0; background-size: 520px 100%; background-repeat: repeat-x;
+  animation: mode-pill-flow 7s linear infinite; transition: opacity 0.45s ease; }
+.mode-pill .pill-video { background-image: linear-gradient(90deg, #3a9de8, #6a4fd6, #3a9de8); }
+.mode-pill .pill-audio { background-image: linear-gradient(90deg, #c2508f, #8957e5, #c2508f); opacity: 0; }
+.mode-switch.audio .mode-pill .pill-video { opacity: 0; }
+.mode-switch.audio .mode-pill .pill-audio { opacity: 1; }
+@keyframes mode-pill-flow { from { background-position: 520px 0; } to { background-position: 0 0; } }
+/* Первая отрисовка – без переезда (пилюля сразу на своём месте). */
+.mode-switch.no-anim .mode-pill, .mode-switch.no-anim .mode-pill i { transition: none; }
+/* У таблиц статистики первая колонка была width: 100% – в fit-table ширина
+   только по долям колонок (иначе названию доставалось почти всё). */
+.stats-grid table.grid-table.fit-table, table.stats.fit-table { table-layout: fixed; }
+.stats-grid table.grid-table.fit-table th:first-child, .stats-grid table.grid-table.fit-table td:first-child,
+table.stats.fit-table th:first-child, table.stats.fit-table td:first-child { width: auto; }
