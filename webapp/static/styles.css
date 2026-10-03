@@ -1890,3 +1890,8 @@ table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
 #process-list .card-title + .progress { margin-top: 11.86px; margin-bottom: 0; }
 #process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status {
   margin-top: 11.86px; margin-bottom: 0; height: 20px; line-height: 20px; display: flex; align-items: center; }
+
+/* Настройки: модель Whisper и кнопка установки в одну строку. */
+.wh-row { display: flex; gap: 8px; align-items: center; }
+.wh-row .picker-host { flex: 1; min-width: 0; }
+.wh-row .step-btn { flex: none; }

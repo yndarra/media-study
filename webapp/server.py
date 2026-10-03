@@ -845,6 +845,32 @@ def anki_recolor_state():
     return _recolor
 
 
+@app.get("/api/asr/status")
+def asr_status():
+    """Локальный Whisper: модели (установлена ли), видеокарта и библиотеки CUDA, идущие установки."""
+    from phase1_ingest import whisper_setup
+
+    return whisper_setup.status()
+
+
+class AsrInstall(BaseModel):
+    what: str  # "model" | "cuda"
+    name: str | None = None
+
+
+@app.post("/api/asr/install")
+def asr_install(body: AsrInstall):
+    from phase1_ingest import whisper_setup
+
+    if body.what == "cuda":
+        whisper_setup.install_cuda()
+    elif body.what == "model" and body.name in {m[0] for m in whisper_setup.MODELS}:
+        whisper_setup.install_model(body.name)
+    else:
+        raise HTTPException(status_code=400, detail="неизвестно, что ставить")
+    return {"ok": True}
+
+
 class ElevenLabsCheck(BaseModel):
     key: str | None = None  # не задан – сохранённый
     proxy: str | None = None

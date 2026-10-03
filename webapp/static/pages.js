@@ -2547,12 +2547,20 @@ const Pages = {
           <h2>Распознавание речи</h2>
           <div class="field-row">
             ${field("set-asr", "Движок", '<div class="picker-host" data-for="set-asr"></div>',
-              "Whisper – локально и бесплатно; ElevenLabs Scribe – по API, заметно точнее (платно, ключ ниже)")}
+              "Whisper – локально и бесплатно (на видеокарте – в разы быстрее); ElevenLabs Scribe – по API, платно, ключ ниже")}
             ${field("set-el-key", "Ключ ElevenLabs", `<div class="secret-row"><input id="set-el-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.elevenlabs_key || "")}" placeholder="sk_…"><button id="set-el-key-eye" class="icon-btn" title="Показать / скрыть"><svg viewBox="0 0 20 20"><path d="M1.8 10s3-5.5 8.2-5.5S18.2 10 18.2 10s-3 5.5-8.2 5.5S1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6"/></svg></button></div>`,
               "elevenlabs.io → профиль → API Keys; нужен доступ «Speech to Text»")}
           </div>
+          <!-- Локальный Whisper: модель (установлена ли), устройство, нагрузка на видеокарту. -->
           <div class="field-row">
-            ${field("set-el-model", "Модель", `<input id="set-el-model" class="wide" value="${escapeHtml(s.elevenlabs_model || "scribe_v2")}">`, "scribe_v2 – самая точная")}
+            ${field("set-wh-model", "Модель Whisper", '<div class="wh-row"><div class="picker-host" data-for="set-wh-model"></div><button id="set-wh-install" class="step-btn hidden">Установить</button></div>',
+              '<span id="set-wh-model-note">Скачивается один раз в кэш</span>')}
+            ${field("set-wh-device", "Устройство", '<div class="picker-host" data-for="set-wh-device"></div>',
+              '<span id="set-wh-gpu-note">Проверяю видеокарту…</span> <button id="set-wh-cuda" class="step-btn small-btn hidden">Установить библиотеки CUDA</button>')}
+          </div>
+          <div class="field"><label class="check"><input id="set-wh-gentle" type="checkbox" ${s.whisper_gentle ? "checked" : ""}> Бережная нагрузка на видеокарту <span class="muted small">(паузы между кусками и облегчённая точность – система и игры не подтормаживают, распознавание чуть дольше)</span></label></div>
+          <div class="field-row">
+            ${field("set-el-model", "Модель ElevenLabs", `<input id="set-el-model" class="wide" value="${escapeHtml(s.elevenlabs_model || "scribe_v2")}">`, "scribe_v2 – самая точная")}
             ${field("set-el-lang", "Язык", `<input id="set-el-lang" class="wide" value="${escapeHtml(s.elevenlabs_language || "")}" placeholder="авто">`, "Код языка (en); пусто – определяется сам")}
           </div>
           ${field("set-el-proxy", "Прокси для ElevenLabs", `<input id="set-el-proxy" class="wide" value="${escapeHtml(s.elevenlabs_proxy || "")}" placeholder="socks5://127.0.0.1:1080 или http://127.0.0.1:10809">`,
@@ -2655,6 +2663,55 @@ const Pages = {
       };
       poll();
     });
+    // Whisper: модели (установленные и нет), устройство, установка недостающего.
+    const whModel = Picker.create(host("set-wh-model"), { id: "set-wh-model", value: s.whisper_model || "medium.en", options: [], onChange: () => drawAsr() });
+    const whDevice = Picker.create(host("set-wh-device"), {
+      id: "set-wh-device", value: s.whisper_device || "cpu",
+      options: [{ value: "cpu", label: "Процессор" }, { value: "cuda", label: "Видеокарта (NVIDIA)" }],
+      onChange: () => drawAsr(),
+    });
+    let asr = null;
+    const drawAsr = () => {
+      if (!asr || !el.isConnected) return;
+      const models = asr.models;
+      whModel.setOptions(models.map((m) => ({ value: m.name, label: m.label, hint: m.installed ? "установлена" : `${m.size_gb} ГБ` })));
+      const chosen = models.find((m) => m.name === el.querySelector("#set-wh-model").value);
+      const busy = (key) => asr.installs[key] && asr.installs[key].running;
+      const failed = (key) => asr.installs[key] && asr.installs[key].error;
+      const installBtn = el.querySelector("#set-wh-install");
+      installBtn.classList.toggle("hidden", !chosen || chosen.installed);
+      installBtn.disabled = !!(chosen && busy(`model:${chosen.name}`));
+      installBtn.textContent = chosen && busy(`model:${chosen.name}`) ? "Устанавливаю…" : `Установить (${chosen ? chosen.size_gb : "?"} ГБ)`;
+      el.querySelector("#set-wh-model-note").textContent = chosen && failed(`model:${chosen.name}`)
+        ? `Не установилась: ${failed(`model:${chosen.name}`)}` : chosen && chosen.installed ? "Установлена" : "Не установлена – скачается при первом распознавании или кнопкой";
+      const g = asr.gpu;
+      const cudaBtn = el.querySelector("#set-wh-cuda");
+      cudaBtn.classList.toggle("hidden", !g.available || g.libs);
+      cudaBtn.disabled = !!busy("cuda");
+      cudaBtn.textContent = busy("cuda") ? "Устанавливаю библиотеки…" : "Установить библиотеки CUDA (~1,2 ГБ)";
+      el.querySelector("#set-wh-gpu-note").textContent = !g.available ? "Видеокарта NVIDIA не найдена – только процессор"
+        : g.libs ? `${g.name.split(",")[0]} – готова` : failed("cuda") ? `Библиотеки не установились: ${failed("cuda")}` : `${g.name.split(",")[0]} – нужны библиотеки CUDA`;
+      // Пока что-то ставится – обновлять.
+      if (Object.values(asr.installs).some((x) => x.running)) setTimeout(loadAsr, 2000);
+    };
+    const loadAsr = async () => {
+      try {
+        asr = await Api.json("/api/asr/status");
+      } catch (_) {
+        return;
+      }
+      drawAsr();
+    };
+    loadAsr();
+    el.querySelector("#set-wh-install").addEventListener("click", async () => {
+      await Api.json("/api/asr/install", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ what: "model", name: el.querySelector("#set-wh-model").value }) });
+      setTimeout(loadAsr, 300);
+    });
+    el.querySelector("#set-wh-cuda").addEventListener("click", async () => {
+      await Api.json("/api/asr/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ what: "cuda" }) });
+      setTimeout(loadAsr, 300);
+    });
     Picker.create(host("set-asr"), {
       id: "set-asr",
       value: s.asr_engine || "whisper",
@@ -2749,6 +2806,9 @@ const Pages = {
         default_skip_deleted: document.getElementById("set-def-skip").checked,
         default_link_video: document.getElementById("set-def-link-video").checked,
         asr_engine: document.getElementById("set-asr").value,
+        whisper_model: document.getElementById("set-wh-model").value,
+        whisper_device: document.getElementById("set-wh-device").value,
+        whisper_gentle: document.getElementById("set-wh-gentle").checked,
         elevenlabs_key: document.getElementById("set-el-key").value.trim(),
         elevenlabs_model: document.getElementById("set-el-model").value.trim() || "scribe_v2",
         elevenlabs_language: document.getElementById("set-el-lang").value.trim(),

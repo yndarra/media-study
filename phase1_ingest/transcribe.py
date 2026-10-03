@@ -22,10 +22,15 @@ def transcribe(video_path: Path, model_size: str = "medium.en") -> dict:
     отдельным шагом, после того как известен точный fps пере-энкодированного
     источника).
     """
-    from common.resources import cpu_threads
+    from webapp.library import app_settings
 
-    # Не на всех ядрах — сколько оставить свободными, задаётся в настройках.
-    model = WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=cpu_threads())
+    from .whisper_setup import load_model
+
+    # Модель и устройство (процессор / видеокарта, бережно) – из настроек
+    # (whisper_setup.py); на процессоре – не на всех ядрах.
+    settings = dict(app_settings(Path(video_path).parent.parent))
+    settings.setdefault("whisper_model", model_size)
+    model, device, pause = load_model(settings, log=lambda m: print(m, flush=True))
     segments_iter, info = model.transcribe(
         str(video_path),
         language="en",
@@ -41,7 +46,12 @@ def transcribe(video_path: Path, model_size: str = "medium.en") -> dict:
     from common.progress import report
 
     rows = []
+    import time
+
     for index, segment in enumerate(segments_iter, start=1):
+        # Бережный режим видеокарты: короткая передышка между кусками.
+        if pause:
+            time.sleep(pause)
         # Распознавание идёт по порядку — процент по концу последней фразы.
         if info.duration:
             report(Path(video_path).parent, "transcribe", 100.0 * segment.end / info.duration)

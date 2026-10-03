@@ -208,6 +208,11 @@ DEFAULT_APP_SETTINGS = {
     "anki_color_dash": "#7d7d88",
     "anki_color_who": "#8a8a95",
     "asr_engine": "whisper",
+    # Локальный Whisper: модель, устройство ("cpu" / "cuda") и бережная нагрузка
+    # на видеокарту (паузы между кусками) – см. phase1_ingest/whisper_setup.py.
+    "whisper_model": "medium.en",
+    "whisper_device": "cpu",
+    "whisper_gentle": False,
     "elevenlabs_model": "scribe_v2",
     "elevenlabs_language": "en",  # пусто – язык определяется сам
     "elevenlabs_keyterms": True,  # подсказывать имена/термины из словаря (+20% к цене)
