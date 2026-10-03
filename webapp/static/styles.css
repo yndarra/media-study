@@ -1839,3 +1839,19 @@ table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: 
 th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover, th.sortable.sorted { color: var(--text); }
 .info-table td, .info-table th { font-size: 12.5px; }
+
+/* Переключатель режима: без теней; выбранная кнопка – непрерывный плавный
+   перелив градиента в одну сторону (как зебра, только без полос): видео –
+   сине-фиолетовый, аудио – розово-фиолетовый. Рамка – в тон режима. */
+.mode-switch.video, .mode-switch.audio { box-shadow: none; }
+.mode-switch.video { border-color: rgba(96, 165, 250, 0.3); }
+.mode-switch.audio { border-color: rgba(240, 139, 196, 0.32); }
+.mode-switch.video button.active, .mode-switch.audio button.active {
+  box-shadow: none; background-size: 200% 100%; animation: mode-flow 5s linear infinite; }
+.mode-switch.video button.active { background-image: linear-gradient(90deg, #2f5f9e, #5b4fd6, #2f5f9e); }
+.mode-switch.audio button.active { background-image: linear-gradient(90deg, #c2508f, #8957e5, #c2508f); }
+@keyframes mode-flow { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+
+/* Ссылка на открытое в редакторе: автор над названием. */
+#menu-editing-link { display: flex; flex-direction: column; gap: 1px; }
+.editing-group { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }

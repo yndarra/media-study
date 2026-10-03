@@ -1538,6 +1538,7 @@ def get_manifest(project_id: str):
     data = _public(p.store.load())
     # Название – заданное вручную в окне видео (если есть): его показывает меню "Сейчас правится".
     data["video"]["title"] = title_of(p.dir)
+    data["video"]["group"] = library.group_of(p.dir)  # автор – над названием в ссылке меню
     # Аудио без видео: редактор показывает фон с кругом вместо картинки.
     data["video"]["audio_only"] = bool(library.video_info(p.dir).get("audio_only"))
     return data

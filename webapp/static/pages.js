@@ -227,6 +227,15 @@ const Mode = {
   },
 };
 
+// Ссылка "сейчас правится" в меню: автор (мелко) и под ним название.
+function setEditingLink() {
+  const link = document.getElementById("menu-editing-link");
+  if (!link) return;
+  const v = State.manifest && State.manifest.video;
+  link.innerHTML = (v && v.group ? `<span class="editing-group">${escapeHtml(v.group)}</span>` : "") +
+    `<span class="editing-title">${escapeHtml((v && v.title) || State.project || "")}</span>`;
+}
+
 const Router = {
   start() {
     Panels.init();
@@ -353,7 +362,7 @@ const Router = {
     if (State.project) {
       const link = document.getElementById("menu-editing-link");
       link.href = `#/edit/${encodeURIComponent(State.project)}`;
-      link.textContent = (State.manifest && State.manifest.video.title) || State.project;
+      setEditingLink();
     }
     if (view === "editor") requestAnimationFrame(() => Timeline._resize && (Timeline._resize(), App.renderAll()));
   },
@@ -1736,8 +1745,8 @@ const Pages = {
       // Переименовали видео, которое открыто в редакторе, – обновить ссылку в меню.
       if (State.project === id && State.manifest) {
         State.manifest.video.title = title;
-        const link = document.getElementById("menu-editing-link");
-        if (link) link.textContent = title;
+        State.manifest.video.group = group;
+        setEditingLink();
       }
     };
     saveButton.addEventListener("click", async () => {
