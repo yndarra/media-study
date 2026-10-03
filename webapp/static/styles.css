@@ -1868,7 +1868,7 @@ th.sortable:hover, th.sortable.sorted { color: var(--text); }
 
 /* Таблицы – единый стандарт везде (окна, настройки, статистика): текст 13 px,
    строка 20 px, одинаковые отступы сверху и снизу (строка ровно посередине
-   между разделителями), разделитель и под последней строкой. */
+   между разделителями), под последней строкой разделителя нет (см. ниже). */
 table.stats td, table.stats th { font-size: 13px; line-height: 20px; padding: 6px 12px 6px 0; vertical-align: middle;
   border-bottom: 1px solid #26262d; }
 table.stats td:last-child, table.stats th:last-child { padding-right: 0; }
@@ -1932,3 +1932,13 @@ table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
 
 /* Говорящие на карточках: включено – голубая, как связанные границы. */
 #speakers-btn.on { color: #79b8ff; }
+
+/* Переключатель Видео/Аудио – той же формы, что вкладки статистики
+   (.seg-switch: отступы, высота, шрифт, скругления), только на всю ширину
+   меню и со своими цветами: переливающаяся заливка и цветная обводка. */
+.mode-switch.seg-switch { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; gap: 2px; border-radius: 9px; background: #141418; }
+.mode-switch.seg-switch button { display: block; height: 28px; padding: 0 14px 1px; border-radius: 6px; font-size: 13px; line-height: normal; }
+.mode-switch.seg-switch button.active { color: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+
+/* Таблицы: под последней строкой разделителя нет. */
+table.stats tr:last-child > td, table.stats tr:last-child > th { border-bottom: none; }
