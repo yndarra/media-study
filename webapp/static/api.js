@@ -71,6 +71,17 @@ const Api = {
     return this.json(`/api/p/${encodeURIComponent(id)}/disk`);
   },
 
+  // Хранилища видео (настройки) и перенос видео между ними.
+  storages() {
+    return this.json("/api/storages");
+  },
+
+  moveProject(id, dest) {
+    return this.json(`/api/p/${encodeURIComponent(id)}/move`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dest }),
+    });
+  },
+
   download(url) {
     return this.json("/api/download", {
       method: "POST",

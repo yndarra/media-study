@@ -229,8 +229,10 @@ def project_stats(project_id: str):
         summary["to_translate"] = None  # Anki закрыт — неизвестно
     summary["id"] = project_id
     _card_states(summary, _anki_flag_counts(), {a["id"] for a in _translation_activity() if a.get("id")})
+    from . import storage
+
     return {"summary": summary, "stats": library.stats(p.dir), "disk": library.disk_usage(p.dir),
-            "deck_sync": _deck_sync_state()}
+            "deck_sync": _deck_sync_state(), "storage": _storage_info(project_id)}
 
 
 @app.get("/api/p/{project_id}/disk")
@@ -239,7 +241,78 @@ def project_disk(project_id: str):
     project_dir = DATA_DIR / project_id
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail="видео не найдено")
-    return library.disk_usage(project_dir)
+    return {**library.disk_usage(project_dir), "storage": _storage_info(project_id)}
+
+
+def _storage_info(project_id: str) -> dict:
+    """Где лежит видео, куда его можно перенести и как идёт перенос."""
+    from . import storage
+
+    here = storage.location(DATA_DIR, project_id)
+    move = storage.MOVES.get(project_id)
+    return {
+        "here": here,
+        "targets": [s for s in storage.storages(DATA_DIR)
+                    if s["online"] and os.path.normcase(s["path"]) != os.path.normcase(here["path"])],
+        "move": move and {k: move[k] for k in ("done", "total", "dest", "error", "finished")},
+    }
+
+
+@app.get("/api/storages")
+def list_storages():
+    """Хранилища (настройки): путь, диск, свободно / всего, сколько видео и места занимают."""
+    from . import storage
+
+    result = storage.storages(DATA_DIR)
+    for s in result:
+        s["videos"], s["used"] = 0, 0
+    for link in DATA_DIR.iterdir():
+        if not link.is_dir() or not any((link / m).exists() for m in ("manifest.json", "video_info.json", "phase1_status.json")):
+            continue
+        here = storage.location(DATA_DIR, link.name)
+        for s in result:
+            if os.path.normcase(s["path"]) == os.path.normcase(here["path"]):
+                s["videos"] += 1
+                s["used"] += _disk_total(link.name)
+    return result
+
+
+class MoveRequest(BaseModel):
+    dest: str
+
+
+@app.post("/api/p/{project_id}/move")
+def move_project(project_id: str, body: MoveRequest):
+    """
+    Перенести видео в другое хранилище (копия -> ссылка -> удаление старого).
+    Нельзя, пока над видео идёт процесс: обработка, передача в Anki, перевод.
+    """
+    from . import storage
+
+    project_dir = DATA_DIR / project_id
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail="видео не найдено")
+    known = [s["path"] for s in storage.storages(DATA_DIR)]
+    if not any(os.path.normcase(body.dest) == os.path.normcase(p) for p in known):
+        raise HTTPException(status_code=400, detail="такого хранилища нет в настройках")
+    item = library.summary(project_dir)
+    busy = item["state"] == "processing" or (item["state"] == "ready" and _stage3_status(project(project_id), fresh=True)["notes_left"]) \
+        or project_id in {a["id"] for a in _translation_activity() if a.get("id")}
+    if busy:
+        raise HTTPException(status_code=409, detail="Над видео идёт процесс – перенести можно после него")
+    # Свободного места должно хватить (с запасом 1 ГБ).
+    need = _disk_total(project_id)
+    dest = next(s for s in storage.storages(DATA_DIR) if os.path.normcase(s["path"]) == os.path.normcase(body.dest))
+    if dest.get("free", 0) < need + 2**30:
+        raise HTTPException(status_code=400, detail="На диске не хватит места")
+    # Закрыть копию видео в редакторе этого сервера нельзя – её держит браузер;
+    # если файлы заняты, перенос сам сообщит об этом.
+    try:
+        storage.start_move(DATA_DIR, project_id, body.dest)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    _disk_cache.pop(project_id, None)
+    return {"ok": True}
 
 
 class ProjectSettingsRequest(BaseModel):
@@ -285,7 +358,9 @@ def _worker_env() -> dict:
 
 def _spawn_phase1(project_dir: Path, args: list[str]) -> None:
     """Этап 1 в фоне; вывод — в data/<id>/phase1.log, ход — в phase1_status.json."""
-    project_dir.mkdir(parents=True, exist_ok=True)
+    from . import storage
+
+    storage.new_project_dir(DATA_DIR, project_dir.name)
     log = open(project_dir / "phase1.log", "a", encoding="utf-8")
     process = subprocess.Popen(
         [sys.executable, "-u", "-m", "phase1_ingest.cli", *args, "--project-dir", str(project_dir)],
@@ -371,8 +446,9 @@ async def import_file(request: Request, name: str):
 
     size = int(request.headers.get("content-length") or 0)
     project_id = slug_for_file(name, size)
-    project_dir = DATA_DIR / project_id
-    project_dir.mkdir(parents=True, exist_ok=True)
+    from . import storage
+
+    project_dir = storage.new_project_dir(DATA_DIR, project_id)
     incoming = project_dir / f"incoming{Path(name).suffix.lower()}"
     with open(incoming, "wb") as out:
         async for chunk in request.stream():
@@ -550,6 +626,20 @@ def update_settings(body: dict):
         for name, value in wanted:
             if value and known and value not in known:
                 raise HTTPException(status_code=400, detail=f"модели {name} «{value}» нет на OpenRouter")
+    if "storages" in body:
+        paths = []
+        for raw in body.get("storages") or []:
+            path = str(raw).strip().rstrip("\\/")
+            if not path:
+                continue
+            if not os.path.isabs(path) or not Path(os.path.splitdrive(path)[0] + "\\").exists():
+                raise HTTPException(status_code=400, detail=f"Хранилище «{path}»: диск не найден")
+            if os.path.normcase(os.path.abspath(path)) == os.path.normcase(str(DATA_DIR.resolve())):
+                continue
+            Path(path).mkdir(parents=True, exist_ok=True)
+            if path not in paths:
+                paths.append(path)
+        body["storages"] = paths
     key = (body.pop("openrouter_key", None) or "").strip()
     if key and key != _openrouter_key():
         path = DATA_DIR / OPENROUTER_KEY_FILE
@@ -588,6 +678,11 @@ def activity():
                     "percent": round(100 * done / total, 1) if total else None, "eta_seconds": None,
                 })
     items += _translation_activity()
+    from . import storage
+
+    for move in storage.activity():
+        move["title"] = library.title_of(DATA_DIR / move["id"])
+        items.append(move)
     return items
 
 
@@ -843,6 +938,9 @@ def anki_overview():
         item["disk_total"] = _disk_total(item["id"])
         _card_states(item, flags, translating)
         result.append(item)
+    from . import storage
+
+    result += storage.offline_projects(DATA_DIR)
     return result
 
 

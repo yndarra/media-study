@@ -185,6 +185,10 @@ DEFAULT_APP_SETTINGS = {
     # и пониженный приоритет фоновых процессов (см. common/resources.py).
     "reserve_cpu_cores": 2,
     "low_priority": True,
+    # Дополнительные хранилища видео (папки на других дисках, см. storage.py)
+    # и куда класть новые видео ("" – в основное, data/).
+    "storages": [],
+    "new_video_storage": "",
     # Агент перевода (карточки с флагом "перевод"): модель OpenRouter и файл с ключом.
     "openrouter_model": "google/gemini-3.8-flash",
     # Модель агента поиска источников (с веб-поиском OpenRouter).

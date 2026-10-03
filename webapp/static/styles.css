@@ -1628,3 +1628,15 @@ a.card.started:hover { border-color: rgba(225, 225, 235, 0.16); }
 .batch-chip { height: 34px; padding: 0 10px 2px; border-radius: 5px; border: 1px solid #45454e; border-style: solid;
   background: #1f1f25; color: var(--text); font-size: 14px; }
 .batch-chip:hover { background: #26262d; border-color: #55555f; }
+
+/* Хранилища: строка "Хранится" в окнах видео и карточка в настройках. */
+.storage-cell { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.step-btn.small-btn { height: 26px; padding: 0 9px 1px; font-size: 12.5px; min-width: 0; }
+.modal table.storage-table { margin-top: 6px; }
+.modal .storage-row td { vertical-align: middle; }
+table.storages-table td { vertical-align: middle; }
+table.storages-table td:nth-child(2) { text-align: right; }
+table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: right; }
+.storages-add { margin-top: 12px; }
+/* Видео на отключённом диске. */
+.card.offline-card { opacity: 0.5; cursor: default; }

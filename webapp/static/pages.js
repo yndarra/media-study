@@ -799,6 +799,58 @@ function processingBar(v) {
   return segmentBar([{ n: v.percent, cls, title: `${Math.floor(v.percent)}%` }], 100, cap(v.status), null, `${Math.floor(v.percent)}%`);
 }
 
+// Строка "Хранится" в окнах видео: диск и кнопки "Перенести на …" (другие
+// подключённые хранилища из настроек). Пока идёт перенос – его ход.
+function storageCell(info) {
+  if (!info) return "";
+  const here = escapeHtml(info.here.label) + (info.here.main ? ' <span class="muted small">(основное)</span>' : "");
+  const m = info.move;
+  if (m && !m.finished) {
+    const pct = m.total ? Math.floor((100 * m.done) / m.total) : 0;
+    return `${here} <span class="muted small">→ ${escapeHtml(m.dest)}: ${pct}% – ${(m.done / 2 ** 30).toFixed(1)}/${(m.total / 2 ** 30).toFixed(1)} ГБ</span>`;
+  }
+  const error = m && m.error ? ` <span class="flagged-text small">${escapeHtml(m.error)}</span>` : "";
+  const buttons = (info.targets || []).map((t) =>
+    `<button class="step-btn small-btn storage-move" data-dest="${escapeHtml(t.path)}" title="Свободно ${formatSize(t.free)}">Перенести на ${escapeHtml(t.label)}</button>`).join("");
+  return `<span class="storage-cell">${here}${error}${buttons}</span>`;
+}
+
+// Подключить кнопки переноса в окне видео: нажали – перенос, строка обновляется до конца.
+function bindStorage(body, id, info) {
+  const row = body.querySelector(".storage-row td:last-child");
+  if (!row) return;
+  const draw = (i) => {
+    row.innerHTML = storageCell(i);
+    row.querySelectorAll(".storage-move").forEach((b) => b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await Api.moveProject(id, b.dataset.dest);
+      } catch (err) {
+        let message = err.message;
+        try {
+          message = JSON.parse(message).detail;
+        } catch (_) {}
+        draw({ ...i, move: { finished: true, error: cap(message) } });
+        return;
+      }
+      poll();
+    }));
+  };
+  const poll = async () => {
+    if (!body.isConnected) return;
+    let fresh;
+    try {
+      fresh = (await Api.projectDisk(id)).storage;
+    } catch (_) {
+      return;
+    }
+    draw(fresh);
+    if (fresh.move && !fresh.move.finished) setTimeout(poll, 1500);
+  };
+  draw(info);
+  if (info && info.move && !info.move.finished) poll();
+}
+
 // Строка "Потрачено": всего и по видам (OpenRouter).
 function spentLine(costs) {
   const c = costs || {};
@@ -988,7 +1040,9 @@ const Pages = {
       const first = !box.querySelector("a.card");
       renderSmooth(box, sortWithin(groupByAuthor(items, byPendingWork), byVideoWork).map(([group, list]) =>
         `<h2 class="group-title">${escapeHtml(group)}</h2><div class="cards">` + list.map((v) =>
-          `<a class="card${cardState(v)}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
+          v.state === "offline"
+            ? `<div class="card offline-card">${cardTitle(v)}<div class="muted small">Диск ${escapeHtml(v.storage)} не подключён</div></div>`
+            : `<a class="card${cardState(v)}" href="#/video/${encodeURIComponent(v.id)}">${cardTitle(v)}` +
           // Кнопка следующего шага – вместо строки "Место на диске".
           videoBars(v) + (cardAction(v) ? cardAction(v) + videoNotes(v, false) : videoNotes(v)) +
           "</a>").join("") + "</div>",
@@ -1298,6 +1352,7 @@ const Pages = {
           ${row("Всего", `<b>${formatSize(d.total)}</b>`)}
         </table>
       </div>
+      ${data.storage ? `<table class="stats storage-table"><tr class="storage-row"><td>Хранится</td><td></td></tr></table>` : ""}
       <div class="modal-actions">
         <a id="info-edit" class="step-btn${editZebra ? " primary" : ""} zebra-host" href="#/edit/${encodeURIComponent(v.id)}"
           ${editZebra ? `data-zebra="${editZebra}"` : ""}><canvas class="zebra"></canvas><span>Редактировать</span></a>
@@ -1309,6 +1364,7 @@ const Pages = {
       </div>`;
     autoGrow(body.querySelector("#title-input"));
     singleLine(body.querySelector("#group-input"));
+    bindStorage(body, id, data.storage);
     animateBars(body.querySelector(".modal-bars"));
     requestAnimationFrame(() => foldLongRows(body));
     const saveButton = body.querySelector("#info-save");
@@ -1515,6 +1571,7 @@ const Pages = {
       </div>
       ${disk ? `<h2>Место на диске</h2><table class="stats">
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
+        ${disk.storage ? '<tr class="storage-row"><td>Хранится</td><td></td></tr>' : ""}
       </table>` : ""}
       <div class="modal-actions">
         ${v.state === "processing" ? '<button class="step-btn process-cancel">Отменить</button>'
@@ -1525,6 +1582,7 @@ const Pages = {
       </div>`;
     body.querySelectorAll("textarea.grow:not(.fixed)").forEach(autoGrow);
     singleLine(body.querySelector("#group-input"));
+    if (disk) bindStorage(body, id, disk.storage);
     requestAnimationFrame(() => foldLongRows(body));
     // Градиент окна – по этапу, как у карточки в "Обработке" (рыжий – скачивание,
     // синий – шаг с процентом, жёлтый – сверка/поиск агентом/нарезка, зелёный – начало).
@@ -1786,7 +1844,7 @@ const Pages = {
     // Пока настройки грузятся, прошлое содержимое не показываем (иначе оно
     // мелькало и потом "появлялось" ещё раз – анимация как будто дважды).
     el.innerHTML = "";
-    const s = await Api.settings();
+    const [s, stores] = await Promise.all([Api.settings(), Api.storages().catch(() => [])]);
     const field = (id, label, control, hint) =>
       `<div class="field"><label class="field-label" for="${id}">${label}</label>${control}` +
       (hint ? `<div class="field-hint">${hint}</div>` : "") + "</div>";
@@ -1822,6 +1880,18 @@ const Pages = {
           <div class="field"><label class="check"><input id="set-priority" type="checkbox" ${s.low_priority !== false ? "checked" : ""}> Пониженный приоритет обработки</label></div>
         </section>
         <section class="set-card wide-card">
+          <h2>Хранилища видео</h2>
+          <table class="stats storages-table" id="storages-table"></table>
+          <input type="hidden" id="set-storages" value="${escapeHtml(JSON.stringify(s.storages || []))}">
+          <div class="field-row storages-add">
+            ${field("set-storage-new", "Добавить хранилище",
+              '<div class="author-row"><input id="set-storage-new" class="wide" placeholder="D:\\media-study" data-watch="no"><button id="set-storage-add" class="step-btn" disabled>Добавить</button></div>',
+              "Папка на другом диске (например, внешнем). Видео переносятся кнопкой «Перенести на …» в окне видео; в data/ остаётся ссылка")}
+            ${field("set-new-storage", "Новые видео сохранять", '<div class="picker-host" data-for="set-new-storage"></div>',
+              "Куда скачиваются и добавляются новые видео")}
+          </div>
+        </section>
+        <section class="set-card wide-card">
           <h2>Агенты (OpenRouter)</h2>
           ${field("set-key", "Ключ", `<div class="secret-row"><input id="set-key" class="wide" type="password" autocomplete="off" value="${escapeHtml(s.openrouter_key || "")}" placeholder="sk-or-…"><button id="set-key-eye" class="icon-btn" title="Показать / скрыть"><svg viewBox="0 0 20 20"><path d="M1.8 10s3-5.5 8.2-5.5S18.2 10 18.2 10s-3 5.5-8.2 5.5S1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6"/></svg></button></div>`,
             "Для перевода и поиска источников")}
@@ -1840,6 +1910,45 @@ const Pages = {
       </section>
       <div class="settings-actions"><span id="settings-note" class="muted small"></span><button id="settings-cancel" class="step-btn">Отменить</button><button id="settings-save" class="step-btn primary">Сохранить</button></div>`;
     const host = (id) => el.querySelector(`.picker-host[data-for="${id}"]`);
+    // Хранилища: основное (data/) и добавленные; список правится до "Сохранить"
+    // (скрытое поле set-storages – чтобы работали "Отменить" и вопрос при уходе).
+    const storesField = el.querySelector("#set-storages");
+    const listed = () => JSON.parse(storesField.value || "[]");
+    const drawStores = () => {
+      const extra = listed();
+      const main = stores.find((x) => x.main);
+      const rows = [main, ...extra.map((path) => stores.find((x) => !x.main && x.path.toLowerCase() === path.toLowerCase()) || { path, label: path.slice(0, 2), online: true, fresh: true })]
+        .filter(Boolean).map((x) => `<tr><td>${escapeHtml(x.label)}${x.main ? ' <span class="muted small">(основное)</span>' : ""}<div class="muted small">${escapeHtml(x.path)}</div></td>` +
+          `<td>${!x.online ? '<span class="flagged-text">Не подключён</span>' : x.fresh ? '<span class="muted">После сохранения</span>'
+            : `Свободно ${formatSize(x.free)} из ${formatSize(x.total)}<div class="muted small">Видео: ${x.videos || 0}${x.videos ? `, ${formatSize(x.used)}` : ""}</div>`}</td>` +
+          `<td>${x.main ? "" : `<button class="step-btn storage-remove" data-path="${escapeHtml(x.path)}" title="${x.videos ? "Сначала перенесите видео с этого диска" : "Убрать из списка (файлы не удаляются)"}"${x.videos ? " disabled" : ""}>Убрать</button>`}</td></tr>`).join("");
+      el.querySelector("#storages-table").innerHTML = rows;
+      el.querySelectorAll(".storage-remove").forEach((b) => b.addEventListener("click", () => {
+        setStores(listed().filter((p) => p !== b.dataset.path));
+      }));
+    };
+    const setStores = (list) => {
+      storesField.value = JSON.stringify(list);
+      storesField.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    // И после "Отменить" (поле восстанавливается и шлёт input) – таблица и список заново.
+    storesField.addEventListener("input", () => {
+      drawStores();
+      newStorePicker.setOptions(storeOptions());
+    });
+    const storeOptions = () => [{ value: "", label: `${(stores.find((x) => x.main) || {}).label || "Основное"} (основное)` },
+      ...listed().map((p) => ({ value: p, label: `${(stores.find((x) => x.path.toLowerCase() === p.toLowerCase()) || { label: p.slice(0, 2) }).label} – ${p}` }))];
+    const newStorePicker = Picker.create(host("set-new-storage"), { id: "set-new-storage", value: s.new_video_storage || "", options: storeOptions() });
+    drawStores();
+    const newInput = el.querySelector("#set-storage-new");
+    const addButton = el.querySelector("#set-storage-add");
+    newInput.addEventListener("input", () => (addButton.disabled = !newInput.value.trim()));
+    addButton.addEventListener("click", () => {
+      const path = newInput.value.trim().replace(/[\\/]+$/, "");
+      if (path && !listed().some((p) => p.toLowerCase() === path.toLowerCase())) setStores([...listed(), path]);
+      newInput.value = "";
+      addButton.disabled = true;
+    });
     Picker.create(host("set-quality"), {
       id: "set-quality",
       value: String(Number(s.download_max_height) || 0),
@@ -1897,6 +2006,8 @@ const Pages = {
         search_model: document.getElementById("set-search-model").value.trim(),
         reserve_cpu_cores: Math.max(0, Number(document.getElementById("set-reserve").value) || 0),
         low_priority: document.getElementById("set-priority").checked,
+        storages: JSON.parse(document.getElementById("set-storages").value || "[]"),
+        new_video_storage: document.getElementById("set-new-storage").value,
         });
       } catch (err) {
         let message = err.message;
