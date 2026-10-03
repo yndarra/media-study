@@ -202,6 +202,11 @@ DEFAULT_APP_SETTINGS = {
     "default_link_video": False,
     # Распознавание речи: "whisper" (локально) или "elevenlabs" (Scribe по API,
     # см. phase1_ingest/transcribe_elevenlabs.py); ключ – data/elevenlabs_key.txt.
+    # Цвета на карточках Anki (см. phase3_export/anki.py, decorate).
+    "anki_color_en": "#c9b6ff",
+    "anki_color_ru": "#f6edcf",
+    "anki_color_dash": "#7d7d88",
+    "anki_color_who": "#8a8a95",
     "asr_engine": "whisper",
     "elevenlabs_model": "scribe_v2",
     "elevenlabs_language": "en",  # пусто – язык определяется сам

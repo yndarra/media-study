@@ -1855,3 +1855,22 @@ th.sortable:hover, th.sortable.sorted { color: var(--text); }
 /* Ссылка на открытое в редакторе: автор над названием. */
 #menu-editing-link { display: flex; flex-direction: column; gap: 1px; }
 .editing-group { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Настройки: цвета на карточках Anki. */
+.color-row { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 6px; }
+.color-pick { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); cursor: pointer; }
+.color-pick input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid #45454e; border-radius: 6px; background: none; cursor: pointer; }
+.color-pick input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+.color-pick input[type=color]::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+/* Сообщения редактора – под блоком фраз, по центру, в несколько строк. */
+#text-panel .toast { align-self: center; max-width: min(900px, 100%); margin-top: 6px; padding: 6px 12px; border-radius: 8px;
+  background: rgba(248, 81, 73, 0.08); border: 1px solid rgba(248, 81, 73, 0.25); color: #ffb3b3; font-size: 13px;
+  line-height: 1.45; text-align: center; white-space: pre-wrap; word-break: break-word; animation: fade-in 0.25s ease-out; }
+/* Переключатель режима: текст ровно по центру кнопки (по вертикали). Перелив –
+   в другую сторону и шире: узор в 3 ширины кнопки (цвет1 → цвет2 → цвет1),
+   за цикл сдвигается ровно на свой период – стык не виден. */
+.mode-switch button { display: flex; align-items: center; justify-content: center; line-height: 1; padding: 0 0 2px; }
+.mode-switch.video button.active, .mode-switch.audio button.active {
+  background-size: 300% 100%; animation: mode-flow-back 7s linear infinite; }
+@keyframes mode-flow-back { from { background-position: 150% 0; } to { background-position: 0% 0; } }

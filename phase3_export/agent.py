@@ -96,8 +96,10 @@ def extract_comments(field_html: str) -> tuple[str, list[str]]:
 
 
 def front_text(front_html: str) -> str:
-    """Английский текст лица карточки (без клипа)."""
-    without_sound = re.sub(r"\[sound:[^\]]+\]", "", front_html)
+    """Английский текст лица карточки (без клипа, цветов и строки говорящих)."""
+    from . import anki
+
+    without_sound = re.sub(r"\[sound:[^\]]+\]", "", anki.unmark(front_html)[0])
     lines = [_plain(p) for p in _SEGMENT_SPLIT.split(without_sound) if not _SEGMENT_SPLIT.fullmatch(p or "")]
     return "\n".join(line for line in lines if line)
 
@@ -309,6 +311,7 @@ def apply(data_dir: Path, approve: list[int], reject: list[int], edits: dict | N
         # Этап 4 (перевод) — вся карточка: длинное тире "—" -> короткое "–" (и лицо, и оборот).
         anki.invoke("updateNoteFields", note={"id": p["note_id"], "fields": {
             anki.FRONT_FIELD: normalize_dashes(p["front_new"]), anki.BACK_FIELD: normalize_dashes(p["back_new"])}})
+        anki.recolor_notes([p["note_id"]])  # цвета и строка говорящих – по новому обороту
         anki.invoke("addTags", notes=[p["note_id"]], tags=AGENT_TAG)
         if p.get("flag"):  # перевод по флагу: зелёный снимается, красный -> оранжевый
             new_flag = 2 if p["flag"] == 1 else 0

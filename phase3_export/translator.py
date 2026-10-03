@@ -448,6 +448,7 @@ def apply_direct(project_dir: Path, proposals: list[dict], cards: list[dict]) ->
         if card["note_id"]:
             anki.invoke("updateNoteFields", note={"id": card["note_id"], "fields": {
                 anki.FRONT_FIELD: normalize_dashes(card["front_old"]), anki.BACK_FIELD: normalize_dashes(p["back_new"])}})
+            anki.recolor_notes([card["note_id"]])  # цвета и строка говорящих – по новому обороту
             anki.invoke("addTags", notes=[card["note_id"]], tags=TRANSLATED_TAG)
     store_translations(project_dir, stored)
     return len(stored)

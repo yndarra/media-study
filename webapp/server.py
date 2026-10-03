@@ -814,6 +814,35 @@ def update_settings(body: dict):
     return {**saved, "openrouter_key": _openrouter_key(), "elevenlabs_key": elevenlabs_key(DATA_DIR), "deck_sync": _deck_sync_state()}
 
 
+# Перекраска готовых карточек (кнопка в настройках) – в фоне, ход в "Сейчас идёт".
+_recolor: dict = {"running": False, "done": 0, "total": 0, "changed": 0, "error": ""}
+
+
+@app.post("/api/anki/recolor")
+def anki_recolor():
+    from phase3_export import anki
+
+    if _recolor["running"]:
+        raise HTTPException(status_code=409, detail="Перекраска уже идёт")
+
+    def run():
+        _recolor.update(running=True, done=0, total=0, changed=0, error="")
+        try:
+            _recolor["changed"] = anki.recolor_all(progress=lambda done, total: _recolor.update(done=done, total=total))
+        except Exception as error:  # Anki закрыт и т.п.
+            _recolor["error"] = str(error)[:300]
+        finally:
+            _recolor["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": True}
+
+
+@app.get("/api/anki/recolor")
+def anki_recolor_state():
+    return _recolor
+
+
 class ElevenLabsCheck(BaseModel):
     key: str | None = None  # не задан – сохранённый
     proxy: str | None = None
@@ -882,6 +911,11 @@ def activity():
                     "percent": round(100 * done / total, 1) if total else None, "eta_seconds": None,
                 })
     items += _translation_activity()
+    if _recolor["running"]:
+        total = _recolor["total"] or 0
+        items.append({"kind": "anki", "id": None, "title": "Карточки Anki", "label": "Перекраска",
+                      "detail": f"{_recolor['done']}/{total}" if total else "",
+                      "percent": round(100 * _recolor["done"] / total, 1) if total else None, "eta_seconds": None})
     from . import storage
 
     for move in storage.activity():
@@ -1465,8 +1499,7 @@ def _pull_texts_from_anki(project_id: str, fragment_ids: list[str]) -> int:
         if not note or fragment is None:
             continue
         front = note["fields"][anki.FRONT_FIELD]["value"]
-        card = html.unescape(re.sub(r"\[sound:[^\]]*\]", "", front).replace("<br>", "\n"))
-        card = re.sub(r"<[^>]+>", "", card).strip()
+        card = anki.plain_front(front)
         expected = anki.card_content(fragment.text, known)[0]
         if not card or card.strip() == expected.strip():
             continue

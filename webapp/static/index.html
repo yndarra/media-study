@@ -89,7 +89,6 @@
         <button id="review-badge" class="badge review hidden" title="Текст проверен — снять пометку">Проверить текст</button>
       </div>
       <div class="group right">
-        <span id="toast" class="toast hidden"></span>
         <!-- Скорость воспроизведения (общая для всех видео): −0.1× / 1× / +0.1× -->
         <button id="speed-down" class="icon-btn speed-btn" title="Медленнее (до 0.5×)">−</button>
         <button id="speed-value" class="speed-value" title="Скорость воспроизведения — клик: вернуть 1×">1.0×</button>
@@ -167,6 +166,8 @@
         <div id="next-text" class="ctx dim"></div>
       </div>
       <!-- После объединения: на стыке ". Заглавная" – склеить в одну фразу. -->
+      <!-- Сообщения редактора (ошибки, "передано в Anki" и т.п.) – под фразами, во всю ширину. -->
+      <div id="toast" class="toast hidden"></div>
       <div id="junction-row" class="hidden"><button id="junction-join" class="step-btn small-btn">Склеить в одну фразу</button></div>
     </div>
 

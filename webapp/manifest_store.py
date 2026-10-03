@@ -603,6 +603,9 @@ class ManifestStore:
             source_segment_ids=[*first.source_segment_ids, *second.source_segment_ids],
             merged_from=[first.id, second.id],
             junction=original_junction if first.original_text and second.original_text else None,
+            # Между частями – удалённый фрагмент или зазор: он входит в отрезок
+            # (без разрыва), но подсвечивается на дорожке.
+            merged_gap=[first.algo_end_frame, second.algo_start_frame] if second.algo_start_frame > first.algo_end_frame else None,
             context_custom=first.context_custom or second.context_custom,
             heard_ranges=heard,
         )

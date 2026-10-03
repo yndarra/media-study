@@ -114,6 +114,9 @@ const Timeline = {
     band(x(Math.max(start, origStart)), x(Math.min(last, origLast)), "#213650");
     if (start !== origStart) band(x(Math.min(start, origStart)), x(Math.max(start, origStart)), "#46321c");
     if (last !== origLast) band(x(Math.min(last, origLast)), x(Math.max(last, origLast)), "#46321c");
+    // Объединение через удалённый фрагмент (или зазор): эти кадры вошли в
+    // отрезок, чтобы не было разрыва, – подсвечены жёлтым.
+    if (f.merged_gap) band(x(f.merged_gap[0]), x(f.merged_gap[1] - 1), "#5a4a14");
 
     this._drawWaveform(f, sx, ex);
     const endMarkX = ex;

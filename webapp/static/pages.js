@@ -2463,6 +2463,16 @@ const Pages = {
             "Карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются")}
           ${field("set-deck-audio", "Колода для аудио", `<input id="set-deck-audio" class="wide" value="${escapeHtml(s.anki_deck_root_audio || "")}">`,
             "Песни и другие аудио: &lt;колода&gt;::&lt;исполнитель&gt;::&lt;название&gt;")}
+          <div class="field"><div class="field-label">Цвета на карточках</div>
+            <div class="color-row">
+              <label class="color-pick"><input type="color" id="set-color-en" value="${escapeHtml(s.anki_color_en || "#c9b6ff")}"> Английский</label>
+              <label class="color-pick"><input type="color" id="set-color-ru" value="${escapeHtml(s.anki_color_ru || "#f6edcf")}"> Русский</label>
+              <label class="color-pick"><input type="color" id="set-color-dash" value="${escapeHtml(s.anki_color_dash || "#7d7d88")}"> Тире</label>
+              <label class="color-pick"><input type="color" id="set-color-who" value="${escapeHtml(s.anki_color_who || "#8a8a95")}"> Говорящие</label>
+            </div>
+            <div class="field-hint">Новые карточки – сразу в этих цветах; уже готовые – кнопкой ниже (после «Сохранить»)</div>
+            <div class="el-check-row"><button id="set-recolor" class="step-btn">Перекрасить готовые карточки</button><span id="set-recolor-note" class="muted small"></span></div>
+          </div>
           <div id="deck-sync" class="small"></div>
         </section>
         <section class="set-card">
@@ -2592,6 +2602,32 @@ const Pages = {
       newInput.value = "";
       addButton.disabled = true;
     });
+    // Перекраска готовых карточек приложения в сохранённые цвета (в фоне).
+    el.querySelector("#set-recolor").addEventListener("click", async (e) => {
+      const button = e.currentTarget;
+      const note = el.querySelector("#set-recolor-note");
+      if (watcher.isDirty()) {
+        note.textContent = "Сначала сохраните настройки";
+        return;
+      }
+      button.disabled = true;
+      try {
+        await Api.json("/api/anki/recolor", { method: "POST" });
+      } catch (err) {
+        note.textContent = err.message;
+        button.disabled = false;
+        return;
+      }
+      const poll = async () => {
+        if (!button.isConnected) return;
+        const st = await Api.json("/api/anki/recolor");
+        note.textContent = st.running ? `Перекрашиваю: ${st.done}/${st.total || "?"}`
+          : st.error ? `Не получилось: ${st.error}` : `Готово: изменено ${st.changed} карточек`;
+        if (st.running) setTimeout(poll, 1000);
+        else button.disabled = false;
+      };
+      poll();
+    });
     Picker.create(host("set-asr"), {
       id: "set-asr",
       value: s.asr_engine || "whisper",
@@ -2667,6 +2703,10 @@ const Pages = {
         saved = await Api.saveSettings({
         anki_deck_root: document.getElementById("set-deck").value.trim(),
         anki_deck_root_audio: document.getElementById("set-deck-audio").value.trim(),
+        anki_color_en: document.getElementById("set-color-en").value,
+        anki_color_ru: document.getElementById("set-color-ru").value,
+        anki_color_dash: document.getElementById("set-color-dash").value,
+        anki_color_who: document.getElementById("set-color-who").value,
         new_audio_storage: document.getElementById("set-new-audio-storage").value,
         context_padding_seconds: Number(document.getElementById("set-padding").value),
         download_max_height: Number(document.getElementById("set-quality").value),

@@ -133,7 +133,7 @@ def add_clip_note(deck: str, clip_path, media_name: str, text: str, project: str
         note={
             "deckName": deck,
             "modelName": MODEL_NAME,
-            "fields": {FRONT_FIELD: front_html(media_name, text, with_clip=not unvoiced), BACK_FIELD: back},
+            "fields": dict(zip((FRONT_FIELD, BACK_FIELD), decorate(front_html(media_name, text, with_clip=not unvoiced), back, speakers))),
             "tags": note_tags(project, fragment_id, speakers, **flags) + list(extra_tags or []),
             "options": {"allowDuplicate": False},
         },
@@ -159,13 +159,14 @@ def flagged_notes() -> list[dict]:
             project, fragment_id = parse_tags(note.get("tags", []))
             front = card["fields"].get(FRONT_FIELD, {}).get("value", "")
             # Клип с лица могли удалить (реплика без озвучки) — это не ошибка.
-            match = re.match(r"\s*(\[sound:[^\]]*\])(?:<br>)?", front)
-            sound, text = (match.group(1), front[match.end():]) if match else ("", front)
+            match = re.search(r"\[sound:[^\]]*\]", front)
+            sound = match.group(0) if match else ""
+            text = plain_front(front)
             result.append({
                 "project": project,
                 "fragment_id": fragment_id,
                 "clip": sound.removeprefix("[sound:").removesuffix("]"),
-                "text": html.unescape(text.replace("<br>", "\n")),
+                "text": text,
                 "deck": card.get("deckName", ""),
                 "flag": flag,
                 "card_id": card["cardId"],
@@ -185,6 +186,7 @@ def update_clip_note(note_id: int, clip_path, media_name: str, text: str,
     if not unvoiced:
         invoke("storeMediaFile", filename=media_name, path=str(clip_path), deleteExisting=True)
     invoke("updateNoteFields", note={"id": note_id, "fields": {FRONT_FIELD: front_html(media_name, text, with_clip=not unvoiced)}})
+    recolor_notes([note_id], speakers={note_id: speakers})
     if project and fragment_id:
         invoke("updateNoteTags", note=note_id, tags=note_tags(project, fragment_id, speakers, **flags))
     # Обрезка/текст поправлены: оранжевый флаг снимается, красный ("и
@@ -406,3 +408,153 @@ def resequence(note_ids: list[int], dry_run: bool = False) -> int:
             for card_id, due in updates[chunk_start: chunk_start + 200]
         ])
     return len(updates)
+
+
+# -- цвета на карточках -----------------------------------------------------------
+#
+# Тип заметок "1.0 Левобережье" общий со всеми карточками пользователя – его
+# стиль не трогаем; цвета ставятся прямо в поля карточек приложения
+# (встроенный стиль у span с классом ms-…, по классу их потом находят и
+# перекрашивают). Английское – светло-фиолетовое, русское (перевод, значения
+# слов, пояснения – даже с английскими словами внутри) – бело-жёлтое, тире в
+# разборе слов – серее, после всего содержимого карточки – говорящие серым
+# (div.ms-who): в конце оборота, если перевод есть, иначе в конце лица
+# (пустой оборот = "не переведено" для проверок перевода). Цвета – в
+# настройках приложения (anki_color_*), "Перекрасить готовые" – recolor_all.
+
+COLOR_DEFAULTS = {"en": "#c9b6ff", "ru": "#f6edcf", "dash": "#7d7d88", "who": "#8a8a95"}
+# Служебные метки – не имена говорящих (говорящие хранятся метками, см. speaker_tag).
+SERVICE_TAGS = {TAG_NO_TEXT, TAG_NO_SPEAKER, "агент_перевод", "leech", "marked"}
+
+_MARK_SPAN = re.compile(r'<span class="ms-(?:en|ru|dash)"[^>]*>(.*?)</span>', re.S)
+_WHO_DIV = re.compile(r'(?:<br\s*/?>\s*)?<div class="ms-who"[^>]*>(.*?)</div>', re.S)
+_BREAKS = re.compile(r"(<br\s*/?>|</?ul>|</?li>|</?div[^>]*>)", re.I)
+
+
+def card_colors() -> dict:
+    """Цвета из настроек приложения (data/settings.json), по умолчанию – COLOR_DEFAULTS."""
+    try:
+        from pathlib import Path
+
+        from webapp.library import app_settings
+
+        settings = app_settings(Path(os.environ.get("MEDIA_STUDY_DATA_DIR", "data")))
+        return {k: (settings.get(f"anki_color_{k}") or v) for k, v in COLOR_DEFAULTS.items()}
+    except Exception:
+        return dict(COLOR_DEFAULTS)
+
+
+def _plain(fragment: str) -> str:
+    return html.unescape(re.sub(r"<[^>]+>", "", fragment or "")).strip()
+
+
+def unmark(field: str) -> tuple[str, str]:
+    """Поле без разметки цветов и без строки говорящих; (поле, говорящие из неё)."""
+    who = ""
+    match = _WHO_DIV.search(field or "")
+    if match:
+        who = _plain(match.group(1))
+    field = _WHO_DIV.sub("", field or "")
+    while True:
+        cleaned = _MARK_SPAN.sub(r"\1", field)
+        if cleaned == field:
+            return field, who
+        field = cleaned
+
+
+def plain_front(front: str) -> str:
+    """Текст лица карточки (без клипа, цветов и строки говорящих), строками."""
+    field, _ = unmark(front)
+    field = re.sub(r"\[sound:[^\]]*\]", "", field)
+    parts = [_plain(p) for p in _BREAKS.split(field) if not _BREAKS.fullmatch(p or "")]
+    return "\n".join(p for p in parts if p)
+
+
+def _span(kind: str, color: str, inner: str) -> str:
+    return f'<span class="ms-{kind}" style="color:{color}">{inner}</span>'
+
+
+def _paint_front(front: str, c: dict) -> str:
+    parts = _BREAKS.split(front)
+    out = []
+    for part in parts:
+        if _BREAKS.fullmatch(part or "") or not _plain(re.sub(r"\[sound:[^\]]*\]", "", part)):
+            out.append(part)
+            continue
+        sound = re.match(r"\s*(\[sound:[^\]]*\])", part)
+        if sound:
+            out.append(sound.group(1) + _span("en", c["en"], part[sound.end():]))
+        else:
+            out.append(_span("en", c["en"], part))
+    return "".join(out)
+
+
+def _paint_back(back: str, c: dict) -> str:
+    out = []
+    for part in _BREAKS.split(back):
+        if _BREAKS.fullmatch(part or "") or not _plain(part):
+            out.append(part)
+            continue
+        # Разбор слова: "<i>phrase</i> – значение".
+        term = re.match(r"^(\s*<i>.*?</i>)\s*[–-]\s*(.*)$", part, re.S)
+        if term:
+            out.append(_span("en", c["en"], term.group(1)) + " " + _span("dash", c["dash"], "–") + " " + _span("ru", c["ru"], term.group(2)))
+        else:
+            out.append(_span("ru", c["ru"], part))
+    return "".join(out)
+
+
+def speakers_from_tags(tags: list[str]) -> list[str]:
+    return [t.replace("_", " ") for t in tags
+            if t not in SERVICE_TAGS and not t.lower().startswith(TAG) and "::" not in t]
+
+
+def decorate(front: str, back: str, speakers: list[str] | None = None, colors: dict | None = None) -> tuple[str, str]:
+    """Поля карточки в цветах + строка говорящих в конце (см. выше)."""
+    c = colors or card_colors()
+    front, who_front = unmark(front)
+    back, who_back = unmark(back)
+    names = ", ".join(speakers) if speakers is not None else (who_back or who_front)
+    has_back = bool(_plain(back))
+    front = _paint_front(front, c)
+    if has_back:
+        back = _paint_back(back, c)
+    if names:
+        div = f'<div class="ms-who" style="color:{c["who"]}">{html.escape(names, quote=False)}</div>'
+        if has_back:
+            back += div
+        else:
+            front += div
+    return front, back
+
+
+def recolor_notes(note_ids: list[int], speakers: dict | None = None, colors: dict | None = None, progress=None) -> int:
+    """
+    Перекрасить карточки приложения (и поставить строку говорящих). speakers –
+    {id заметки: [имена]} (иначе – из прежней строки или из меток).
+    Возвращает, сколько заметок изменено.
+    """
+    c = colors or card_colors()
+    changed = 0
+    ids = list(note_ids)
+    for start in range(0, len(ids), 100):
+        for note in invoke("notesInfo", notes=ids[start:start + 100]):
+            if TAG not in [t.lower() for t in note.get("tags", [])]:
+                continue  # только карточки приложения
+            front = note["fields"].get(FRONT_FIELD, {}).get("value", "")
+            back = note["fields"].get(BACK_FIELD, {}).get("value", "")
+            names = (speakers or {}).get(note["noteId"])
+            if names is None and not (unmark(front)[1] or unmark(back)[1]):
+                names = speakers_from_tags(note.get("tags", []))
+            new_front, new_back = decorate(front, back, names, c)
+            if (new_front, new_back) != (front, back):
+                invoke("updateNoteFields", note={"id": note["noteId"], "fields": {FRONT_FIELD: new_front, BACK_FIELD: new_back}})
+                changed += 1
+        if progress:
+            progress(min(len(ids), start + 100), len(ids))
+    return changed
+
+
+def recolor_all(progress=None) -> int:
+    """Все карточки приложения – в текущие цвета (кнопка в настройках)."""
+    return recolor_notes(invoke("findNotes", query=f"tag:{TAG}"), progress=progress)
