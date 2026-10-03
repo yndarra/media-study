@@ -1895,3 +1895,23 @@ table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
 .wh-row { display: flex; gap: 8px; align-items: center; }
 .wh-row .picker-host { flex: 1; min-width: 0; }
 .wh-row .step-btn { flex: none; }
+
+/* Настройки: блок цветов карточек – квадратные образцы цвета (общие правила
+   для input иначе сжимали их в тонкие полоски). Пустой блок рядом – просто
+   место под будущие настройки. */
+.set-card .color-row { gap: 10px 22px; margin: 0 0 8px; }
+.set-card .color-pick input[type=color] { width: 28px; min-width: 28px; height: 28px; flex: none; padding: 0; }
+.set-card .color-pick input[type=color]::-webkit-color-swatch-wrapper { padding: 3px; }
+.set-card.empty-card { min-height: 120px; }
+/* Чекбоксы в настройках – одинаково: отступ поля, пояснение строкой ниже. */
+.set-card .field label.check { margin: 0; }
+.set-card .field label.check + label.check { margin-top: 8px; }
+.set-card .field .field-label + label.check { margin-top: 2px; }
+.set-card .field label.check + .field-hint { margin-top: 4px; padding-left: 24px; }
+
+/* Образец цвета – свой квадрат с заливкой; системный выбор цвета – прозрачный
+   input поверх него (родной квадрат браузера в тёмной теме не закрашивался). */
+.color-pick .swatch { position: relative; width: 26px; height: 26px; flex: none; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
+.color-pick .swatch input[type=color] { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0;
+  opacity: 0; cursor: pointer; border: none; padding: 0; }

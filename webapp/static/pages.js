@@ -2490,16 +2490,6 @@ const Pages = {
             "Карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются")}
           ${field("set-deck-audio", "Колода для аудио", `<input id="set-deck-audio" class="wide" value="${escapeHtml(s.anki_deck_root_audio || "")}">`,
             "Песни и другие аудио: &lt;колода&gt;::&lt;исполнитель&gt;::&lt;название&gt;")}
-          <div class="field"><div class="field-label">Цвета на карточках</div>
-            <div class="color-row">
-              <label class="color-pick"><input type="color" id="set-color-en" value="${escapeHtml(s.anki_color_en || "#c9b6ff")}"> Английский</label>
-              <label class="color-pick"><input type="color" id="set-color-ru" value="${escapeHtml(s.anki_color_ru || "#f6edcf")}"> Русский</label>
-              <label class="color-pick"><input type="color" id="set-color-dash" value="${escapeHtml(s.anki_color_dash || "#7d7d88")}"> Тире</label>
-              <label class="color-pick"><input type="color" id="set-color-who" value="${escapeHtml(s.anki_color_who || "#8a8a95")}"> Говорящие</label>
-            </div>
-            <div class="field-hint">Новые карточки – сразу в этих цветах; уже готовые – кнопкой ниже (после «Сохранить»)</div>
-            <div class="el-check-row"><button id="set-recolor" class="step-btn">Перекрасить готовые карточки</button><span id="set-recolor-note" class="muted small"></span></div>
-          </div>
           <div id="deck-sync" class="small"></div>
         </section>
         <section class="set-card">
@@ -2528,6 +2518,20 @@ const Pages = {
             "Распознавание речи и перекодирование их не занимают – система не захлёбывается. Клипы для Anki кодирует видеокарта")}
           <div class="field"><label class="check"><input id="set-priority" type="checkbox" ${s.low_priority !== false ? "checked" : ""}> Пониженный приоритет обработки</label></div>
         </section>
+        <!-- Цвета на карточках Anki – отдельный блок в две мини-карточки;
+             рядом – пока пустой блок такой же ширины (под будущие настройки). -->
+        <section class="set-card half-card">
+          <h2>Цвета на карточках</h2>
+          <div class="color-row">
+            <label class="color-pick"><span class="swatch" style="background:${escapeHtml(s.anki_color_en || "#c9b6ff")}"><input type="color" id="set-color-en" value="${escapeHtml(s.anki_color_en || "#c9b6ff")}"></span> Английский</label>
+            <label class="color-pick"><span class="swatch" style="background:${escapeHtml(s.anki_color_ru || "#f6edcf")}"><input type="color" id="set-color-ru" value="${escapeHtml(s.anki_color_ru || "#f6edcf")}"></span> Русский</label>
+            <label class="color-pick"><span class="swatch" style="background:${escapeHtml(s.anki_color_dash || "#7d7d88")}"><input type="color" id="set-color-dash" value="${escapeHtml(s.anki_color_dash || "#7d7d88")}"></span> Тире</label>
+            <label class="color-pick"><span class="swatch" style="background:${escapeHtml(s.anki_color_who || "#8a8a95")}"><input type="color" id="set-color-who" value="${escapeHtml(s.anki_color_who || "#8a8a95")}"></span> Говорящие</label>
+          </div>
+          <div class="field-hint">Новые карточки – сразу в этих цветах; уже готовые – кнопкой ниже (после «Сохранить»)</div>
+          <div class="el-check-row"><button id="set-recolor" class="step-btn">Перекрасить готовые карточки</button><span id="set-recolor-note" class="muted small"></span></div>
+        </section>
+        <section class="set-card half-card empty-card"></section>
         <section class="set-card wide-card">
           <h2>Хранилище</h2>
           <!-- Диски: название и путь, заполненность (занято всего / из них медиа), убрать. -->
@@ -2558,14 +2562,16 @@ const Pages = {
             ${field("set-wh-device", "Устройство", '<div class="picker-host" data-for="set-wh-device"></div>',
               '<span id="set-wh-gpu-note">Проверяю видеокарту…</span> <button id="set-wh-cuda" class="step-btn small-btn hidden">Установить библиотеки CUDA</button>')}
           </div>
-          <div class="field"><label class="check"><input id="set-wh-gentle" type="checkbox" ${s.whisper_gentle ? "checked" : ""}> Бережная нагрузка на видеокарту <span class="muted small">(паузы между кусками и облегчённая точность – система и игры не подтормаживают, распознавание чуть дольше)</span></label></div>
+          <div class="field"><label class="check"><input id="set-wh-gentle" type="checkbox" ${s.whisper_gentle ? "checked" : ""}> Бережная нагрузка на видеокарту</label>
+            <div class="field-hint">Паузы между кусками и облегчённая точность – система и игры не подтормаживают, распознавание чуть дольше</div></div>
           <div class="field-row">
             ${field("set-el-model", "Модель ElevenLabs", `<input id="set-el-model" class="wide" value="${escapeHtml(s.elevenlabs_model || "scribe_v2")}">`, "scribe_v2 – самая точная")}
             ${field("set-el-lang", "Язык", `<input id="set-el-lang" class="wide" value="${escapeHtml(s.elevenlabs_language || "")}" placeholder="авто">`, "Код языка (en); пусто – определяется сам")}
           </div>
           ${field("set-el-proxy", "Прокси для ElevenLabs", `<input id="set-el-proxy" class="wide" value="${escapeHtml(s.elevenlabs_proxy || "")}" placeholder="socks5://127.0.0.1:1080 или http://127.0.0.1:10809">`,
             "ElevenLabs недоступен из некоторых стран – укажите прокси вашего VPN (или включите VPN на весь компьютер и оставьте пустым)")}
-          <div class="field"><label class="check"><input id="set-el-terms" type="checkbox" ${s.elevenlabs_keyterms !== false ? "checked" : ""}> Подсказывать имена и термины из словаря <span class="muted small">(+20% к цене распознавания)</span></label></div>
+          <div class="field"><label class="check"><input id="set-el-terms" type="checkbox" ${s.elevenlabs_keyterms !== false ? "checked" : ""}> Подсказывать имена и термины из словаря</label>
+            <div class="field-hint">+20% к цене распознавания</div></div>
           <div class="el-check-row"><button id="set-el-check" class="step-btn">Проверить подключение</button><span id="set-el-result" class="muted small"></span></div>
         </section>
         <section class="set-card wide-card">
@@ -2712,6 +2718,9 @@ const Pages = {
       await Api.json("/api/asr/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ what: "cuda" }) });
       setTimeout(loadAsr, 300);
     });
+    // Образцы цвета: квадрат перекрашивается сразу при выборе.
+    el.querySelectorAll(".color-pick input[type=color]").forEach((input) =>
+      input.addEventListener("input", () => { input.parentElement.style.background = input.value; }));
     Picker.create(host("set-asr"), {
       id: "set-asr",
       value: s.asr_engine || "whisper",
