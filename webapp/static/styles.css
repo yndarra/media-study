@@ -195,7 +195,6 @@ a.card:hover { border-color: #5a5a66; }
 
 .back-link { color: var(--dim); text-decoration: none; font-size: 13px; }
 table.stats { border-collapse: collapse; max-width: 900px; }
-table.stats td { padding: 5px 12px 5px 0; vertical-align: top; border-bottom: 1px solid #26262d; }
 table.stats td:first-child { color: var(--dim); white-space: nowrap; }
 .flagged-text { color: #ffa657; }
 
@@ -692,7 +691,6 @@ textarea.sources {
 /* Таблицы (настройки, подробности): разделители во всю ширину, под последней строкой — нет. */
 table.stats { width: 100%; }
 #view-settings table.stats { max-width: 1000px; }
-table.stats tr:last-child td { border-bottom: none; }
 .disk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
 
 /* Поля ввода: одинаковая высота; текст по центру по вертикали (у шрифта Segoe UI
@@ -836,7 +834,6 @@ label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=c
 /* Окно подробностей видео — компактнее: заголовки и таблицы мельче, окно уже. */
 .modal { width: min(720px, 100%); }
 .modal h2 { font-size: 14px; margin: 16px 0 6px; }
-.modal table.stats td { font-size: 13px; padding-top: 4px; padding-bottom: 4px; }
 .modal .modal-actions { margin-top: 12px; }
 /* Флажок "Пакетом" в строке кнопок: без внешних отступов, по центру строки. */
 .modal-actions label.check { margin: 0; white-space: nowrap; }
@@ -880,7 +877,6 @@ a.card.complete:hover { border-color: rgba(244, 114, 182, 0.24); }
 
 /* Таблицы в окнах: у всех строк одна высота строки, кнопка-стрелка её не
    раздвигает – раскрытые строки и одиночная выглядят одинаково. */
-.modal table.stats td { line-height: 20px; }
 .multi-first { height: 20px; }
 .multi-toggle { height: 20px; line-height: 20px; }
 
@@ -892,7 +888,6 @@ a.card.complete:hover { border-color: rgba(244, 114, 182, 0.24); }
 .modal-overlay.closing { opacity: 0; transition: opacity 0.15s ease-in; pointer-events: none; }
 /* Текст в строках таблиц окна — оптически посередине между разделителями
    (как в кнопках: строка Segoe UI сидит ниже центра, приподнимаем на 1.5 px). */
-.modal table.stats td { padding-top: 2.5px; padding-bottom: 5.5px; }
 /* Обе группы отрезков — на всю ширину полосы, чтобы проценты считались от
    всей полосы (раньше у правой группы не было своей ширины и фиолетовый
    отрезок схлопывался, а левая группа укорачивалась на его ширину). Правая
@@ -1555,9 +1550,7 @@ table.hotkeys-table td:first-child { color: var(--text); padding-right: 24px; }
 table.hotkeys-table td:last-child { color: var(--text); }
 
 /* Статистика: таблицы со столбцами – заголовки приглушённые, числа справа. */
-table.grid-table th { text-align: right; font-weight: 500; font-size: 12px; color: var(--dim); padding: 0 0 6px 16px; white-space: nowrap; border-bottom: 1px solid #26262d; }
 table.grid-table th:first-child { text-align: left; padding-left: 0; }
-table.grid-table td { text-align: right; padding-left: 16px; white-space: nowrap; }
 table.grid-table td:first-child { text-align: left; padding-left: 0; white-space: normal; color: var(--text); }
 table.grid-table td a { color: #79c0ff; text-decoration: none; }
 table.grid-table td a:hover { text-decoration: underline; }
@@ -1611,9 +1604,7 @@ table.grid-table tr.total-row td { border-top: 1px solid #34343c; font-weight: 6
 /* Статистика: итоги 2×2 (расходы и видео – первый ряд, правка и Anki – второй);
    таблицы во всю ширину, заголовки столбцов ровно над числами. */
 .stats-grid table.grid-table { width: 100%; max-width: none; table-layout: auto; }
-.stats-grid table.grid-table th, .stats-grid table.grid-table td { padding: 6px 0 6px 20px; vertical-align: bottom; }
 .stats-grid table.grid-table th:first-child, .stats-grid table.grid-table td:first-child { padding-left: 0; width: 100%; }
-.stats-grid table.grid-table td { vertical-align: top; }
 
 /* Окна видео (оба раздела): побольше места между последней таблицей и кнопками. */
 .modal .modal-actions { margin-top: 26px; }
@@ -1874,3 +1865,21 @@ th.sortable:hover, th.sortable.sorted { color: var(--text); }
 .mode-switch.video button.active, .mode-switch.audio button.active {
   background-size: 300% 100%; animation: mode-flow-back 7s linear infinite; }
 @keyframes mode-flow-back { from { background-position: 150% 0; } to { background-position: 0% 0; } }
+
+/* Таблицы – единый стандарт везде (окна, настройки, статистика): текст 13 px,
+   строка 20 px, одинаковые отступы сверху и снизу (строка ровно посередине
+   между разделителями), разделитель и под последней строкой. */
+table.stats td, table.stats th { font-size: 13px; line-height: 20px; padding: 6px 12px 6px 0; vertical-align: middle;
+  border-bottom: 1px solid #26262d; }
+table.stats td:last-child, table.stats th:last-child { padding-right: 0; }
+table.grid-table th { text-align: right; font-weight: 500; color: var(--dim); white-space: nowrap; }
+table.grid-table td { text-align: right; white-space: nowrap; }
+table.grid-table th, table.grid-table td { padding-left: 20px; }
+table.grid-table th:first-child, table.grid-table td:first-child { padding-left: 0; }
+/* Буквы без хвостиков (цифры, «Ролик») сидели на 2 px ниже середины – текст
+   строки чуть выше (по замеру чернил: сверху и снизу поровну). */
+table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
+.speed-line .hover-band { fill: transparent; }
+.speed-line .hover-band:hover { fill: rgba(121, 184, 255, 0.06); }
+/* Режим "Видео": перелив с голубого на фиолетовый. */
+.mode-switch.video button.active { background-image: linear-gradient(90deg, #3a9de8, #6a4fd6, #3a9de8); }

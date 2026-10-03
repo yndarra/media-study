@@ -387,11 +387,8 @@ function progressBar(done, total, label, cls = "") {
 // (рыжая полоса) – красноватая, шаг с синей полосой – синяя, самое начало
 // (полосы ещё нет) – зеленоватая, остальные шаги – желтоватая.
 function procState(v) {
-  if (v.state !== "processing") return "";
-  if (v.step === "download") return " proc-red";
-  if (v.percent !== null && v.percent !== undefined) return " proc-blue";
-  if (["search", "agent_search", "ai_fix", "segment", "assets"].includes(v.step)) return " proc-yellow";
-  return " proc-green";
+  // Подсветка – только у того, что сейчас обрабатывается, и только синеватая.
+  return v.state === "processing" ? " proc-blue" : "";
 }
 
 // Оформление карточки видео по этапу (фон-градиент и обводка):
@@ -1073,8 +1070,10 @@ function drawSpeedChart(box, list, avg) {
   const grid = ticks.map((v) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/>` +
     `<text class="axis" x="${pad.l - 8}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(1)}</text>`).join("");
   const best = speeds.indexOf(Math.max(...speeds));
-  const dots = list.map((r, k) => `<circle class="dot${k === best ? " best" : ""}" cx="${pts[k][0]}" cy="${pts[k][1]}" r="${k === best ? 6 : 4.5}">` +
-    `<title>${escapeHtml(shortDate(r.saved_at))} · ${escapeHtml(resultTitle(r))}\n${speedOf(r).toFixed(2)}/мин – ${r.frags} фрагм. за ${formatMinutes(r.ms)}</title></circle>`).join("");
+  // Без точек (так чище): подсказка о результате – при наведении на его полосу графика.
+  const half = list.length > 1 ? (W - pad.l - pad.r) / (list.length - 1) / 2 : (W - pad.l - pad.r) / 2;
+  const dots = list.map((r, k) => `<rect class="hover-band" x="${pts[k][0] - half}" y="${pad.t}" width="${half * 2}" height="${H - pad.t - pad.b}">` +
+    `<title>${escapeHtml(shortDate(r.saved_at))} · ${escapeHtml(resultTitle(r))}\n${speedOf(r).toFixed(2)}/мин – ${r.frags} фрагм. за ${formatMinutes(r.ms)}${k === best ? " (лучший)" : ""}</title></rect>`).join("");
   const labels = list.length > 1
     ? `<text class="axis" x="${x(0)}" y="${H - 8}">${escapeHtml(shortDate(list[0].saved_at))}</text>` +
       `<text class="axis" x="${x(list.length - 1)}" y="${H - 8}" text-anchor="end">${escapeHtml(shortDate(list[list.length - 1].saved_at))}</text>`
@@ -1548,6 +1547,22 @@ const Pages = {
   // перевода – их готовит окно "Перевод". Итог – слева от кнопки.
   pressedActions: new Map(), // видео, где только что нажали кнопку на карточке: {id: время}
   statsCache: new Map(), // данные окна медиа по коду (для мгновенного открытия)
+  diskCache: new Map(), // место на диске по коду (окно в "Обработке" – сразу)
+
+  async prefetchDisk(ids) {
+    if (this._prefetchingDisk) return;
+    this._prefetchingDisk = true;
+    try {
+      for (const id of ids) {
+        if (this.diskCache.has(id) || State.view !== "process") continue;
+        try {
+          this.diskCache.set(id, await Api.projectDisk(id));
+        } catch (_) {}
+      }
+    } finally {
+      this._prefetchingDisk = false;
+    }
+  },
 
   // Пока виден список – данные окон его медиа подгружаются заранее, по одному,
   // каждое не чаще раза в минуту (окно тогда открывается без ожидания).
@@ -1927,6 +1942,8 @@ const Pages = {
       if (!box) return;
       const pending = (await Api.projects()).filter((v) => v.state !== "ready");
       const items = pending.filter((v) => !!v.audio_only === (kind === "audio"));
+      Pages.processItems = pending;
+      Pages.prefetchDisk(items.map((v) => v.id));
       if (!items.length) {
         box.innerHTML = `<p class="muted">Нечего обрабатывать – добавьте ${kind === "audio" ? "аудио" : "видео"} в разделе «Добавить».</p>`;
         return;
@@ -1959,15 +1976,19 @@ const Pages = {
     const body = Modal.show('<p class="muted">Загрузка…</p>', () => {
       if (location.hash.startsWith("#/process/")) location.hash = "#/process";
     }, { isDirty: () => !!watcher && watcher.isDirty(), save: () => save() });
-    const v = (await Api.projects()).find((item) => item.id === id);
+    // Окно – сразу: медиа берётся из уже показанного списка, место на диске –
+    // из подгруженного заранее; свежее место на диске подставляется по приходу.
+    const v = (Pages.processItems || []).find((item) => item.id === id) || (await Api.projects()).find((item) => item.id === id);
     if (!v) {
       body.innerHTML = '<p class="muted">Видео не найдено.</p>';
       return;
     }
-    let disk = null;
-    try {
-      disk = await Api.projectDisk(id);
-    } catch (_) {}
+    const diskFresh = Api.projectDisk(id).then((d) => {
+      Pages.diskCache.set(id, d);
+      return d;
+    }).catch(() => null);
+    let disk = Pages.diskCache.get(id) || null;
+    if (!disk) disk = await diskFresh;
     const row = (name, value) => `<tr><td>${name}</td><td>${value}</td></tr>`;
     body.innerHTML = `
       <div class="process-form">
@@ -1985,7 +2006,7 @@ const Pages = {
         </div></div>
         <label class="check"><input type="checkbox" class="no-gaps" ${v.no_gaps ? "checked" : ""}> Без пустых фрагментов <span class="muted small">(без музыки, шумов и других фрагментов без текста)</span></label>
       </div>
-      ${disk ? `<h2>Место на диске</h2><table class="stats">
+      ${disk ? `<h2>Место на диске</h2><table class="stats" id="proc-disk">
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
       </table>` : ""}
       <div class="modal-actions">
@@ -1998,6 +2019,12 @@ const Pages = {
       </div>`;
     body.querySelectorAll("textarea.grow:not(.fixed)").forEach(autoGrow);
     singleLine(body.querySelector("#group-input"));
+    // Пришло свежее место на диске – числа в таблице на месте.
+    diskFresh.then((d) => {
+      const table = body.querySelector("#proc-disk");
+      if (!d || !table || !body.isConnected) return;
+      table.innerHTML = row("Оригинал", formatSize(d.master)) + row("Копия для редактора", formatSize(d.editor)) + row("Всего", `<b>${formatSize(d.total)}</b>`);
+    });
     requestAnimationFrame(() => foldLongRows(body));
     // Градиент окна – по этапу, как у карточки в "Обработке" (рыжий – скачивание,
     // синий – шаг с процентом, жёлтый – сверка/поиск агентом/нарезка, зелёный – начало).
