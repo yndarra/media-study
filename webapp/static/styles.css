@@ -1883,3 +1883,10 @@ table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
 .speed-line .hover-band:hover { fill: rgba(121, 184, 255, 0.06); }
 /* Режим "Видео": перелив с голубого на фиолетовый. */
 .mode-switch.video button.active { background-image: linear-gradient(90deg, #3a9de8, #6a4fd6, #3a9de8); }
+/* "Обработка": после названия – как в "Видео" (11.86 px до полосы). Строка
+   состояния без полосы – той же высоты, что полоса (20 px), текст по её
+   середине: карточки с полосой и без – одной высоты, текст посередине между
+   названием и низом карточки. */
+#process-list .card-title + .progress { margin-top: 11.86px; margin-bottom: 0; }
+#process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status {
+  margin-top: 11.86px; margin-bottom: 0; height: 20px; line-height: 20px; display: flex; align-items: center; }
