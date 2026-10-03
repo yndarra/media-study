@@ -1789,3 +1789,19 @@ table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: 
 
 /* Настройки: проверка ElevenLabs. */
 .el-check-row { display: flex; align-items: center; gap: 12px; margin: 4px 0 12px; }
+
+/* Настройки: "Хранилище" – строки дисков с заполненностью. */
+.store-list { display: flex; flex-direction: column; gap: 8px; }
+.store-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(200px, 2fr) auto; gap: 16px; align-items: center;
+  padding: 10px 12px; border-radius: 8px; background: #18181d; border: 1px solid rgba(255, 255, 255, 0.06); }
+.store-drive { font-weight: 600; }
+.store-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-bar { position: relative; height: 8px; border-radius: 4px; background: #26262e; overflow: hidden; margin-bottom: 5px; }
+.store-busy, .store-app { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.store-busy { background: #4a4a55; }
+.store-app { background: #2f6fbf; }
+.store-row .step-btn { height: 30px; }
+.store-add { display: flex; gap: 8px; }
+.store-add input { flex: 1; min-width: 0; }
+/* Горячие клавиши – во всю ширину блока. */
+#view-settings table.hotkeys-table { max-width: none; width: 100%; }

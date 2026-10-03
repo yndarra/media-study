@@ -2341,17 +2341,18 @@ const Pages = {
           <div class="field"><label class="check"><input id="set-priority" type="checkbox" ${s.low_priority !== false ? "checked" : ""}> Пониженный приоритет обработки</label></div>
         </section>
         <section class="set-card wide-card">
-          <h2>Хранилища видео</h2>
-          <table class="stats storages-table" id="storages-table"></table>
+          <h2>Хранилище</h2>
+          <!-- Диски: название и путь, заполненность (занято всего / из них медиа), убрать. -->
+          <div class="field"><div class="field-label">Диски</div><div id="storages-list" class="store-list"></div></div>
           <input type="hidden" id="set-storages" value="${escapeHtml(JSON.stringify(s.storages || []))}">
-          <div class="field-row storages-add">
-            ${field("set-storage-new", "Добавить хранилище",
-              '<div class="author-row"><input id="set-storage-new" class="wide" placeholder="D:\\media-study" data-watch="no"><button id="set-storage-add" class="step-btn" disabled>Добавить</button></div>',
-              "Папка на другом диске (например, внешнем). Видео переносятся кнопкой «Перенести на …» в окне видео; в data/ остаётся ссылка")}
+          ${field("set-storage-new", "Добавить хранилище",
+            '<div class="store-add"><input id="set-storage-new" class="wide" placeholder="D:\\media-study" data-watch="no"><button id="set-storage-add" class="step-btn" disabled>Добавить</button></div>',
+            "Папка на другом диске (например, внешнем). Медиа переносятся кнопкой «Хранилище» в окне видео или аудио; в data/ остаётся ссылка")}
+          <div class="field-row">
             ${field("set-new-storage", "Новые видео сохранять", '<div class="picker-host" data-for="set-new-storage"></div>',
               "Куда скачиваются и добавляются новые видео")}
             ${field("set-new-audio-storage", "Новые аудио сохранять", '<div class="picker-host" data-for="set-new-audio-storage"></div>',
-              "Свои аудиофайлы (песни и т.п.); «Как видео» – туда же, куда видео")}
+              "Свои аудиофайлы; «Как видео» – туда же, куда видео")}
           </div>
         </section>
         <section class="set-card wide-card">
@@ -2398,11 +2399,19 @@ const Pages = {
       const extra = listed();
       const main = stores.find((x) => x.main);
       const rows = [main, ...extra.map((path) => stores.find((x) => !x.main && x.path.toLowerCase() === path.toLowerCase()) || { path, label: path.slice(0, 2), online: true, fresh: true })]
-        .filter(Boolean).map((x) => `<tr><td>${escapeHtml(x.label)}${x.main ? ' <span class="muted small">(основное)</span>' : ""}<div class="muted small">${escapeHtml(x.path)}</div></td>` +
-          `<td>${!x.online ? '<span class="flagged-text">Не подключён</span>' : x.fresh ? '<span class="muted">После сохранения</span>'
-            : `Свободно ${formatSize(x.free)} из ${formatSize(x.total)}<div class="muted small">Видео: ${x.videos || 0}${x.videos ? `, ${formatSize(x.used)}` : ""}</div>`}</td>` +
-          `<td>${x.main ? "" : `<button class="step-btn storage-remove" data-path="${escapeHtml(x.path)}" title="${x.videos ? "Сначала перенесите видео с этого диска" : "Убрать из списка (файлы не удаляются)"}"${x.videos ? " disabled" : ""}>Убрать</button>`}</td></tr>`).join("");
-      el.querySelector("#storages-table").innerHTML = rows;
+        .filter(Boolean).map((x) => {
+          // Полоска: занято на диске всего (серым) и из этого – медиа приложения (синим).
+          const pct = (n) => (x.total ? Math.min(100, (n / x.total) * 100).toFixed(1) : 0);
+          const usage = !x.online ? '<span class="flagged-text small">Диск не подключён</span>'
+            : x.fresh ? '<span class="muted small">Появится после «Сохранить»</span>'
+              : `<div class="store-bar"><div class="store-busy" style="width:${pct(x.total - x.free)}%"></div><div class="store-app" style="width:${pct(x.used || 0)}%"></div></div>` +
+                `<div class="muted small">Свободно ${formatSize(x.free)} из ${formatSize(x.total)} · медиа: ${x.videos || 0}${x.videos ? `, ${formatSize(x.used)}` : ""}</div>`;
+          return `<div class="store-row"><div class="store-name"><span class="store-drive">${escapeHtml(x.label)}</span>` +
+            `${x.main ? ' <span class="muted small">основное</span>' : ""}<div class="muted small store-path">${escapeHtml(x.path)}</div></div>` +
+            `<div class="store-usage">${usage}</div>` +
+            `<div>${x.main ? "" : `<button class="step-btn storage-remove" data-path="${escapeHtml(x.path)}" title="${x.videos ? "Сначала перенесите медиа с этого диска" : "Убрать из списка (файлы не удаляются)"}"${x.videos ? " disabled" : ""}>Убрать</button>`}</div></div>`;
+        }).join("");
+      el.querySelector("#storages-list").innerHTML = rows;
       el.querySelectorAll(".storage-remove").forEach((b) => b.addEventListener("click", () => {
         setStores(listed().filter((p) => p !== b.dataset.path));
       }));
