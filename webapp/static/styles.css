@@ -1923,3 +1923,9 @@ table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
   border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; cursor: pointer; backdrop-filter: blur(4px); }
 #audio-vis-style:hover { color: #fff; background: rgba(40, 40, 50, 0.7); }
 #video-wrap.audio-mode #audio-vis-style { display: block; }
+
+/* Кнопки Видео/Аудио: текст по центру по вертикали по буквам (замер пикселей
+   при масштабе 100%/125%/150%) – чуть выше центра строки шрифта. */
+.mode-switch button { padding: 0 0 3.5px; }
+/* Над кнопками Журнал / перезапуск / выключение – без разделителя. */
+.server-row { border-top: none; }

@@ -605,7 +605,7 @@ const App = {
     // продлевается до него).
     const running = State.stage3.pending_ids.length > 0 || State.stage3.notes_left > 0;
     const stop = running && isLocked(currentFragment());
-    $("stage3-btn").textContent = stop ? "Остановить" : "Передать в Anki";
+    $("stage3-btn").textContent = stop ? "Остановить" : "Anki";
     $("stage3-btn").dataset.action = stop ? "stop" : "queue";
     $("stage3-btn").disabled = !stop && !hasNew;
     const s = State.stage3;
