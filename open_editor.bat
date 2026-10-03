@@ -30,7 +30,9 @@ rem иначе новая страница будет разговаривать
 rem Трогаются только процессы, запущенные командой webapp.run.
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*-m webapp.run*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 
-start "media-study editor" cmd /k py -3.12 -m webapp.run --project-dir "%PROJECT_DIR%"
+rem Сервер – без окна консоли (pyw); журнал – data\server.log, его видно в
+rem приложении (низ меню: "Журнал"), там же кнопка "Остановить".
+start "" pyw -3.12 -m webapp.run --project-dir "%PROJECT_DIR%" --log-file "data\server.log"
 
 rem Ждём, пока сервер поднимется и открытые вкладки успеют отметиться.
 rem Код 1 - вкладка уже открыта (она перезагрузится сама), 0 - открываем новую.

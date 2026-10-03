@@ -159,11 +159,56 @@ def heartbeat(body: HeartbeatRequest):
         translated = _translated_ids(body.project)
     return {
         "instance": SERVER_INSTANCE,
+        # Версия интерфейса (время последней правки html/js/css): сменилась –
+        # вкладка сама перезагружается (правки интерфейса без перезапуска сервера).
+        "ui": _ui_version(),
         "ready": time.monotonic() - SERVER_STARTED >= READY_AFTER_SECONDS,
         "newest": body.opened_at >= newest,
         "stage3": stage3,
         "translated_ids": translated,
     }
+
+
+def _ui_version() -> str:
+    return str(max((p.stat().st_mtime_ns for p in STATIC_DIR.iterdir() if p.is_file()), default=0))
+
+
+# -- журналы и остановка (низ меню: "Журнал" и "Остановить") ------------------------
+#
+# Сервер работает без окна консоли; его журнал (data/server.log) и журналы
+# фоновых процессов смотрятся в приложении – окошком, которое дописывается
+# по мере появления строк.
+LOG_FILES = {"server": "server.log", "anki": "stage3_worker.log", "translate": "agent.log"}
+LOG_TAIL_BYTES = 96 * 1024  # при открытии – только хвост журнала
+
+
+@app.get("/api/logs")
+def read_log(name: str = "server", since: int | None = None):
+    """Новые строки журнала с байта since (нет since – последние LOG_TAIL_BYTES)."""
+    if name not in LOG_FILES:
+        raise HTTPException(status_code=404, detail="нет такого журнала")
+    path = DATA_DIR / LOG_FILES[name]
+    if not path.exists():
+        return {"text": "", "next": 0}
+    size = path.stat().st_size
+    start = max(0, size - LOG_TAIL_BYTES) if since is None or since > size else since
+    with open(path, "rb") as f:
+        f.seek(start)
+        data = f.read(min(size - start, 2 * 2**20))
+    text = data.decode("utf-8", errors="replace")
+    if since is None and start > 0:
+        text = text.split("\n", 1)[-1]  # с начала строки
+    return {"text": text, "next": start + len(data)}
+
+
+@app.post("/api/shutdown")
+def shutdown():
+    """
+    Остановить сервер (кнопка внизу меню). Фоновые процессы – обработка,
+    передача в Anki, перевод – живут отдельно и доделывают своё.
+    """
+    threading.Timer(0.4, lambda: os._exit(0)).start()
+    return {"ok": True}
 
 
 # Фрагменты видео, чьи карточки в Anki уже переведены (оборот заполнен) — для

@@ -1558,8 +1558,6 @@ table.grid-table tr.total-row td { border-top: 1px solid #34343c; font-weight: 6
 .stats-grid table.stats td:last-child { text-align: right; }
 .stats-grid table.grid-table td:first-child { text-align: left; }
 /* Статистика: четыре карточки итогов в ряд; таблицы по видео/авторам – во всю ширину. */
-.stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 1400px; }
-@media (max-width: 1300px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .stats-grid table.grid-table { max-width: none; width: 100%; }
 
 /* Таймер правки – поверх плеера, слева сверху (timer.js). Квадратная кнопка;
@@ -1605,8 +1603,6 @@ table.grid-table tr.total-row td { border-top: 1px solid #34343c; font-weight: 6
 
 /* Статистика: итоги 2×2 (расходы и видео – первый ряд, правка и Anki – второй);
    таблицы во всю ширину, заголовки столбцов ровно над числами. */
-.stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 1100px; }
-@media (max-width: 1300px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .stats-grid table.grid-table { width: 100%; max-width: none; table-layout: auto; }
 .stats-grid table.grid-table th, .stats-grid table.grid-table td { padding: 6px 0 6px 20px; vertical-align: bottom; }
 .stats-grid table.grid-table th:first-child, .stats-grid table.grid-table td:first-child { padding-left: 0; width: 100%; }
@@ -1663,3 +1659,52 @@ table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: 
 
 /* Полоса переноса на другой диск в «Сейчас идёт». */
 .seg.moving { background: #6b6b78; }
+
+/* Страницы с блоками (Настройки, Статистика, Добавить): блоки по 1, 2 или 4
+   в ряд (трёх не бывает) – по ширине самой страницы; шире 4 блоков страница
+   не растягивается и стоит посередине, как плеер в редакторе. */
+#view-settings, #view-stats, #view-add { max-width: 1400px; margin-left: auto; margin-right: auto; container-type: inline-size; }
+.page-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); max-width: none; margin-top: 14px; }
+@container (min-width: 680px) { .page-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 1300px) { .page-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.page-grid > .wide-card { grid-column: 1 / -1; }
+/* "Добавить": два блока рядом – при 4 колонках каждый на две. */
+@container (min-width: 1300px) { .page-grid > .half-card { grid-column: span 2; } }
+.page-grid .set-card h2 { margin-top: 0; }
+.half-card .author-row { margin-top: 12px; }
+#view-settings .hotkeys-card { margin-top: 14px; }
+
+/* Низ меню: "Остановить" и журнал. */
+.server-row { display: flex; gap: 6px; margin-top: auto; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.activity:not(.hidden) ~ .server-row { margin-top: 10px; }
+.server-btn { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px 1px; font-size: 12.5px;
+  color: var(--dim); background: transparent; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; }
+.server-btn:hover { color: var(--text); background: #1f1f25; }
+.server-btn#server-stop:hover { color: #ff9a9a; border-color: rgba(248, 81, 73, 0.4); }
+.server-btn.icon { padding: 0 6px; }
+.server-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Окно журналов. */
+.log-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.log-window { width: min(1200px, 100%); height: min(720px, 100%); display: flex; flex-direction: column; background: #0d0d10;
+  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); overflow: hidden; }
+.log-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.log-tab { height: 28px; padding: 0 12px 1px; font-size: 13px; background: transparent; border: 1px solid transparent; color: var(--dim); border-radius: 6px; }
+.log-tab:hover { color: var(--text); }
+.log-tab.active { background: #1f1f25; border-color: #45454e; color: var(--text); }
+.log-follow { margin-left: auto; }
+.log-close { background: transparent; border: none; color: var(--dim); font-size: 22px; line-height: 1; padding: 0 6px; }
+.log-close:hover { color: var(--text); }
+.log-body { flex: 1; margin: 0; padding: 10px 14px; overflow: auto; font: 12.5px/1.5 Consolas, "Cascadia Mono", monospace; color: #c9c9d1; white-space: pre-wrap; word-break: break-word; }
+.lg-err { color: #ff7b72; }
+.lg-trace { color: #d98580; }
+.lg-warn { color: #e3b341; }
+.lg-ok { color: #56d364; }
+.lg-info { color: #56d364; }
+.lg-method { color: #79c0ff; }
+.lg-dim { color: #6e6e78; }
+/* Горячие клавиши – во всю ширину страницы, как остальные широкие блоки. */
+#view-settings .hotkeys-card { max-width: none; }
+/* "Добавить": поле ссылки занимает остаток строки, кнопка не вылезает за блок. */
+.half-card .author-row input.wide, .half-card #download-url { flex: 1 1 auto; min-width: 0; width: auto; }
+.half-card .author-row .step-btn { flex: none; }

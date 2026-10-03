@@ -1895,16 +1895,23 @@ const Pages = {
   // -- добавить -----------------------------------------------------------------------
   async add() {
     const el = document.getElementById("view-add");
+    // Как в "Настройках": блоки-карточки, два рядом (на узком экране – друг под другом).
     el.innerHTML = `<h1>Добавить</h1>
-      <h2>По ссылке</h2>
-      <p class="muted small">YouTube и всё, что умеет yt-dlp. Видео скачается в качестве, заданном в «Настройках».</p>
-      <div class="author-row"><input id="download-url" class="wide" placeholder="https://youtu.be/…"><button id="download-go" class="step-btn" disabled>Скачать</button></div>
-      <h2>Свой файл</h2>
-      <p class="muted small">Видео или аудио любого распространённого формата (mp4, mkv, webm, mov, mp3, m4a, wav, flac, ogg…).</p>
-      <div class="author-row">
-        <label class="step-btn file-pick">Выбрать файл<input id="file-input" type="file" accept="video/*,audio/*" hidden></label>
-        <span id="file-chip" class="file-chip hidden"><span class="file-chip-name"></span><button class="file-chip-x" title="Убрать файл">×</button></span>
-        <button id="file-go" class="step-btn" disabled>Добавить</button>
+      <div class="page-grid">
+        <section class="set-card half-card">
+          <h2>По ссылке</h2>
+          <p class="muted small">YouTube и всё, что умеет yt-dlp. Видео скачается в качестве, заданном в «Настройках».</p>
+          <div class="author-row"><input id="download-url" class="wide" placeholder="https://youtu.be/…"><button id="download-go" class="step-btn" disabled>Скачать</button></div>
+        </section>
+        <section class="set-card half-card">
+          <h2>Свой файл</h2>
+          <p class="muted small">Видео или аудио любого распространённого формата (mp4, mkv, webm, mov, mp3, m4a, wav, flac, ogg…).</p>
+          <div class="author-row">
+            <label class="step-btn file-pick">Выбрать файл<input id="file-input" type="file" accept="video/*,audio/*" hidden></label>
+            <span id="file-chip" class="file-chip hidden"><span class="file-chip-name"></span><button class="file-chip-x" title="Убрать файл">×</button></span>
+            <button id="file-go" class="step-btn" disabled>Добавить</button>
+          </div>
+        </section>
       </div>
       <div id="add-note" class="muted small"></div>`;
     viewEnter(el); // заголовок, описание и содержимое появляются по очереди
@@ -2012,8 +2019,7 @@ const Pages = {
     }).join("");
 
     el.innerHTML = `<h1>Статистика</h1>
-      <p class="muted small page-note">По всем видео. Расходы – OpenRouter (поиск источников и перевод); для видео, обработанных до учёта расходов, – оценка по средней цене.</p>
-      <div class="settings-grid stats-grid">
+      <div class="page-grid stats-grid">
         ${card("Расходы", [
           row("Всего", `<b>${money(spentAll, anyEst(all))}</b>`),
           ...Object.entries(kinds).map(([k, name]) => row(name, money(kindTotal(k), kindEst(k)))),
@@ -2062,8 +2068,7 @@ const Pages = {
     const modelField = (id, label, hint) => field(id, label, `<div class="picker-host" data-for="${id}"></div>`, hint);
     // Настройки – карточками по темам; кнопки – внизу справа.
     el.innerHTML = `<h1>Настройки</h1>
-      <p class="muted small page-note">Общие для всех видео. Изменения применяются после «Сохранить».</p>
-      <div id="settings-form" class="settings-grid">
+      <div id="settings-form" class="page-grid">
         <section class="set-card">
           <h2>Anki</h2>
           ${field("set-deck", "Колода", `<input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}">`,
@@ -2178,7 +2183,7 @@ const Pages = {
       });
     }
     // Заголовок, описание, карточки по очереди, кнопки.
-    viewEnter(el, [el.querySelector("h1"), el.querySelector(".page-note"), ...el.querySelectorAll(".set-card"), el.querySelector(".settings-actions")]);
+    viewEnter(el, [el.querySelector("h1"), ...el.querySelectorAll(".set-card"), el.querySelector(".settings-actions")]);
     const showDeckSync = (state) => {
       const box = document.getElementById("deck-sync");
       if (!box || !state) return;
@@ -2238,6 +2243,112 @@ const Pages = {
     this.settingsGuard = { isDirty: () => watcher.isDirty(), save: saveSettings, restore: () => watcher.restore() };
   },
 };
+
+// Журналы (кнопка внизу меню): сервер, передача в Anki, перевод – окно поверх
+// всего, строки дописываются по мере появления (раз в секунду), с цветом:
+// ошибки – красным, предупреждения – жёлтым, запросы – по коду ответа.
+const LogViewer = {
+  TABS: [["server", "Сервер"], ["anki", "Передача в Anki"], ["translate", "Перевод"]],
+  el: null,
+  name: "server",
+  next: null,
+  timer: null,
+
+  open() {
+    if (this.el) return;
+    const el = (this.el = document.createElement("div"));
+    el.className = "log-overlay";
+    el.innerHTML = `<div class="log-window" role="dialog">
+        <div class="log-head">${this.TABS.map(([k, t]) => `<button class="log-tab" data-k="${k}">${t}</button>`).join("")}
+          <span class="log-follow muted small"></span><button class="log-close" title="Закрыть (Esc)">×</button></div>
+        <pre class="log-body"></pre></div>`;
+    el.addEventListener("mousedown", (e) => e.target === el && this.close());
+    el.querySelector(".log-close").addEventListener("click", () => this.close());
+    el.querySelectorAll(".log-tab").forEach((b) => b.addEventListener("click", () => this.show(b.dataset.k)));
+    this.onKey = (e) => e.key === "Escape" && (e.stopPropagation(), this.close());
+    document.addEventListener("keydown", this.onKey, true);
+    document.body.appendChild(el);
+    this.show(this.name);
+  },
+
+  close() {
+    if (!this.el) return;
+    clearTimeout(this.timer);
+    document.removeEventListener("keydown", this.onKey, true);
+    this.el.remove();
+    this.el = null;
+  },
+
+  show(name) {
+    this.name = name;
+    this.next = null;
+    this.el.querySelectorAll(".log-tab").forEach((b) => b.classList.toggle("active", b.dataset.k === name));
+    this.el.querySelector(".log-body").innerHTML = "";
+    clearTimeout(this.timer);
+    this.poll();
+  },
+
+  async poll() {
+    if (!this.el) return;
+    const body = this.el.querySelector(".log-body");
+    const name = this.name;
+    try {
+      const q = this.next === null ? "" : `&since=${this.next}`;
+      const data = await Api.json(`/api/logs?name=${name}${q}`);
+      if (!this.el || name !== this.name) return;
+      // Внизу – прокручиваем за новыми строками; пролистали вверх – не мешаем.
+      const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+      if (data.text) body.insertAdjacentHTML("beforeend", this.paint(data.text));
+      this.next = data.next;
+      if (atBottom) body.scrollTop = body.scrollHeight;
+      this.el.querySelector(".log-follow").textContent = atBottom ? "" : "Прокрутка остановлена – новые строки внизу";
+    } catch (_) {
+      body.insertAdjacentHTML("beforeend", '<span class="lg-err">Сервер не отвечает</span>\n');
+    }
+    this.timer = setTimeout(() => this.poll(), 1000);
+  },
+
+  paint(text) {
+    return text.replace(/\r/g, "").split("\n").map((line, k, all) => {
+      if (k === all.length - 1 && !line) return "";
+      const html = escapeHtml(line);
+      if (/Traceback|Error|ERROR|Exception|ОШИБКА|не смог|не удалось|не скачалось/.test(line)) return `<span class="lg-err">${html}</span>\n`;
+      if (/^\s+(File |\^|raise )/.test(line)) return `<span class="lg-trace">${html}</span>\n`;
+      if (/WARNING|предупрежд/i.test(line)) return `<span class="lg-warn">${html}</span>\n`;
+      // Запрос: метод и путь – акцентом, код ответа – по цвету.
+      const req = /^(INFO:\s+)(.*?")(GET|POST|PATCH|PUT|DELETE)( [^ ]+ )(HTTP\/[\d.]+")( )(\d{3})(.*)$/.exec(line);
+      if (req) {
+        const code = Number(req[7]);
+        const cls = code >= 500 ? "lg-err" : code >= 400 ? "lg-warn" : "lg-ok";
+        return `<span class="lg-info">${escapeHtml(req[1])}</span><span class="lg-dim">${escapeHtml(req[2])}</span>` +
+          `<span class="lg-method">${req[3]}</span>${escapeHtml(req[4])}<span class="lg-dim">${escapeHtml(req[5])}</span> ` +
+          `<span class="${cls}">${req[7]}</span><span class="lg-dim">${escapeHtml(req[8])}</span>\n`;
+      }
+      if (/^INFO:/.test(line)) return `<span class="lg-info">INFO:</span>${escapeHtml(line.slice(5))}\n`;
+      return `${html}\n`;
+    }).join("");
+  },
+};
+
+// Кнопки внизу меню: журнал и остановка сервера.
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("server-log").addEventListener("click", () => LogViewer.open());
+  document.getElementById("server-stop").addEventListener("click", async () => {
+    const answer = await askConfirm({
+      title: "Остановить сервер?",
+      text: "Приложение перестанет отвечать, пока вы снова не запустите <b>open_editor.bat</b>. Фоновые процессы – обработка, передача в Anki, перевод – доделают своё.",
+      yes: "Остановить", no: "Отмена", danger: true,
+    });
+    if (answer !== "yes") return;
+    try {
+      await Api.json("/api/shutdown", { method: "POST" });
+    } catch (_) {}
+    const banner = document.createElement("div");
+    banner.className = "stale-banner";
+    banner.textContent = "Сервер остановлен. Чтобы продолжить, запустите open_editor.bat – эта вкладка обновится сама.";
+    document.body.prepend(banner);
+  });
+});
 
 // Блок "Сейчас идёт" внизу меню: фоновые процессы с процентом и временем до конца.
 const Activity = {

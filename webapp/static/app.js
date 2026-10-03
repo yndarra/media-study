@@ -1522,19 +1522,53 @@ const Heartbeat = {
     }
     if (this.instance === null) {
       this.instance = info.instance;
+      this.ui = info.ui;
+      return;
+    }
+    // Поменялся интерфейс (html/js/css) без перезапуска сервера – тоже
+    // перезагрузиться, но не посреди набора текста и не с несохранённым.
+    if (info.ui !== this.ui && info.newest && info.ready) this.reloadPending = true;
+    if (this.reloadPending && info.instance === this.instance) {
+      if (this.safeToReload()) this.reload();
       return;
     }
     if (info.instance === this.instance || !info.ready) return;
-    clearInterval(this.timer);
     if (info.newest) {
-      location.reload();
+      // Сервер перезапущен – перезагрузиться, как только это ничего не испортит.
+      this.reloadPending = true;
+      if (this.safeToReload()) {
+        clearInterval(this.timer);
+        this.reload();
+      }
     } else {
+      clearInterval(this.timer);
       const banner = document.createElement("div");
       banner.className = "stale-banner";
       banner.textContent = "Редактор перезапущен — работайте в свежей вкладке, эта устарела.";
       document.body.prepend(banner);
       document.title = "(устарела) " + document.title;
     }
+  },
+
+  // Можно ли перезагрузить страницу сейчас: не пишем в поле, нет открытого
+  // вопроса и несохранённых изменений (окно видео, настройки).
+  safeToReload() {
+    const a = document.activeElement;
+    if (a && (a.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName))) return false;
+    if (document.querySelector(".ask-overlay")) return false;
+    if (typeof Modal !== "undefined" && Modal.guard && Modal.guard.isDirty && Modal.guard.isDirty()) return false;
+    if (State.view === "settings" && Pages.settingsGuard && Pages.settingsGuard.isDirty()) return false;
+    return true;
+  },
+
+  async reload() {
+    if (this.reloading) return; // уже перезагружаемся (сохранение ещё идёт)
+    this.reloading = true;
+    clearInterval(this.timer);
+    try {
+      await App.flushSaves(); // правки фрагмента – на сервер до перезагрузки
+    } catch (_) {}
+    location.reload();
   },
 };
 
