@@ -1961,7 +1961,7 @@ table.stats td, table.stats th { padding-top: 5px; padding-bottom: 7px; }
    видео (голубой -> фиолетовый) плавно сменяется градиентом аудио
    (розовый -> фиолетовый) – оба слоя переливаются всё время, анимация не
    прерывается. Градиент повторяется по горизонтали (первый цвет = последний),
-   поэтому перелив бесшовный; полоса широкая – 900 px на цикл. */
+   поэтому перелив бесшовный; полоса широкая – 1600 px на цикл. */
 .mode-switch.seg-switch { position: relative; }
 .mode-switch.seg-switch button,
 .mode-switch.seg-switch button.active,
@@ -1971,13 +1971,13 @@ table.stats td, table.stats th { padding-top: 5px; padding-bottom: 7px; }
 .mode-pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 8px) / 2); border-radius: 6px;
   overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1); }
 .mode-switch.audio .mode-pill { transform: translateX(calc(100% + 2px)); }
-.mode-pill i { position: absolute; inset: 0; background-size: 900px 100%; background-repeat: repeat-x;
-  animation: mode-pill-flow 12s linear infinite; transition: opacity 0.45s ease; }
+.mode-pill i { position: absolute; inset: 0; background-size: 1600px 100%; background-repeat: repeat-x;
+  animation: mode-pill-flow 21s linear infinite; transition: opacity 0.45s ease; }
 .mode-pill .pill-video { background-image: linear-gradient(90deg, #3a9de8, #9a86f5, #3a9de8); }
 .mode-pill .pill-audio { background-image: linear-gradient(90deg, #c2508f, #8957e5, #c2508f); opacity: 0; }
 .mode-switch.audio .mode-pill .pill-video { opacity: 0; }
 .mode-switch.audio .mode-pill .pill-audio { opacity: 1; }
-@keyframes mode-pill-flow { from { background-position: 900px 0; } to { background-position: 0 0; } }
+@keyframes mode-pill-flow { from { background-position: 1600px 0; } to { background-position: 0 0; } }
 /* Первая отрисовка – без переезда (пилюля сразу на своём месте). */
 .mode-switch.no-anim .mode-pill, .mode-switch.no-anim .mode-pill i { transition: none; }
 /* У таблиц статистики первая колонка была width: 100% – в fit-table ширина
