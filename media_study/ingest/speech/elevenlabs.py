@@ -163,9 +163,7 @@ def transcribe(video_path: Path, log=print) -> dict:
         _extract_audio(video_path, audio)
         fields = [("model_id", model), ("timestamps_granularity", "word"), ("diarize", "true"),
                   ("tag_audio_events", "false")]
-        language = (cfg.get("elevenlabs_language") or "").strip()
-        if language:
-            fields.append(("language_code", language))
+        # Язык не указываем – ElevenLabs определяет его сам.
         if cfg.get("elevenlabs_keyterms", True):
             terms = _keyterms(project_dir)
             fields += [("keyterms", t) for t in terms]

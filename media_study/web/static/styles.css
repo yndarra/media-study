@@ -2033,3 +2033,6 @@ html { scrollbar-gutter: stable; }
    уровне – колонка кнопки "Убрать" есть у каждой строки (у основного пустая). */
 .store-row { grid-template-columns: minmax(160px, 1fr) minmax(200px, 2fr) 84px; }
 .store-row > div:last-child { display: flex; justify-content: flex-end; }
+
+/* Распознавание речи: показываются поля только выбранного движка. */
+#asr-box[data-engine="whisper"] .asr-el, #asr-box[data-engine="elevenlabs"] .asr-wh { display: none; }

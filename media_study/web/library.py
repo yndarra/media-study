@@ -224,7 +224,7 @@ DEFAULT_APP_SETTINGS = {
     "whisper_device": "cpu",
     "whisper_gentle": False,
     "elevenlabs_model": "scribe_v2",
-    "elevenlabs_language": "en",  # пусто – язык определяется сам
+    "elevenlabs_language": "",  # не используется: язык ElevenLabs определяет сам
     "elevenlabs_keyterms": True,  # подсказывать имена/термины из словаря (+20% к цене)
     "elevenlabs_proxy": "",  # http://… или socks5://… – если ElevenLabs недоступен напрямую
     "default_link_audio": True,
