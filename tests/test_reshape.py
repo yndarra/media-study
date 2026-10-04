@@ -48,5 +48,35 @@ class TestMergeComma(unittest.TestCase):
         self.assertEqual(len(reshape.merge_comma_tails(entries, FPS, set())), 2)
 
 
+class TestMergeClose(unittest.TestCase):
+    # Слова распознавания: w0..w3 – первая фраза, w4..w7 – вторая.
+    @staticmethod
+    def asr(gap):
+        first = [{"id": f"w{i}", "start": i * 0.3, "end": i * 0.3 + 0.25} for i in range(4)]
+        second = [{"id": f"w{i}", "start": first[-1]["end"] + gap + (i - 4) * 0.3, "end": first[-1]["end"] + gap + (i - 4) * 0.3 + 0.25}
+                  for i in range(4, 8)]
+        return first + second
+
+    @staticmethod
+    def entries(first, second):
+        return [{"start_frame": 0, "end_frame": 12, "text": first, "source_segment_ids": ["w0", "w1", "w2", "w3"]},
+                {"start_frame": 12, "end_frame": 25, "text": second, "source_segment_ids": ["w4", "w5", "w6", "w7"]}]
+
+    def test_same_speaker_no_pause_joined(self):
+        out = reshape.merge_close_phrases(self.entries("Suisui: Wait.", "Suisui: Where are you going?"), self.asr(0.1), FPS)
+        self.assertEqual([e["text"] for e in out], ["Suisui: Wait. Where are you going?"])
+        self.assertEqual((out[0]["start_frame"], out[0]["end_frame"]), (0, 25))
+
+    def test_pause_or_other_speaker_not_joined(self):
+        self.assertEqual(len(reshape.merge_close_phrases(self.entries("Suisui: Wait.", "Suisui: Where?"), self.asr(0.8), FPS)), 2)
+        self.assertEqual(len(reshape.merge_close_phrases(self.entries("Suisui: Wait.", "Rover: Where?"), self.asr(0.1), FPS)), 2)
+        self.assertEqual(len(reshape.merge_close_phrases(self.entries("Suisui: Wait.", "Where?"), self.asr(0.1), FPS)), 2)
+
+    def test_no_names_and_too_long(self):
+        self.assertEqual(len(reshape.merge_close_phrases(self.entries("Wait.", "Where?"), self.asr(0.1), FPS)), 1)
+        long_text = "Suisui: " + "word " * 30
+        self.assertEqual(len(reshape.merge_close_phrases(self.entries("Suisui: Wait.", long_text), self.asr(0.1), FPS)), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

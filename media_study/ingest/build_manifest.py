@@ -85,6 +85,10 @@ def assemble_manifest(
         entries = reshape.merge_comma_tails(entries, fps, reshape.proper_words(source_words))
         for entry in entries:
             entry.pop("_words", None)
+    # Короткие фразы одного говорящего почти без паузы – одной карточкой (reshape.py, п. 3).
+    from . import reshape
+
+    entries = reshape.merge_close_phrases(entries, words, fps)
     # Каждая строка карточки — законченная фраза: заглавная, знак конца,
     # парные кавычки (см. media_study/core/text_polish.py).
     from media_study.core.text_polish import polish_text

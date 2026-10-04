@@ -10,6 +10,12 @@
    заполнителя), говорящий тот же (или у продолжения нет имени) и вместе не
    длиннее MERGE_MAX_SECONDS; первая буква продолжения становится строчной,
    если это не имя собственное.
+3. Две короткие фразы ОДНОГО персонажа, сказанные почти без паузы (между
+   последним словом первой и первым словом второй меньше CLOSE_GAP_SECONDS),
+   склеиваются в одну карточку, если вместе они короткие (не длиннее
+   CLOSE_MAX_SECONDS и CLOSE_MAX_CHARS) – даже если это два предложения
+   ("Wait. Where are you going?"). Разные говорящие или заметная пауза –
+   не склеиваются.
 
 Нужно у записей: start_frame/end_frame, text, source_segment_ids, и "_words"
 — слова источника фрагмента вместе с индексом слова речи (см.
@@ -23,6 +29,11 @@ import re
 MERGE_MAX_SECONDS = 15.0
 # Делить по говорящим — только если обе части не короче этого.
 SPLIT_MIN_SECONDS = 0.6
+# Склейка близких фраз одного говорящего (п. 3): пауза в речи между ними –
+# меньше этого, вместе – не длиннее по времени и по числу букв.
+CLOSE_GAP_SECONDS = 0.3
+CLOSE_MAX_SECONDS = 6.0
+CLOSE_MAX_CHARS = 140
 
 _SPEAKER_RE = re.compile(r"^\s*([^:\n]{1,80}?)\s*:\s*")
 
@@ -109,6 +120,52 @@ def merge_comma_tails(entries: list[dict], fps: float, names: set[str]) -> list[
                 prev["end_frame"] = entry["end_frame"]
                 prev["source_segment_ids"] = list(prev.get("source_segment_ids", [])) + list(entry.get("source_segment_ids", []))
                 prev["_words"] = list(prev.get("_words") or []) + list(entry.get("_words") or [])
+                prev["needs_review"] = prev.get("needs_review", False) or entry.get("needs_review", False)
+                prev["heard"] = prev.get("heard", False) or entry.get("heard", False)
+                continue
+        result.append(entry)
+    return result
+
+
+def _speakers_of(text: str) -> list[str | None]:
+    """Говорящий каждой строки текста (None – строка без имени)."""
+    return [_speaker(line) for line in text.strip().split("\n") if line.strip()]
+
+
+def merge_close_phrases(entries: list[dict], asr_words: list[dict], fps: float) -> list[dict]:
+    """
+    Склеивает соседние короткие фразы одного говорящего без паузы между ними
+    (см. п. 3 описания модуля). Пауза – по словам распознавания фрагментов
+    (source_segment_ids -> start/end слов); слов нет – не склеиваем.
+    """
+    by_id = {w["id"]: w for w in asr_words}
+
+    def speech(entry):
+        ws = [by_id[i] for i in entry.get("source_segment_ids") or [] if i in by_id]
+        return (min(w["start"] for w in ws), max(w["end"] for w in ws)) if ws else None
+
+    result: list[dict] = []
+    for entry in entries:
+        prev = result[-1] if result else None
+        text = (entry.get("text") or "").strip()
+        if prev is not None and text and (prev.get("text") or "").strip() and prev["end_frame"] == entry["start_frame"]:
+            a, b = speech(prev), speech(entry)
+            prev_who, who = _speakers_of(prev["text"]), _speakers_of(text)
+            # Один и тот же говорящий: у второй фразы все строки – его (или обе без имён).
+            same = len(set(who)) == 1 and who[0] == prev_who[-1]
+            joined_len = len(prev["text"].strip()) + 1 + len(_SPEAKER_RE.sub("", text, count=1) if who[0] else text)
+            if (same and a and b and b[0] - a[1] < CLOSE_GAP_SECONDS
+                    and (entry["end_frame"] - prev["start_frame"]) / fps <= CLOSE_MAX_SECONDS
+                    and joined_len <= CLOSE_MAX_CHARS):
+                # Реплики одного говорящего – одной строкой: "A: x" + "A: y" -> "A: x y".
+                body = " ".join(_SPEAKER_RE.sub("", line, count=1).strip() for line in text.split("\n") if line.strip())
+                prev["text"] = prev["text"].rstrip() + " " + body
+                if prev.get("source_text") is not None:
+                    prev["source_text"] = (prev.get("source_text") or "").rstrip() + " " + body
+                prev["end_frame"] = entry["end_frame"]
+                prev["source_segment_ids"] = list(prev.get("source_segment_ids", [])) + list(entry.get("source_segment_ids", []))
+                if "_words" in prev or "_words" in entry:
+                    prev["_words"] = list(prev.get("_words") or []) + list(entry.get("_words") or [])
                 prev["needs_review"] = prev.get("needs_review", False) or entry.get("needs_review", False)
                 prev["heard"] = prev.get("heard", False) or entry.get("heard", False)
                 continue
