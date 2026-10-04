@@ -2558,8 +2558,8 @@ const Pages = {
           <div class="field"><div class="field-label">Диски</div><div id="storages-list" class="store-list"></div></div>
           <input type="hidden" id="set-storages" value="${escapeHtml(JSON.stringify(s.storages || []))}">
           ${field("set-storage-new", "Добавить хранилище",
-            '<div class="store-add"><input id="set-storage-new" class="wide" placeholder="D:\\media-study" data-watch="no"><button id="set-storage-add" class="step-btn" disabled>Добавить</button></div>',
-            "Папка на другом диске (например, внешнем). Медиа переносятся кнопкой «Хранилище» в окне видео или аудио; в data/ остаётся ссылка")}
+            '<div class="store-add"><input id="set-storage-new" class="wide" placeholder="D:\\ или E:\\Медиа" data-watch="no"><button id="set-storage-add" class="step-btn" disabled>Добавить</button></div>',
+            "Место на другом диске (например, внешнем): папка media-study создаётся там сама. Медиа переносятся кнопкой «Хранилище» в окне видео или аудио; в data/ остаётся ссылка")}
           <div class="field-row">
             ${field("set-new-storage", "Новые видео сохранять", '<div class="picker-host" data-for="set-new-storage"></div>',
               "Куда скачиваются и добавляются новые видео")}
@@ -2658,7 +2658,12 @@ const Pages = {
     const addButton = el.querySelector("#set-storage-add");
     newInput.addEventListener("input", () => (addButton.disabled = !newInput.value.trim()));
     addButton.addEventListener("click", () => {
-      const path = newInput.value.trim().replace(/[\\/]+$/, "");
+      // Указывают только место (диск или папку) – хранилище – папка
+      // media-study внутри него (сервер создаст её при сохранении). Если
+      // указали уже саму папку media-study – вторую не добавляем.
+      let path = newInput.value.trim().replace(/["']/g, "").replace(/\//g, "\\").replace(/\\+$/, "");
+      if (/^[a-z]$/i.test(path)) path += ":"; // "D" -> "D:"
+      if (path && !/(^|\\)media-study$/i.test(path)) path += "\\media-study";
       if (path && !listed().some((p) => p.toLowerCase() === path.toLowerCase())) setStores([...listed(), path]);
       newInput.value = "";
       addButton.disabled = true;
