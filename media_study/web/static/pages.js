@@ -197,9 +197,25 @@ const Mode = {
       localStorage.setItem("media-mode", kind);
     } catch (_) {}
     this.paint();
+    if (changed) this.restartFlow(kind);
     if (changed && reroute && ["videos", "process", "add", "stats"].includes(State.view)) {
       if (State.view === "videos") location.hash = "#/media";
       Router.route(true);
+    }
+  },
+
+  // Перелив выбранного режима – с начала цикла: у видео с голубого, у аудио с
+  // розового (иначе он продолжался бы с того места, где шёл в фоне).
+  // Перезапускаются только слои нового режима (градиент пилюли и обводка),
+  // старые продолжают переливаться, пока плавно гаснут.
+  restartFlow(kind) {
+    const sw = document.getElementById("mode-switch");
+    const pill = sw.querySelector(`.pill-${kind}`);
+    const border = kind === "video" ? "::before" : "::after";
+    for (const a of document.getAnimations()) {
+      const e = a.effect;
+      if (!(a instanceof CSSAnimation) || !e) continue; // плавное появление (transition) не трогаем
+      if (e.target === pill || (e.target === sw && e.pseudoElement === border)) a.currentTime = 0;
     }
   },
 
