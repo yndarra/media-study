@@ -1994,3 +1994,26 @@ body.anki-locked #cur-text, body.anki-locked #timeline, body.anki-locked #speake
 body.anki-locked #reset-btn, body.anki-locked #undo-btn, body.anki-locked #redo-btn, body.anki-locked #merge-prev,
 body.anki-locked #merge-next, body.anki-locked #split-btn, body.anki-locked #delete-soft, body.anki-locked #delete-hard {
   pointer-events: none; opacity: 0.45; }
+
+/* Отступ контента справа = отступу от меню слева (28 px), и с полосой
+   прокрутки, и без неё: место под полосу (8 px) зарезервировано всегда,
+   плюс 20 px поля. */
+html { scrollbar-gutter: stable; }
+#main { padding-right: 20px; }
+
+/* Обводка переключателя Видео/Аудио переливается вместе с пилюлей: её цвет –
+   тот, что сейчас посередине пилюли. Градиент пилюли – a -> b -> a на
+   1600 px, сдвигается на 1600 px за 21 с; середина пилюли (~57 px от её
+   края) проходит те же цвета с тем же периодом – отсюда та же длительность
+   и сдвиг фазы (задержка −57/1600 · 21 с ≈ −0,75 с). Две обводки (видео и
+   аудио) лежат друг на друге и плавно сменяются, перелив не прерывается. */
+.mode-switch.seg-switch, .mode-switch.seg-switch.video, .mode-switch.seg-switch.audio { border-color: transparent; }
+.mode-switch.seg-switch::before, .mode-switch.seg-switch::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; border: 1px solid; pointer-events: none;
+  animation: 21s linear -0.75s infinite; transition: opacity 0.45s ease; }
+.mode-switch.seg-switch::before { animation-name: mode-border-video; }
+.mode-switch.seg-switch::after { animation-name: mode-border-audio; opacity: 0; }
+.mode-switch.seg-switch.audio::before { opacity: 0; }
+.mode-switch.seg-switch.audio::after { opacity: 1; }
+@keyframes mode-border-video { 0%, 100% { border-color: rgba(58, 157, 232, 0.75); } 50% { border-color: rgba(154, 134, 245, 0.75); } }
+@keyframes mode-border-audio { 0%, 100% { border-color: rgba(194, 80, 143, 0.75); } 50% { border-color: rgba(137, 87, 229, 0.75); } }
