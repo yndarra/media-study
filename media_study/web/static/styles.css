@@ -2017,3 +2017,19 @@ html { scrollbar-gutter: stable; }
 .mode-switch.seg-switch.audio::after { opacity: 1; }
 @keyframes mode-border-video { 0%, 100% { border-color: rgba(58, 157, 232, 0.75); } 50% { border-color: rgba(154, 134, 245, 0.75); } }
 @keyframes mode-border-audio { 0%, 100% { border-color: rgba(194, 80, 143, 0.75); } 50% { border-color: rgba(137, 87, 229, 0.75); } }
+
+/* Настройки: "Отменить" / "Сохранить" – плашка поверх страницы внизу справа
+   (над содержимым, не в конце страницы); появляется, когда что-то изменили. */
+.settings-actions { position: fixed; right: 28px; bottom: 20px; z-index: 50; margin: 0; max-width: none;
+  padding: 8px 8px 8px 14px; background: #17171d; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55); opacity: 0; transform: translateY(12px); pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease; }
+.settings-actions.show { opacity: 1; transform: none; pointer-events: auto; }
+.settings-actions #settings-note:empty { display: none; }
+/* Чтобы плашка не закрывала низ последнего блока. */
+#view-settings { padding-bottom: 64px; }
+
+/* Хранилища: полоска свободного места у всех дисков одной ширины и на одном
+   уровне – колонка кнопки "Убрать" есть у каждой строки (у основного пустая). */
+.store-row { grid-template-columns: minmax(160px, 1fr) minmax(200px, 2fr) 84px; }
+.store-row > div:last-child { display: flex; justify-content: flex-end; }

@@ -1907,7 +1907,9 @@ const Heartbeat = {
     if (a && (a.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName))) return false;
     if (document.querySelector(".ask-overlay")) return false;
     if (typeof Modal !== "undefined" && Modal.guard && Modal.guard.isDirty && Modal.guard.isDirty()) return false;
-    if (State.view === "settings" && Pages.settingsGuard && Pages.settingsGuard.isDirty()) return false;
+    // В настройках – никогда: перезагрузка сразу после "Сохранить" выглядела
+    // как сброс страницы. Свежий интерфейс подхватится при переходе в другой раздел.
+    if (State.view === "settings") return false;
     return true;
   },
 

@@ -884,7 +884,7 @@ function singleLine(el) {
 
 // Следит за полями формы: кнопки "Сохранить"/"Отменить" активны, только когда
 // что-то изменено. snapshot() — запомнить текущее как сохранённое.
-function formWatch(root, buttons) {
+function formWatch(root, buttons, onChange = null) {
   const fields = () => [...root.querySelectorAll("input, textarea, select")].filter((el) => el.dataset.watch !== "no");
   const value = (el) => (el.type === "checkbox" ? String(el.checked) : el.value);
   let saved = [];
@@ -909,6 +909,7 @@ function formWatch(root, buttons) {
     update() {
       const dirty = watcher.isDirty();
       buttons.forEach((button) => button && (button.disabled = !dirty));
+      if (onChange) onChange(dirty);
     },
   };
   root.addEventListener("input", () => watcher.update());
@@ -1294,7 +1295,7 @@ const PanelMotion = {
   // Что переезжает плавно: карточки, заголовки, блоки страниц.
   _items() {
     return [...document.querySelectorAll(
-      "#main .view:not(.hidden) :is(.card, .set-card, .group-title, .page-head, .page-note, .settings-actions, #app), " +
+      "#main .view:not(.hidden) :is(.card, .set-card, .group-title, .page-head, .page-note, #app), " +
       "#main .view:not(.hidden) > h1")];
   },
 
@@ -2806,7 +2807,7 @@ const Pages = {
       });
     }
     // Заголовок, описание, карточки по очереди, кнопки.
-    viewEnter(el, [el.querySelector("h1"), ...el.querySelectorAll(".set-card"), el.querySelector(".settings-actions")]);
+    viewEnter(el, [el.querySelector("h1"), ...el.querySelectorAll(".set-card")]);
     const showDeckSync = (state) => {
       const box = document.getElementById("deck-sync");
       if (!box || !state) return;
@@ -2823,7 +2824,11 @@ const Pages = {
     watchDeckSync(s.deck_sync);
     const saveButton = document.getElementById("settings-save");
     const cancelButton = document.getElementById("settings-cancel");
-    const watcher = formWatch(document.getElementById("settings-form"), [saveButton, cancelButton]);
+    // "Отменить" / "Сохранить" – плашка поверх страницы внизу справа, видна,
+    // только пока есть несохранённые изменения.
+    const actions = el.querySelector(".settings-actions");
+    const watcher = formWatch(document.getElementById("settings-form"), [saveButton, cancelButton],
+      (dirty) => actions.classList.toggle("show", dirty));
     document.getElementById("set-key-eye").addEventListener("click", () => {
       const input = document.getElementById("set-key");
       input.type = input.type === "password" ? "text" : "password";
