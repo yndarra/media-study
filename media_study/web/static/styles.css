@@ -2037,12 +2037,11 @@ html { scrollbar-gutter: stable; }
 /* Распознавание речи: показываются поля только выбранного движка. */
 #asr-box[data-engine="whisper"] .asr-el, #asr-box[data-engine="elevenlabs"] .asr-wh { display: none; }
 
-/* Занятые кнопки на карточках: основной текст и "Отмена?" в одной ячейке;
-   смена – общая для всех кнопок (html.cancel-phase): уходящий текст плавно
-   уезжает вверх и гаснет, приходящий вырастает снизу. */
+/* Занятые кнопки на карточках: основной текст и "Отмена?" в одной ячейке
+   (CancelFlip в pages.js). Каждая буква при печати вырастает снизу, при
+   стирании уходит вниз; невидимые буквы место держат – текст не скачет. */
 .card-action .flip { display: inline-grid; position: relative; overflow: hidden; vertical-align: top; }
-.card-action .flip > span { grid-area: 1 / 1; text-align: center; white-space: nowrap;
-  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease, filter 0.45s ease; }
-.card-action .flip-cancel { transform: translateY(85%) scaleY(0.6); opacity: 0; filter: blur(1px); transform-origin: 50% 100%; }
-html.cancel-phase .card-action .flip-main { transform: translateY(-85%) scaleY(0.6); opacity: 0; filter: blur(1px); transform-origin: 50% 0; }
-html.cancel-phase .card-action .flip-cancel { transform: none; opacity: 1; filter: none; }
+.card-action .flip > span { grid-area: 1 / 1; text-align: center; white-space: pre; }
+.card-action .flip .ch { display: inline-block; transform-origin: 50% 100%; transform: translateY(75%) scaleY(0.2); opacity: 0;
+  transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.25), opacity 0.16s ease; }
+.card-action .flip .ch.on { transform: none; opacity: 1; }

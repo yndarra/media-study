@@ -223,6 +223,8 @@ def heartbeat(body: HeartbeatRequest):
         # Версия интерфейса (время последней правки html/js/css): сменилась –
         # вкладка сама перезагружается (правки интерфейса без перезапуска сервера).
         "ui": _ui_version(),
+        # Видео, которые сейчас переносятся: вкладка отпускает их файл в плеере.
+        "moving": [pid for pid, st in __import__("media_study.web.storage", fromlist=["MOVES"]).MOVES.items() if not st["finished"]],
         "ready": time.monotonic() - SERVER_STARTED >= READY_AFTER_SECONDS,
         "newest": body.opened_at >= newest,
         "stage3": stage3,
@@ -387,7 +389,7 @@ def _storage_info(project_id: str) -> dict:
         "here": here,
         "targets": [s for s in storage.storages(DATA_DIR)
                     if s["online"] and os.path.normcase(s["path"]) != os.path.normcase(here["path"])],
-        "move": move and {k: move[k] for k in ("done", "total", "dest", "error", "finished")},
+        "move": move and {**{k: move[k] for k in ("done", "total", "dest", "error", "finished")}, "waiting": move.get("waiting", "")},
     }
 
 

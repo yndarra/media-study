@@ -277,7 +277,11 @@ const App = {
   // Открыть видео в редакторе. Встаём на последний изменённый фрагмент —
   // там, где остановились в прошлый раз.
   async openProject(id) {
-    if (State.project === id && State.manifest) return;
+    if (State.project === id && State.manifest) {
+      // Вернулись в редактор того же видео, а файл отпускали – снова подключить и встать на фрагмент.
+      if (Player.reattach() && State.fragmentIndex >= 0) await this.open(State.fragmentIndex);
+      return;
+    }
     await this.flushSaves();
     Player.pauseIfPlaying();
     State.project = id;
@@ -1870,6 +1874,8 @@ const Heartbeat = {
         if (State.view === "editor" && currentFragment()) App.renderStatus(currentFragment());
       }
     }
+    // Это видео переносится на другой диск – отпустить его файл в плеере.
+    if (State.project && (info.moving || []).includes(State.project)) Player.release();
     if (this.instance === null) {
       this.instance = info.instance;
       this.ui = info.ui;

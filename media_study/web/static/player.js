@@ -333,6 +333,7 @@ const Player = {
     this.pauseIfPlaying();
     this._unfreeze();
     this.src = url;
+    this.released = false;
     this.targetFrame = null;
     this.issuedFrame = null;
     this.seekStartedAt = null;
@@ -340,6 +341,24 @@ const Player = {
     this.video.src = url;
     this.video.muted = true;
     this.video.load();
+  },
+
+  // Отпустить файл видео (ушли из редактора; видео переносится на другой
+  // диск): иначе браузер держит source.mp4 открытым, и Windows не даёт
+  // перенести папку видео. При возвращении в редактор – reattach().
+  release() {
+    if (!this.src || this.released) return;
+    this.pauseIfPlaying();
+    this.video.removeAttribute("src");
+    this.video.load();
+    this.released = true;
+  },
+
+  reattach() {
+    if (!this.released) return false;
+    this.released = false;
+    this.setSource(this.src);
+    return true;
   },
 
   // -- перемотка ---------------------------------------------------------------

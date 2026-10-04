@@ -365,6 +365,8 @@ const Router = {
   },
 
   show(view, menu) {
+    // Ушли из редактора – плеер отпускает файл видео (см. Player.release).
+    if (view !== "editor" && typeof Player !== "undefined") Player.release();
     State.view = view;
     document.querySelectorAll(".view").forEach((el) => el.classList.toggle("hidden", el.id !== `view-${view}`));
     document.querySelectorAll("#menu a[data-menu]").forEach((a) => a.classList.toggle("active", a.dataset.menu === menu));
@@ -531,26 +533,66 @@ const Zebra = {
 
 // Текст занятой кнопки на карточке ("Передаётся в Anki…", "Выполняется
 // перевод…", "Перемещение…"): эти кнопки ещё и отменяют действие, и чтобы это
-// было понятно, по кругу основной текст уезжает вверх и гаснет, а снизу
-// плавно вырастает "Отмена?" (и обратно). Круг ОБЩИЙ для всех таких кнопок:
-// один класс на <html> (cancel-phase), анимация – CSS-переходом, поэтому
-// "Отмена?" появляется и исчезает у всех кнопок одновременно, а новая
-// кнопка сразу показывает текущую фазу.
+// было понятно, по кругу текст посимвольно стирается (с конца), печатается
+// "Отмена?", держится, стирается и снова печатается основной. Каждая буква
+// при печати вырастает снизу ("из-под земли"), при стирании – уходит вниз
+// (CSS-переход у каждой буквы, класс on).
+//
+// Круг ОБЩИЙ для всех таких кнопок: фаза – от одних часов, длительности
+// стирания/печати не зависят от длины текста, поэтому "Отмена?" появляется и
+// исчезает у всех кнопок одновременно; новая кнопка сразу в текущей фазе.
 const CancelFlip = {
-  HOLD_MAIN_MS: 3200, // сколько виден основной текст
-  HOLD_CANCEL_MS: 1600, // сколько видно "Отмена?"
+  CANCEL: "Отмена?",
+  // [фаза, длительность, мс]
+  PHASES: [["holdMain", 3200], ["eraseMain", 650], ["typeCancel", 520], ["holdCancel", 1600], ["eraseCancel", 420], ["typeMain", 750]],
+
   start() {
-    const root = document.documentElement;
-    const tick = () => {
-      const cancel = !root.classList.contains("cancel-phase");
-      root.classList.toggle("cancel-phase", cancel);
-      setTimeout(tick, cancel ? this.HOLD_CANCEL_MS : this.HOLD_MAIN_MS);
+    const frame = () => {
+      const now = performance.now();
+      for (const flip of document.querySelectorAll(".flip")) {
+        const main = flip.querySelectorAll(".flip-main .ch");
+        const cancel = flip.querySelectorAll(".flip-cancel .ch");
+        const [m, c] = this.counts(main.length, cancel.length, now);
+        main.forEach((ch, i) => ch.classList.toggle("on", i < m));
+        cancel.forEach((ch, i) => ch.classList.toggle("on", i < c));
+      }
+      requestAnimationFrame(frame);
     };
-    setTimeout(tick, this.HOLD_MAIN_MS);
+    requestAnimationFrame(frame);
   },
-  // Разметка текста кнопки: основной и "Отмена?" в одной ячейке (ширина – по длинному).
+
+  // Сколько букв основного текста (из nMain) и "Отмена?" (из nCancel) видно сейчас.
+  counts(nMain, nCancel, now) {
+    const cycle = this.PHASES.reduce((sum, [, d]) => sum + d, 0);
+    let t = now % cycle;
+    let phase = "holdMain";
+    let k = 0; // доля пройденной фазы, 0..1
+    for (const [name, d] of this.PHASES) {
+      if (t < d) {
+        phase = name;
+        k = t / d;
+        break;
+      }
+      t -= d;
+    }
+    const shown = (n) => Math.max(0, Math.min(n, Math.ceil(n * k)));
+    return {
+      holdMain: [nMain, 0],
+      eraseMain: [nMain - shown(nMain), 0],
+      typeCancel: [0, shown(nCancel)],
+      holdCancel: [0, nCancel],
+      eraseCancel: [0, nCancel - shown(nCancel)],
+      typeMain: [shown(nMain), 0],
+    }[phase];
+  },
+
+  // Разметка: основной и "Отмена?" в одной ячейке (ширина – по длинному), каждая
+  // буква – отдельно. Сразу в текущей фазе: список карточек перерисовывается
+  // каждые несколько секунд, и буквы не должны при этом "вырастать" заново.
   html(main) {
-    return `<span class="flip"><span class="flip-main">${escapeHtml(main)}</span><span class="flip-cancel">Отмена?</span></span>`;
+    const [m, c] = this.counts([...main].length, [...this.CANCEL].length, performance.now());
+    const chars = (text, on) => [...text].map((ch, i) => `<span class="ch${i < on ? " on" : ""}">${escapeHtml(ch)}</span>`).join("");
+    return `<span class="flip"><span class="flip-main">${chars(main, m)}</span><span class="flip-cancel">${chars(this.CANCEL, c)}</span></span>`;
   },
 };
 CancelFlip.start();
@@ -1859,7 +1901,9 @@ const Pages = {
         running = waitingBatch || (st.state === "running" && st.project === id && Date.now() / 1000 - st.updated < 300);
         render(s);
         paint(s);
-        if (moving) setNote(`Перенос на ${mv.dest}: ${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}% – ` +
+        // Копия готова, но файлы видео кто-то держит – перенос ждёт (кто – в тексте).
+        if (moving && mv.waiting) setNote(mv.waiting);
+        else if (moving) setNote(`Перенос на ${mv.dest}: ${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}% – ` +
           `${(mv.done / 2 ** 30).toFixed(1)}/${(mv.total / 2 ** 30).toFixed(1)} ГБ`);
         else if (mv && mv.error) setNote(mv.error);
         else if (sending) setNote(`Передача в Anki: ${s.in_anki}/${s.active_total}`);
@@ -2129,7 +2173,7 @@ const Pages = {
       }
       const mv = storageInfo && storageInfo.move;
       moving = !!(mv && !mv.finished);
-      procNote.textContent = moving ? `Перенос на ${mv.dest}: ${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}%` : mv && mv.error ? mv.error : "";
+      procNote.textContent = moving ? (mv.waiting || `Перенос на ${mv.dest}: ${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}%`) : mv && mv.error ? mv.error : "";
       renderProc();
       if (moving) setTimeout(pollMove, 1200);
     };

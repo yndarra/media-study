@@ -16,6 +16,13 @@ data/<код> как раньше и ничего не знает о други�
 идёт", затем ссылка переставляется, и старая копия удаляется. Пока идёт
 копирование, видео остаётся на старом месте целиком – если что-то сорвалось,
 ничего не теряется (недокопированное удаляется).
+
+Переставить ссылку можно, только когда файлы видео никто не держит открытыми
+(Windows не даёт переименовать папку с открытыми файлами). Держать может
+вкладка приложения (плеер редактора – он отпускает видео при уходе из
+редактора и при переносе), проводник, антивирус. Тогда перенос не
+выбрасывает готовую копию, а ждёт (WAIT_FREE_SECONDS), повторяя попытку и
+показывая, какая программа держит файлы (Restart Manager Windows).
 """
 from __future__ import annotations
 
@@ -27,6 +34,7 @@ import threading
 import time
 from pathlib import Path
 
+WAIT_FREE_SECONDS = 15 * 60  # сколько ждать, пока файлы видео освободятся
 INDEX_FILE = "storage_index.json"  # код -> {title, group, storage}: для показа при отключённом диске
 
 # Идущие переносы: код видео -> {"done", "total", "dest", "error", "finished"}.
@@ -162,6 +170,72 @@ def new_project_dir(data_dir: Path, project_id: str, audio: bool = False) -> Pat
     return link
 
 
+def lockers(paths: list[Path]) -> list[str]:
+    """
+    Какие программы держат открытыми эти файлы (Restart Manager Windows):
+    ["msedge.exe (Microsoft Edge)", ...]; не удалось узнать – [].
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class RM_UNIQUE_PROCESS(ctypes.Structure):
+        _fields_ = [("dwProcessId", wintypes.DWORD), ("ProcessStartTime", wintypes.FILETIME)]
+
+    class RM_PROCESS_INFO(ctypes.Structure):
+        _fields_ = [("Process", RM_UNIQUE_PROCESS), ("strAppName", wintypes.WCHAR * 256),
+                    ("strServiceShortName", wintypes.WCHAR * 64), ("ApplicationType", ctypes.c_int),
+                    ("AppStatus", wintypes.ULONG), ("TSSessionId", wintypes.DWORD), ("bRestartable", wintypes.BOOL)]
+
+    try:
+        rm = ctypes.WinDLL("rstrtmgr")
+        session = wintypes.DWORD()
+        key = ctypes.create_unicode_buffer(64)
+        if rm.RmStartSession(ctypes.byref(session), 0, key):
+            return []
+        try:
+            names = [str(p) for p in paths][:500]
+            arr = (wintypes.LPCWSTR * len(names))(*names)
+            if rm.RmRegisterResources(session, len(names), arr, 0, None, 0, None):
+                return []
+            needed, count, reasons = wintypes.UINT(0), wintypes.UINT(0), wintypes.DWORD(0)
+            rm.RmGetList(session, ctypes.byref(needed), ctypes.byref(count), None, ctypes.byref(reasons))
+            if not needed.value:
+                return []
+            infos = (RM_PROCESS_INFO * needed.value)()
+            count = wintypes.UINT(needed.value)
+            if rm.RmGetList(session, ctypes.byref(needed), ctypes.byref(count), infos, ctypes.byref(reasons)):
+                return []
+            result = []
+            for info in infos[:count.value]:
+                exe = _process_name(info.Process.dwProcessId)
+                label = f"{exe} ({info.strAppName})" if exe and info.strAppName and info.strAppName.lower() != exe.lower() else (exe or info.strAppName)
+                if os.getpid() == info.Process.dwProcessId:
+                    label = "сервер приложения (отдаёт видео открытой вкладке)"
+                if label and label not in result:
+                    result.append(label)
+            return result
+        finally:
+            rm.RmEndSession(session)
+    except (OSError, AttributeError):
+        return []
+
+
+def _process_name(pid: int) -> str:
+    import ctypes
+
+    handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return ""
+    try:
+        buf = ctypes.create_unicode_buffer(1024)
+        size = ctypes.c_ulong(1024)
+        if ctypes.windll.kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+            return os.path.basename(buf.value)
+        return ""
+    finally:
+        ctypes.windll.kernel32.CloseHandle(handle)
+
+
 def _files(root: Path) -> list[Path]:
     return [p for p in root.rglob("*") if p.is_file()]
 
@@ -223,14 +297,31 @@ def move(data_dir: Path, project_id: str, dest_root: str) -> None:
         except BaseException:
             _rmtree(staging)
             raise
-        # 2. Переставить: data/<код> – на новое место.
+        # 2. Переставить: data/<код> – на новое место. Папку с открытыми
+        # файлами Windows переименовать не даёт – ждём, пока отпустят (копия
+        # готова, её не выбрасываем), и пишем, кто держит.
         if target_now is None:
             old = spare / f"{project_id}.old"
-            try:
-                link.rename(old)  # не выйдет, если файлы видео открыты (редактор)
-            except OSError:
-                _rmtree(staging)
-                raise OSError("Файлы видео заняты – закройте его в редакторе и повторите")
+            deadline = time.time() + WAIT_FREE_SECONDS
+            while True:
+                try:
+                    link.rename(old)
+                    state.pop("waiting", None)
+                    break
+                except OSError:
+                    if state.get("cancel"):
+                        _rmtree(staging)
+                        raise Cancelled()
+                    if time.time() > deadline:
+                        who = lockers(files)
+                        _rmtree(staging)
+                        raise OSError("Файлы видео так и не освободились" + (f" – их держит {', '.join(who)}" if who else "")
+                                      + ". Закройте программу и повторите перенос")
+                    if not state.get("waiting") or time.time() - state.get("checked", 0) > 10:
+                        who = lockers(files)
+                        state["checked"] = time.time()
+                        state["waiting"] = "Жду, пока освободятся файлы видео" + (f": их держит {', '.join(who)}" if who else "")
+                    time.sleep(2)
         else:
             os.rmdir(link)  # убирает только ссылку, папка за ней остаётся
             old = target_now
@@ -275,7 +366,7 @@ def moving(project_id: str) -> dict | None:
     st = MOVES.get(project_id)
     if not st or st["finished"]:
         return None
-    return {"done": st["done"], "total": st["total"], "dest": st["dest"]}
+    return {"done": st["done"], "total": st["total"], "dest": st["dest"], "waiting": st.get("waiting", "")}
 
 
 def activity() -> list[dict]:
@@ -285,7 +376,8 @@ def activity() -> list[dict]:
         if st["finished"]:
             continue
         gb = lambda n: f"{n / 2**30:.1f}"
-        items.append({"kind": "move", "id": project_id, "title": project_id, "label": f"Перенос на {st['dest']}",
+        items.append({"kind": "move", "id": project_id, "title": project_id,
+                      "label": st.get("waiting") or f"Перенос на {st['dest']}",
                       "detail": f"{gb(st['done'])}/{gb(st['total'])} ГБ" if st["total"] else "",
                       "percent": round(100 * st["done"] / st["total"], 1) if st["total"] else None, "eta_seconds": None})
     return items
