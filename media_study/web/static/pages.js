@@ -493,11 +493,7 @@ const Zebra = {
       // Фаза – в долях шага: при смене ширины полосы растягиваются, а не прыгают.
       st.cycles = (st.cycles + (st.speed * dt) / (2 * st.stripe)) % 1;
       this.draw(button, st, target.color);
-      // Текст "… ↔ Отмена" печатается и стирается (занятые кнопки на карточках).
-      const typed = button.querySelector("span[data-type]");
-      if (typed) typed.textContent = Typer.text(key, typed.dataset.type, now);
     }
-    Typer.forget(now);
     requestAnimationFrame((t) => this.frame(t));
   },
 
@@ -535,67 +531,43 @@ const Zebra = {
 
 // Текст занятой кнопки на карточке ("Передаётся в Anki…", "Выполняется
 // перевод…", "Перемещение…"): эти кнопки ещё и отменяют действие, и чтобы это
-// было понятно, текст по кругу посимвольно стирается (как Backspace),
-// печатается "Отмена", держится, стирается, и снова печатается основной.
-// Появилась кнопка – основной текст сначала печатается. Время – от первого
-// показа кнопки, поэтому перерисовка списка (каждые 3 с) текст не сбрасывает.
-const Typer = {
-  CANCEL: "Отмена",
-  TYPE_MS: 55, // на символ при печати
-  ERASE_MS: 32, // на символ при стирании
-  HOLD_MAIN_MS: 3200,
-  HOLD_CANCEL_MS: 1500,
-  starts: new Map(), // ключ кнопки -> {t0, seen}
-
-  text(key, main, now) {
-    let st = this.starts.get(key);
-    if (!st) {
-      st = { t0: now, seen: now };
-      this.starts.set(key, st);
-    }
-    st.seen = now;
-    const c = this.CANCEL;
-    const typeIn = (s, t) => s.slice(0, Math.min(s.length, Math.floor(t / this.TYPE_MS) + 1));
-    const eraseOut = (s, t) => s.slice(0, Math.max(0, s.length - Math.floor(t / this.ERASE_MS) - 1));
-    let t = now - st.t0;
-    if (t < main.length * this.TYPE_MS) return typeIn(main, t);
-    t -= main.length * this.TYPE_MS;
-    // Круг: держим основной -> стираем -> печатаем "Отмена" -> держим -> стираем -> печатаем основной.
-    const parts = [
-      [this.HOLD_MAIN_MS, () => main],
-      [main.length * this.ERASE_MS, (x) => eraseOut(main, x)],
-      [c.length * this.TYPE_MS, (x) => typeIn(c, x)],
-      [this.HOLD_CANCEL_MS, () => c],
-      [c.length * this.ERASE_MS, (x) => eraseOut(c, x)],
-      [main.length * this.TYPE_MS, (x) => typeIn(main, x)],
-    ];
-    t %= parts.reduce((sum, [d]) => sum + d, 0);
-    for (const [d, f] of parts) {
-      if (t < d) return f(t) || "\u00a0"; // пустая строка не схлопывает кнопку
-      t -= d;
-    }
-    return main;
+// было понятно, по кругу основной текст уезжает вверх и гаснет, а снизу
+// плавно вырастает "Отмена?" (и обратно). Круг ОБЩИЙ для всех таких кнопок:
+// один класс на <html> (cancel-phase), анимация – CSS-переходом, поэтому
+// "Отмена?" появляется и исчезает у всех кнопок одновременно, а новая
+// кнопка сразу показывает текущую фазу.
+const CancelFlip = {
+  HOLD_MAIN_MS: 3200, // сколько виден основной текст
+  HOLD_CANCEL_MS: 1600, // сколько видно "Отмена?"
+  start() {
+    const root = document.documentElement;
+    const tick = () => {
+      const cancel = !root.classList.contains("cancel-phase");
+      root.classList.toggle("cancel-phase", cancel);
+      setTimeout(tick, cancel ? this.HOLD_CANCEL_MS : this.HOLD_MAIN_MS);
+    };
+    setTimeout(tick, this.HOLD_MAIN_MS);
   },
-
-  // Кнопка пропала (дольше секунды не рисовалась) – при новом появлении текст снова печатается.
-  forget(now) {
-    for (const [key, st] of this.starts) if (now - st.seen > 1000) this.starts.delete(key);
+  // Разметка текста кнопки: основной и "Отмена?" в одной ячейке (ширина – по длинному).
+  html(main) {
+    return `<span class="flip"><span class="flip-main">${escapeHtml(main)}</span><span class="flip-cancel">Отмена?</span></span>`;
   },
 };
+CancelFlip.start();
 
 function cardAction(v) {
   const pressed = Pages.pressedActions.get(v.id);
   const just = pressed && Date.now() - pressed.at < 8000 ? pressed.action : null; // нажали, сервер ещё не успел
   const id = escapeHtml(v.id);
-  // Идущие действия – нажатие отменяет (текст сам подсказывает: "… ↔ Отмена").
+  // Идущие действия – нажатие отменяет (текст сам подсказывает: "… ↔ Отмена?").
   if (v.moving || just === "move") {
-    return `<button class="card-action move busy" data-action="cancel-move" data-id="${id}" title="Отменить перенос"><canvas class="zebra"></canvas><span data-type="Перемещение…"></span></button>`;
+    return `<button class="card-action move busy" data-action="cancel-move" data-id="${id}" title="Отменить перенос"><canvas class="zebra"></canvas>${CancelFlip.html("Перемещение…")}</button>`;
   }
   if (v.sending || just === "send") {
-    return `<button class="card-action send busy" data-action="cancel-send" data-id="${id}" title="Отменить передачу в Anki"><canvas class="zebra"></canvas><span data-type="Передаётся в Anki…"></span></button>`;
+    return `<button class="card-action send busy" data-action="cancel-send" data-id="${id}" title="Отменить передачу в Anki"><canvas class="zebra"></canvas>${CancelFlip.html("Передаётся в Anki…")}</button>`;
   }
   if (v.translating || just === "translate") {
-    return `<button class="card-action translate busy" data-action="stop" data-id="${id}" title="Отменить перевод"><canvas class="zebra"></canvas><span data-type="Выполняется перевод…"></span></button>`;
+    return `<button class="card-action translate busy" data-action="stop" data-id="${id}" title="Отменить перевод"><canvas class="zebra"></canvas>${CancelFlip.html("Выполняется перевод…")}</button>`;
   }
   if (v.ready_to_send) {
     return `<button class="card-action send" data-action="send" data-id="${id}"><canvas class="zebra"></canvas><span>Передать в Anki</span></button>`;
