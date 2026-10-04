@@ -2,7 +2,7 @@
 """Перевод пачками: запрос (кэш текста видео) и разбор ответа в предложения."""
 import unittest
 
-from phase3_export import translator
+from media_study.export import translator
 
 
 def card(i, text="Hello.", flag=0):

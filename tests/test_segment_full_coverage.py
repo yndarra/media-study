@@ -6,10 +6,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phase1_ingest import segment
-from common.context_bounds import CONTEXT_PADDING_SECONDS
-from common.frame_time import frames_for_seconds
-from common.manifest_schema import validate_full_coverage
+from media_study.ingest import segment
+from media_study.core.context_bounds import CONTEXT_PADDING_SECONDS
+from media_study.core.frames import frames_for_seconds
+from media_study.core.manifest import validate_full_coverage
 
 
 FPS = 30.0

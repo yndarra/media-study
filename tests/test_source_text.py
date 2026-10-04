@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phase1_ingest.source_text import assign_source_words, words_from_cues
+from media_study.ingest.source_text import assign_source_words, words_from_cues
 
 
 def asr(*words):

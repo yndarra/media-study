@@ -2,7 +2,7 @@
 """Ответ ElevenLabs Speech-to-Text -> формат whisper_transcript.json."""
 import unittest
 
-from phase1_ingest.transcribe_elevenlabs import _to_whisper_format
+from media_study.ingest.speech.elevenlabs import _to_whisper_format
 
 
 class TestFormat(unittest.TestCase):

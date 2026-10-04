@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phase3_export.anki import note_tags, split_speakers
+from media_study.export.anki import note_tags, split_speakers
 
 KNOWN = {"Yangyang", "Chixia", "Rover", "Elder Exile"}
 

@@ -7,9 +7,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.context_bounds import context_for
-from common.manifest_schema import Fragment, Manifest, VideoInfo, STATUS_ACTIVE, STATUS_DELETED
-from webapp.manifest_store import ManifestStore
+from media_study.core.context_bounds import context_for
+from media_study.core.manifest import Fragment, Manifest, VideoInfo, STATUS_ACTIVE, STATUS_DELETED
+from media_study.web.manifest_store import ManifestStore
 
 FPS = 30.0
 TOTAL_FRAMES = 300  # 10 секунд при 30 fps

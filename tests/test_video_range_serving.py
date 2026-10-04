@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from imageio_ffmpeg import get_ffmpeg_exe
 
-from common.manifest_schema import Fragment, Manifest, VideoInfo, STATUS_ACTIVE
+from media_study.core.manifest import Fragment, Manifest, VideoInfo, STATUS_ACTIVE
 
 
 def _make_tiny_video(path: Path) -> None:
@@ -53,7 +53,7 @@ class TestVideoRangeServing(unittest.TestCase):
         _make_tiny_manifest(self.project_dir)
 
         os.environ["MEDIA_STUDY_DATA_DIR"] = str(self.project_dir.parent)
-        import webapp.server as server_module
+        import media_study.web.server as server_module
         importlib.reload(server_module)  # пере-читать DATA_DIR под новый temp dir
 
         from fastapi.testclient import TestClient

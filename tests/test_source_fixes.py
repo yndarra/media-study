@@ -2,8 +2,8 @@
 """Разбор реплик вики ("???", шаблон Ровера) и страховки ИИ-доводки."""
 import unittest
 
-from phase1_ingest.ai_fix import _close_enough, _drop_new_speakers
-from phase1_ingest.sources import notion, search_agent
+from media_study.ingest.ai_fix import _close_enough, _drop_new_speakers
+from media_study.ingest.sources import notion, search_agent
 
 
 class TestDialogue(unittest.TestCase):

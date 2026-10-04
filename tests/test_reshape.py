@@ -2,8 +2,8 @@
 """Доводка нарезки: деление по говорящим и склейка фраз, оборванных на запятой."""
 import unittest
 
-from phase1_ingest import reshape
-from phase1_ingest.source_text import _join
+from media_study.ingest import reshape
+from media_study.ingest.source_text import _join
 
 FPS = 10.0
 

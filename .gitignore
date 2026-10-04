@@ -6,5 +6,5 @@ __pycache__/
 *.tmp
 *.tmp.*
 .pytest_cache/
-# ключи сервисов (common/secrets.py)
+# ключи сервисов (media_study/core/secrets.py)
 secrets/

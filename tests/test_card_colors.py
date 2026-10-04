@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Цвета на карточках Anki и строка говорящих (phase3_export/anki.py, decorate)."""
+"""Цвета на карточках Anki и строка говорящих (media_study/export/anki.py, decorate)."""
 import unittest
 
-from phase3_export import anki
+from media_study.export import anki
 
 C = {"en": "#e", "ru": "#r", "dash": "#d", "who": "#w"}
 

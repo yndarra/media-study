@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phase1_ingest import source_text
-from phase1_ingest.sources.notion import dialogue_line
+from media_study.ingest import source_text
+from media_study.ingest.sources.notion import dialogue_line
 
 
 def asr(text: str) -> list[dict]:

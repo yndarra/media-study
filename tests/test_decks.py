@@ -6,7 +6,7 @@
 import unittest
 from unittest import mock
 
-from phase3_export import anki, decks
+from media_study.export import anki, decks
 
 
 class FakeAnki:

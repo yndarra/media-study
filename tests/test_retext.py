@@ -2,8 +2,8 @@
 """Имена и термины на слух -> как в источнике; нечёткое сопоставление с источником."""
 import unittest
 
-from phase1_ingest.source_text import assign_source_words
-from phase2_tools.retext_from_source import fix_terms, known_words, proper_nouns
+from media_study.ingest.source_text import assign_source_words
+from media_study.editing.retext_from_source import fix_terms, known_words, proper_nouns
 
 SOURCE = [
     ("Yangyang", "This is the statue of Jue, the Sentinel (Oracle Engine) in Jinzhou, in the shape of a Loong (dragon)."),
@@ -51,7 +51,7 @@ class TestFuzzySource(unittest.TestCase):
 
 class TestHeardRanges(unittest.TestCase):
     def test_missing_heard_words(self):
-        from phase2_tools.retext_from_source import missing_words
+        from media_study.editing.retext_from_source import missing_words
 
         source = [("Yangyang", "Jinzhou sits right between the Desorock Highland and the Norfall Barrens."),
                   ("Chixia", "Welcome to Jinzhou!")]
@@ -71,14 +71,14 @@ class TestHeardRanges(unittest.TestCase):
                                        heard("It's a border city and a fortress."), terms, known), [])
 
     def test_lines_not_in_source_are_heard(self):
-        from phase2_tools.retext_from_source import heard_ranges, source_index
+        from media_study.editing.retext_from_source import heard_ranges, source_index
 
         text = "Chixia: Isn't that Baizhi?!\nYangyang: My apologies, it is temporarily safe."
         ranges = heard_ranges(text, source_index(SOURCE))
         self.assertEqual([text[a:b] for a, b in ranges], ["Yangyang: My apologies, it is temporarily safe."])
 
     def test_carry_and_shift(self):
-        from common.manifest_schema import carry_ranges, shift_ranges
+        from media_study.core.manifest import carry_ranges, shift_ranges
 
         # Исправленное слово теряет отметку, остальное остаётся голубым.
         old, new = "Hiya Baija!", "Hiya Baizhi!"

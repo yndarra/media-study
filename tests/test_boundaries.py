@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phase1_ingest import boundaries as bnd
+from media_study.ingest import boundaries as bnd
 
 
 def stream(text: str, word_seconds: float = 0.3, pauses: dict | None = None) -> list[dict]:

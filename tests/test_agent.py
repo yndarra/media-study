@@ -2,7 +2,7 @@
 """Агент перевода: оборот строго по правилам и комментарии со звёздочкой."""
 import unittest
 
-from phase3_export.agent import extract_comments, front_text, render_back
+from media_study.export.agent import extract_comments, front_text, render_back
 
 
 class TestRenderBack(unittest.TestCase):

@@ -2,7 +2,7 @@
 """Оформление строк карточек: заглавные, точка в конце, парные кавычки."""
 import unittest
 
-from common.text_polish import polish_line, polish_text
+from media_study.core.text_polish import polish_line, polish_text
 
 
 class TestPolish(unittest.TestCase):

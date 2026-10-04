@@ -2,7 +2,7 @@
 """Поиск источника: кусок источника, соответствующий видео, и разбор HTML."""
 import unittest
 
-from phase1_ingest.sources import search_agent as sa
+from media_study.ingest.sources import search_agent as sa
 
 
 class TestTrim(unittest.TestCase):
