@@ -317,6 +317,11 @@ const Router = {
     // Окно подробностей живёт только на своём адресе (#/video/..., #/processing/...).
     if (!(libModal || (page === "process" && id))) Modal.close(false);
     if (page === "edit" && id) {
+      // Окно подробностей – прочь сразу, без затухания, и дать браузеру его
+      // убрать с экрана до того, как начнёт строиться редактор (большое видео
+      // строится заметное время – окно висело, и казалось, что всё зависло).
+      document.querySelectorAll(".modal-overlay").forEach((o) => o.remove());
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
       // Видео переносится на другой диск (или править нечего, пока идёт
       // передача в Anki / перевод) – в редактор не пускаем.
       let lock = { locked: false };
@@ -657,12 +662,16 @@ function segWidth(w, slanted) {
 
 // Снимок полос перед перерисовкой: ширины отрезков и числа – чтобы новые
 // значения не прыгали, а плавно доезжали от старых.
-function barSnapshot(root) {
+// live – брать ширину, которая СЕЙЧАС на экране (полоса может ещё ехать):
+// перерисовка посреди анимации продолжает её с того же места, а не с нуля.
+function barSnapshot(root, live = false) {
   const snap = new Map();
   if (!root) return snap;
   root.querySelectorAll("[data-bar]").forEach((bar) => {
     const key = barKey(bar);
-    bar.querySelectorAll(".seg").forEach((seg) => snap.set(`${key}|${seg.classList[1]}`, parseFloat(seg.dataset.w) || 0));
+    const full = bar.getBoundingClientRect().width;
+    bar.querySelectorAll(".seg").forEach((seg) => snap.set(`${key}|${seg.classList[1]}`,
+      live && full ? (seg.getBoundingClientRect().width / full) * 100 : parseFloat(seg.dataset.w) || 0));
     const count = bar.querySelector(".progress-count");
     if (count) snap.set(`${key}|#`, parseFloat(count.dataset.shown ?? count.dataset.done) || 0);
   });
@@ -1748,6 +1757,9 @@ const Pages = {
     // "Править": есть что править – синяя зебра; осталось только вернувшееся
     // из Anki – фиолетовая; править нечего – просто синяя.
     const editZebra = !v.awaiting ? "" : (v.flagged || 0) >= v.awaiting ? "editReturned" : "edit";
+    // Перерисовка со свежими данными (reuse): полосы доезжают от того, что
+    // сейчас на экране, а не заполняются заново с нуля.
+    const barsBefore = reuse ? barSnapshot(body.querySelector(".modal-bars"), true) : new Map();
     body.innerHTML = `
       <div class="modal-head">
         <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
@@ -1790,7 +1802,7 @@ const Pages = {
       </div>`;
     autoGrow(body.querySelector("#title-input"));
     singleLine(body.querySelector("#group-input"));
-    animateBars(body.querySelector(".modal-bars"));
+    animateBars(body.querySelector(".modal-bars"), barsBefore);
     requestAnimationFrame(() => foldLongRows(body));
     const saveButton = body.querySelector("#info-save");
     const closeAndFlash = () => {
@@ -1903,7 +1915,7 @@ const Pages = {
         paint(s);
         // Копия готова, но файлы видео кто-то держит – перенос ждёт (кто – в тексте).
         if (moving && mv.waiting) setNote(mv.waiting);
-        else if (moving) setNote(`Перенос на ${mv.dest}: ${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}% – ` +
+        else if (moving) setNote(`Перенос на ${mv.dest}:\n${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}% – ` +
           `${(mv.done / 2 ** 30).toFixed(1)}/${(mv.total / 2 ** 30).toFixed(1)} ГБ`);
         else if (mv && mv.error) setNote(mv.error);
         else if (sending) setNote(`Передача в Anki: ${s.in_anki}/${s.active_total}`);
@@ -2173,7 +2185,7 @@ const Pages = {
       }
       const mv = storageInfo && storageInfo.move;
       moving = !!(mv && !mv.finished);
-      procNote.textContent = moving ? (mv.waiting || `Перенос на ${mv.dest}: ${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}%`) : mv && mv.error ? mv.error : "";
+      procNote.textContent = moving ? (mv.waiting || `Перенос на ${mv.dest}:\n${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}%`) : mv && mv.error ? mv.error : "";
       renderProc();
       if (moving) setTimeout(pollMove, 1200);
     };

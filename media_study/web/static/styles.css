@@ -2045,3 +2045,14 @@ html { scrollbar-gutter: stable; }
 .card-action .flip .ch { display: inline-block; transform-origin: 50% 100%; transform: translateY(75%) scaleY(0.2); opacity: 0;
   transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.25), opacity 0.16s ease; }
 .card-action .flip .ch.on { transform: none; opacity: 1; }
+
+/* Статус переноса – в две строки: "Перенос на D: …:" и под ним "82% – 15.8/19.3 ГБ". */
+#info-note, .modal-actions .note { white-space: pre-line; }
+#info-note.busy { line-height: 1.35; }
+
+/* Появление текста (textfx.js): слово – блоком (не переносится посреди),
+   каждая буква вырастает снизу. */
+.fxw { display: inline-block; white-space: nowrap; }
+.fxc { display: inline-block; white-space: pre; transform-origin: 50% 100%;
+  animation: fx-grow 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
+@keyframes fx-grow { from { transform: translateY(70%) scaleY(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
