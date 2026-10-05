@@ -1112,9 +1112,7 @@ const shortDate = (iso) => {
 function hbars(items, legend = "") {
   const total = (i) => i.segs.reduce((acc, x) => acc + (x.value || 0), 0);
   const max = Math.max(0, ...items.map(total)) || 1;
-  // Ширина колонки значения – по самому длинному значению (в символах).
-  const valueChars = Math.max(4, ...items.map((i) => String(i.text).replace(/<[^>]+>/g, "").length));
-  return `<div class="hbars" style="--hbar-val:${valueChars + 1}ch">${legend ? `<div class="hbar-legend">${legend}</div>` : ""}${items.map((i) => {
+  return `<div class="hbars">${legend ? `<div class="hbar-legend">${legend}</div>` : ""}${items.map((i) => {
     const label = i.href ? `<a href="${i.href}">${escapeHtml(i.label)}</a>` : escapeHtml(i.label);
     return `<div class="hbar-row"><div class="hbar-label" title="${escapeHtml(i.label)}">${label}</div><div class="hbar-track"><div class="hbar-fill">` +
       i.segs.map((x) => `<div class="hbar-seg ${x.cls || ""}" style="width:${((x.value || 0) / max * 100).toFixed(2)}%" title="${escapeHtml(x.title || "")}"></div>`).join("") +
@@ -1174,7 +1172,7 @@ function drawSpeedChart(box, list, avg) {
   box.innerHTML = `<svg class="speed-line" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <defs><linearGradient id="speed-fill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#79b8ff" stop-opacity="0.35"/><stop offset="1" stop-color="#79b8ff" stop-opacity="0"/></linearGradient></defs>
-    ${grid}<path class="area" d="${area}"/><path class="line" d="${line}"/>
+    ${grid}<path class="area" d="${area}"/><path class="line" d="${line}" pathLength="1"/>
     <line class="avg" x1="${pad.l}" x2="${W - pad.r}" y1="${y(avg)}" y2="${y(avg)}"/>
     <text class="avg-label" x="${W - pad.r}" y="${y(avg) - 6}" text-anchor="end">средняя ${avg.toFixed(2)}/мин</text>
     ${dots}${labels}</svg>`;
@@ -2440,11 +2438,10 @@ const Pages = {
       { key: "disk", label: "Место на диске", get: (v) => v.disk_total || 0, fmt: (x) => formatSize(x) },
     ];
     const metricOf = (k) => metrics.find((m) => m.key === k) || metrics[0];
-    const ui = (this.statsUi ||= { tab: localStorage.getItem("stats-tab") || "speed", infoMetric: "duration", sort: "duration", dir: -1, authorMetric: "duration" });
+    const ui = (this.statsUi ||= { tab: localStorage.getItem("stats-tab") || "costs", infoMetric: "duration", sort: "duration", dir: -1, authorMetric: "duration" });
     const mediaLink = (v) => `#/${v.state === "ready" ? (v.audio_only ? "audio" : "video") : "process"}/${encodeURIComponent(v.id)}`;
 
     const tabs = {
-      speed: { label: "Скорость правки", html: () => speedTab(data.results, Math.max(0, barTotal - editedAll)) },
       costs: {
         label: "Расходы",
         html: () => {
@@ -2461,6 +2458,7 @@ const Pages = {
             <tr class="total-row"><td>Итого</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k))}</td>`).join("")}<td><b>${money(spentVideos)}</b></td></tr></table>`;
         },
       },
+      speed: { label: "Скорость правки", html: () => speedTab(data.results, Math.max(0, barTotal - editedAll)) },
       info: {
         label: "Информация",
         html: () => {
@@ -2499,7 +2497,7 @@ const Pages = {
         },
       },
     };
-    if (!tabs[ui.tab]) ui.tab = "speed";
+    if (!tabs[ui.tab]) ui.tab = "costs";
 
     el.innerHTML = `<h1>Статистика</h1>
       <div class="page-grid stats-grid">

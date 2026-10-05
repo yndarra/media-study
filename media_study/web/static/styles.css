@@ -2112,3 +2112,18 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
 /* Время в карточке медиа – как название (размер, жирность, обычные цифры),
    отличается только цветом. */
 .card-time { font-variant-numeric: normal; margin-right: 0; }
+
+/* Полосы статистики: одна сетка на блок – колонка значения по самому
+   широкому значению (всё влезает), полосы у всех строк одной длины. */
+.hbars { display: grid; grid-template-columns: minmax(140px, 30%) 1fr max-content; column-gap: 12px; row-gap: 7px; }
+.hbars > .hbar-row { display: contents; }
+.hbars > .hbar-legend, .hbars > p { grid-column: 1 / -1; }
+.hbar-value { min-width: 0; }
+/* Заполнение – со скруглённым правым краем. */
+.hbar-fill > .hbar-seg:last-child { border-radius: 0 4px 4px 0; }
+
+/* График скорости правки: линия прорисовывается слева направо, заливка и
+   средняя проявляются. */
+.speed-line .line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: line-draw 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s forwards; }
+@keyframes line-draw { to { stroke-dashoffset: 0; } }
+.speed-line .area, .speed-line .avg, .speed-line .avg-label { animation: fade-in 0.8s ease-out 0.5s both; }
