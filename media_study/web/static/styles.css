@@ -2103,3 +2103,8 @@ a.step-btn { padding-bottom: 0; }
 table.stats { border-collapse: separate; border-spacing: 0; }
 table.stats td, table.stats th { padding-top: 5px; padding-bottom: 7px; }
 table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bottom: 7px; } /* строка 34 px – цифры ровно посередине */
+
+/* Появление блоков: медленнее и строго по одному – слева направо, потом
+   следующий ряд (порядок в разметке); только прозрачность. */
+:root { --enter-step: 70ms; }
+.enter { animation-duration: 0.6s; animation-timing-function: ease-out; animation-delay: calc(var(--i) * var(--enter-step)); }

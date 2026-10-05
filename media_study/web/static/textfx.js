@@ -19,7 +19,11 @@
 //   - текст, который не влезает и обрезается многоточием (text-overflow:
 //     ellipsis, line-clamp), сначала обрезается так, как обрежет его CSS, и
 //     анимируется уже обрезанный – ничего не вылезает за край;
-//   - на время анимации буквы обёрнуты в <span>, после – прежняя разметка.
+//   - буквы обёрнуты в <span> и после анимации так и остаются (data-fxdone):
+//     обёрнутые буквы встают на чуть другие доли пикселя, чем обычный текст,
+//     и возврат к обычному тексту давал рывок в конце. Обычный текст
+//     возвращается только при смене размера окна (пересчитать многоточие) и
+//     когда содержимое перестраивают (свернуть строку и т.п. – finish()).
 //
 // Не трогается: редактор, поля ввода, svg/canvas, числа, которые и так
 // плавно считаются (progress-count), буквы занятых кнопок (.flip), и всё,
@@ -43,7 +47,7 @@ const TextFx = {
   // Лист: только текст (или уже обёрнутый нами); строка data-fx-line – тоже единица.
   isUnit(el) {
     if (!el || el.nodeType !== 1) return false;
-    if (el.dataset.fx || el.hasAttribute("data-fx-line")) return true;
+    if (el.dataset.fx || el.hasAttribute("data-fxdone") || el.hasAttribute("data-fx-line")) return true;
     if (!el.firstChild) return false;
     for (const n of el.childNodes) if (n.nodeType !== 3) return false;
     return true;
@@ -54,12 +58,18 @@ const TextFx = {
     return (el && el.closest && el.closest("[data-fx-line]")) || el;
   },
 
+  // Буквы ещё обёрнуты – настоящий текст в __fxText (на экране мог быть
+  // обрезан многоточием); иначе – что в элементе сейчас.
+  wrapped(el) {
+    return !!(el.__fxMarker && el.contains(el.__fxMarker));
+  },
+
   textOf(el) {
-    return el.dataset.fx ? el.__fxText : el.textContent;
+    return (el.dataset.fx || el.hasAttribute("data-fxdone")) && this.wrapped(el) ? el.__fxText : el.textContent;
   },
 
   excluded(el) {
-    return !el.isConnected || !!el.closest(this.EXCLUDE) || !!(el.parentElement && el.parentElement.closest("[data-fx]"));
+    return !el.isConnected || !!el.closest(this.EXCLUDE) || !!(el.parentElement && el.parentElement.closest("[data-fx], [data-fxdone]"));
   },
 
   // Ключ единицы внутри перерисованного узла top: ближайший "именованный"
@@ -166,11 +176,13 @@ const TextFx = {
 
   // Закончить анимацию единицы сразу (её содержимое сейчас будут перестраивать).
   finish(el) {
-    if (!el || !el.dataset.fx) return;
+    if (!el || !(el.dataset.fx || el.hasAttribute("data-fxdone"))) return;
     clearTimeout(el.__fxTimer);
-    if (el.__fxMarker && el.contains(el.__fxMarker)) el.innerHTML = el.__fxSaved;
+    if (this.wrapped(el)) el.innerHTML = el.__fxSaved;
     delete el.dataset.fx;
+    el.removeAttribute("data-fxdone");
     el.__fxSaved = undefined;
+    el.__fxMarker = null;
   },
 
   // Блок, который обрезает текст многоточием (сам элемент или его родитель).
@@ -225,11 +237,12 @@ const TextFx = {
   // elapsed – анимация уже шла столько мс (продолжение после перерисовки);
   // clip – блок, который обрезает текст многоточием (уже известно, что не влезает).
   animate(el, text, from, elapsed = 0, clip = null) {
-    if (el.dataset.fx && el.__fxSaved !== undefined && el.__fxMarker && el.contains(el.__fxMarker)) el.innerHTML = el.__fxSaved; // прошлая не закончилась
+    if (el.__fxSaved !== undefined && this.wrapped(el)) el.innerHTML = el.__fxSaved; // прошлые обёртки – прочь
     el.__fxText = text;
     el.__fxSaved = el.innerHTML;
     el.__fxStart = performance.now() - elapsed;
     el.dataset.fx = "1";
+    el.removeAttribute("data-fxdone");
     // Не влезает – сначала обрезать, как обрежет CSS.
     if (clip) from = Math.min(from, this.truncate(el, clip));
     const nodes = this.textNodes(el);
@@ -275,7 +288,8 @@ const TextFx = {
     el.__fxTimer = setTimeout(() => this.queueUnwrap(el, text), Math.max(0, k * step + this.GROW_MS + 80 - elapsed));
   },
 
-  // Возврат простого текста после анимации – пачкой раз в кадр.
+  // Анимация прошла: буквы остаются обёрнутыми (data-fxdone) – без замены
+  // на обычный текст, значит без рывка. Пачкой раз в кадр.
   unwrapQueue: new Map(),
   queueUnwrap(el, text) {
     this.unwrapQueue.set(el, text);
@@ -283,16 +297,25 @@ const TextFx = {
     requestAnimationFrame(() => {
       for (const [e, t] of this.unwrapQueue) {
         if (!e.dataset.fx || e.__fxText !== t) continue;
-        // Содержимое уже заменили (например, строку свернули) – не возвращать старое.
-        if (e.__fxMarker && e.contains(e.__fxMarker)) e.innerHTML = e.__fxSaved;
         delete e.dataset.fx;
-        e.__fxSaved = undefined;
-        e.__fxMarker = null;
+        if (this.wrapped(e)) e.setAttribute("data-fxdone", "");
       }
-      this.unwrapQueue.clear(); // наблюдатель увидит тот же текст – не анимирует
+      this.unwrapQueue.clear();
+      this.observer.takeRecords(); // только атрибуты – разбирать нечего
     });
+  },
+
+  // Окно поменяло размер – обрезанный многоточием текст пересчитать: всё
+  // обёрнутое – снова обычным текстом (без анимации).
+  onResize() {
+    clearTimeout(this.resizeTimer);
+    this.resizeTimer = setTimeout(() => {
+      document.querySelectorAll("[data-fxdone]").forEach((el) => this.finish(el));
+      this.observer.takeRecords();
+    }, 200);
   },
 };
 // Сразу (скрипт – в конце страницы): иначе первые отрисовки разделов шли до
 // запуска наблюдателя, и часть текста появлялась без анимации "через раз".
 TextFx.start();
+window.addEventListener("resize", () => TextFx.onResize());

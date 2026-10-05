@@ -671,7 +671,8 @@ function barSnapshot(root, live = false) {
     const key = barKey(bar);
     const full = bar.getBoundingClientRect().width;
     bar.querySelectorAll(".seg").forEach((seg) => snap.set(`${key}|${seg.classList[1]}`,
-      live && full && seg.getAnimations().length ? (seg.getBoundingClientRect().width / full) * 100 : parseFloat(seg.dataset.w) || 0));
+      live && full && (seg.getAnimations().length || seg.parentElement.getAnimations().length)
+        ? (seg.getBoundingClientRect().width / full) * 100 : parseFloat(seg.dataset.w) || 0));
     const count = bar.querySelector(".progress-count");
     if (count) snap.set(`${key}|#`, parseFloat(count.dataset.shown ?? count.dataset.done) || 0);
   });
@@ -685,12 +686,27 @@ function barKey(bar) {
 
 // Плавно довести полосы внутри root от снимка (или от нуля – при первом
 // показе раздела) до их настоящих значений; числа считают вверх/вниз так же.
+// Заполнение от нуля (первый показ) – растяжением всей полосы (transform):
+// его рисует видеокарта отдельно от страницы, и оно не подлагивает, пока
+// страница строится (окно подробностей, свежие данные). Изменение уже
+// показанных значений – шириной отрезков, как раньше.
 function animateBars(root, snap = new Map()) {
   if (!root) return;
   const segs = [];
   root.querySelectorAll("[data-bar]").forEach((bar) => {
     const key = barKey(bar);
-    bar.querySelectorAll(".seg").forEach((seg) => {
+    const all = [...bar.querySelectorAll(".seg")];
+    const fromZero = all.length && all.every((seg) => !(snap.get(`${key}|${seg.classList[1]}`) > 0));
+    const holder = all.length && all[0].parentElement;
+    if (fromZero && holder && all.every((seg) => seg.parentElement === holder)) {
+      holder.style.transformOrigin = "0 50%";
+      holder.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }],
+        { duration: BAR_ANIMATION_MS, easing: "cubic-bezier(0.22, 0.61, 0.36, 1)" });
+      const count = bar.querySelector(".progress-count");
+      if (count) countUp(count, 0, parseFloat(count.dataset.done) || 0);
+      return;
+    }
+    all.forEach((seg) => {
       const from = snap.get(`${key}|${seg.classList[1]}`) ?? 0;
       const to = parseFloat(seg.dataset.w) || 0;
       if (Math.abs(from - to) < 0.01) return;
@@ -760,8 +776,8 @@ function flashCard(box) {
 function cardsEnter(box, elapsed = 0) {
   if (!elapsed) box.__enterAt = performance.now();
   box.querySelectorAll("a.card, .group-title").forEach((el, i) => {
-    el.style.setProperty("--i", Math.min(i, 20));
-    if (elapsed) el.style.animationDelay = `calc(var(--i) * 35ms - ${Math.round(elapsed)}ms)`;
+    el.style.setProperty("--i", Math.min(i, 60));
+    if (elapsed) el.style.animationDelay = `calc(var(--i) * var(--enter-step) - ${Math.round(elapsed)}ms)`;
     el.classList.add("enter");
     const done = (e) => {
       if (e.target !== el) return; // анимация вложенного (буквы, полосы) – не наша
@@ -772,7 +788,7 @@ function cardsEnter(box, elapsed = 0) {
     el.addEventListener("animationend", done);
   });
 }
-const CARDS_ENTER_MS = 20 * 35 + 380; // последняя карточка (--i = 20) + длительность
+const CARDS_ENTER_MS = 60 * 70 + 600; // последняя карточка (--i = 60) + длительность
 
 // Перерисовать список без мигания: полосы доезжают от прежних значений
 // (first – первый показ раздела: заполняются от нуля).
@@ -847,8 +863,8 @@ function foldLongRows(root) {
     if (td.querySelector(".one-line") || td.clientHeight - 8 < line * 1.5) return;
     // Буквы ещё растут – закончить, иначе в свёрнутую строку скопируются
     // недорисованные (она анимируется заново – уже свёрнутой).
-    td.querySelectorAll("[data-fx]").forEach((el) => TextFx.finish(el));
-    if (td.dataset.fx) TextFx.finish(td);
+    td.querySelectorAll("[data-fx], [data-fxdone]").forEach((el) => TextFx.finish(el));
+    TextFx.finish(td);
     td.innerHTML = `<div class="multi-first one-line"><span class="one-line-text">${td.innerHTML}</span>` +
       '<button class="multi-toggle" title="Показать целиком">▾</button></div>';
     td.parentElement.classList.add("multi");
