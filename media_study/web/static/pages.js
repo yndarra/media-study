@@ -756,6 +756,10 @@ function countUp(el, from, to) {
   requestAnimationFrame(step);
 }
 const BAR_ANIMATION_MS = 900;
+// Окно подробностей открывается с уже известными данными; свежие – после
+// того, как отыграло появление (полосы, текст), чтобы не перерисовывать
+// посреди анимации (двойное заполнение полос и т.п.).
+const MODAL_SETTLE_MS = 1600;
 
 // Раздел открыли: заголовок, описание и остальное содержимое страницы
 // появляются по очереди (так же, как карточки).
@@ -1446,6 +1450,8 @@ const Pages = {
       let items;
       try {
         items = (await Api.ankiOverview()).filter((v) => !!v.audio_only === audio);
+        // Свежие данные карточек – окну подробностей (открывается сразу с ними).
+        Pages.listItems = new Map(items.map((v) => [v.id, v]));
       } catch (err) {
         box.innerHTML = `<p class="muted">Не удалось загрузить список: ${escapeHtml(err.message)}</p>`;
         return;
@@ -1741,6 +1747,7 @@ const Pages = {
   // перерисовывается на месте (reuse – то же окно, без анимации появления).
   // Не перерисовывается, пока правят название/автора.
   async videoModal(id, reuse = null) {
+    // (MODAL_SETTLE_MS – см. ниже: окно сперва отыгрывает появление.)
     let watcher = null;
     let save = async () => {};
     const guard = { isDirty: () => !!watcher && watcher.isDirty(), save: () => save() };
@@ -1751,23 +1758,29 @@ const Pages = {
     if (reuse) Modal.guard = guard;
     // Поколение содержимого окна: старые циклы обновления после перерисовки затихают.
     const gen = (body.dataset.gen = String(Number(body.dataset.gen || 0) + 1));
-    const cached = reuse ? reuse.data : Pages.statsCache.get(id);
-    const fresh = reuse ? null : Api.projectStats(id).then((d) => {
+    let cached = reuse ? reuse.data : Pages.statsCache.get(id);
+    const listed = !reuse && Pages.listItems && Pages.listItems.get(id);
+    if (cached && listed) cached = { ...cached, summary: { ...cached.summary, ...listed } };
+    const load = () => Api.projectStats(id).then((d) => {
       Pages.statsCache.set(id, { ...d, _at: Date.now() });
       return d;
     });
     let data = cached;
     if (!data) {
       try {
-        data = await fresh;
+        data = await load();
       } catch (err) {
         body.innerHTML = `<p class="muted">Видео не найдено или ещё обрабатывается.</p>`;
         return;
       }
-    } else if (fresh) {
+    } else if (!reuse) {
+      // Проверить актуальность – когда анимации появления закончатся.
+      const fresh = new Promise((resolve) => setTimeout(resolve, MODAL_SETTLE_MS)).then(load);
       fresh.then((d) => {
         if (!body.isConnected || body.dataset.gen !== gen) return;
-        const strip = (x) => JSON.stringify({ ...x, _at: 0 });
+        // Сравнить только то, что пришло (сводка – по её полям): совпало – не перерисовывать.
+        const keys = Object.keys(d.summary || {});
+        const strip = (x) => JSON.stringify({ ...x, _at: 0, summary: keys.map((k) => (x.summary || {})[k]) });
         if (strip(d) === strip(cached)) return;
         const head = body.querySelector(".modal-head");
         if ((watcher && watcher.isDirty()) || (head && head.contains(document.activeElement))) return;
@@ -1856,7 +1869,7 @@ const Pages = {
     singleLine(body.querySelector("#group-input"));
     animateBars(body.querySelector(".modal-bars"), barsBefore);
     Zebra.paintNow();
-    requestAnimationFrame(() => foldLongRows(body));
+    foldLongRows(body);
     const saveButton = body.querySelector("#info-save");
     const closeAndFlash = () => {
       Pages.flashId = id;
@@ -2141,7 +2154,7 @@ const Pages = {
       if (!d || !table || !body.isConnected) return;
       table.innerHTML = row("Оригинал", formatSize(d.master)) + row("Копия для редактора", formatSize(d.editor)) + row("Всего", `<b>${formatSize(d.total)}</b>`);
     });
-    requestAnimationFrame(() => foldLongRows(body));
+    foldLongRows(body);
     // Градиент окна – по этапу, как у карточки в "Обработке" (рыжий – скачивание,
     // синий – шаг с процентом, жёлтый – сверка/поиск агентом/нарезка, зелёный – начало).
     const procBox = body.closest(".modal");
