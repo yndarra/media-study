@@ -111,18 +111,30 @@ const TextFx = {
       // Контейнер перерисовали: запомнить тексты удалённых единиц по ключам.
       const rootKey = `${target.id || (typeof target.className === "string" ? target.className : "") || target.tagName}`;
       [...r.removedNodes].forEach((n, i) => this.unitsIn(n).forEach((u) =>
-        old.set(this.keyOf(u, n, `${rootKey}:${i}`), u.__fxText ?? u.textContent)));
+        old.set(this.keyOf(u, n, `${rootKey}:${i}`), { text: u.__fxText ?? u.textContent, started: u.dataset.fx ? u.__fxStart : null })));
       [...r.addedNodes].forEach((n, i) => this.unitsIn(n).forEach((u) => {
         if (!touched.has(u)) touched.set(u, { key: this.keyOf(u, n, `${rootKey}:${i}`) });
       }));
     }
+    const jobs = [];
     for (const [el, prev] of touched) {
       if (!el.isConnected || this.excluded(el)) continue;
       const text = this.textOf(el);
       let before = prev;
-      if (prev && typeof prev === "object") before = old.has(prev.key) ? old.get(prev.key) : "";
-      if (before === text || !text.trim() || text.length > this.MAX_LEAF) {
+      let started = null;
+      if (prev && typeof prev === "object") {
+        const was = old.get(prev.key);
+        before = was ? was.text : "";
+        started = was ? was.started : null;
+      }
+      if (!text.trim() || text.length > this.MAX_LEAF) {
         el.__fxText = text;
+        continue;
+      }
+      if (before === text) {
+        // Тот же текст – без анимации; но если прежний ещё рос – продолжить с того же места.
+        if (started !== null && started !== undefined) jobs.push([el, text, 0, performance.now() - started]);
+        else el.__fxText = text;
         continue;
       }
       // Общее начало остаётся, анимируется изменившийся хвост (с начала слова).
@@ -135,9 +147,30 @@ const TextFx = {
         el.__fxText = text;
         continue;
       }
-      this.animate(el, text, common);
+      jobs.push([el, text, common, 0]);
     }
+    this.run(jobs);
     this.observer.takeRecords(); // свои же изменения (обёртка букв) – не разбирать
+  },
+
+  // Сначала все чтения (какие единицы обрезаются многоточием и не влезают),
+  // потом все записи (обёртка букв): иначе браузер пересчитывал бы раскладку
+  // страницы на каждой строке – отсюда подлагивания при появлении разделов.
+  run(jobs) {
+    const plan = jobs.map(([el, text, from, elapsed]) => {
+      const box = this.clipBox(el);
+      return [el, text, from, elapsed, box && this.overflows(box) ? box : null];
+    });
+    for (const [el, text, from, elapsed, clip] of plan) this.animate(el, text, from, elapsed, clip);
+  },
+
+  // Закончить анимацию единицы сразу (её содержимое сейчас будут перестраивать).
+  finish(el) {
+    if (!el || !el.dataset.fx) return;
+    clearTimeout(el.__fxTimer);
+    if (el.__fxMarker && el.contains(el.__fxMarker)) el.innerHTML = el.__fxSaved;
+    delete el.dataset.fx;
+    el.__fxSaved = undefined;
   },
 
   // Блок, который обрезает текст многоточием (сам элемент или его родитель).
@@ -189,14 +222,16 @@ const TextFx = {
     return lo;
   },
 
-  animate(el, text, from) {
-    if (el.dataset.fx && el.__fxSaved !== undefined) el.innerHTML = el.__fxSaved; // прошлая анимация не закончилась
+  // elapsed – анимация уже шла столько мс (продолжение после перерисовки);
+  // clip – блок, который обрезает текст многоточием (уже известно, что не влезает).
+  animate(el, text, from, elapsed = 0, clip = null) {
+    if (el.dataset.fx && el.__fxSaved !== undefined && el.__fxMarker && el.contains(el.__fxMarker)) el.innerHTML = el.__fxSaved; // прошлая не закончилась
     el.__fxText = text;
     el.__fxSaved = el.innerHTML;
+    el.__fxStart = performance.now() - elapsed;
     el.dataset.fx = "1";
     // Не влезает – сначала обрезать, как обрежет CSS.
-    const box = this.clipBox(el);
-    if (box && this.overflows(box)) from = Math.min(from, this.truncate(el, box));
+    if (clip) from = Math.min(from, this.truncate(el, clip));
     const nodes = this.textNodes(el);
     const shownChars = nodes.reduce((s, n) => s + n.data.replace(/\s/g, "").length, 0) || 1;
     const step = Math.min(this.STEP_MS, this.MAX_SPREAD_MS / Math.max(1, shownChars));
@@ -227,23 +262,35 @@ const TextFx = {
           const span = document.createElement("span");
           span.className = "fxc";
           span.textContent = ch;
-          span.style.animationDelay = `${Math.round(k++ * step)}ms`;
+          span.style.animationDelay = `${Math.round(k++ * step - elapsed)}ms`;
           word.append(span);
         }
         frag.append(word);
+        if (!el.__fxMarker || !el.contains(el.__fxMarker)) el.__fxMarker = word;
       }
       if (trail) frag.append(trail);
       node.replaceWith(frag);
     }
     clearTimeout(el.__fxTimer);
-    el.__fxTimer = setTimeout(() => {
-      // Анимация прошла – прежняя разметка (если текст тем временем не сменили).
-      if (el.dataset.fx && el.__fxText === text) {
-        el.innerHTML = el.__fxSaved; // наблюдатель увидит тот же текст – не анимирует
-        delete el.dataset.fx;
-        el.__fxSaved = undefined;
+    el.__fxTimer = setTimeout(() => this.queueUnwrap(el, text), Math.max(0, k * step + this.GROW_MS + 80 - elapsed));
+  },
+
+  // Возврат простого текста после анимации – пачкой раз в кадр.
+  unwrapQueue: new Map(),
+  queueUnwrap(el, text) {
+    this.unwrapQueue.set(el, text);
+    if (this.unwrapQueue.size > 1) return;
+    requestAnimationFrame(() => {
+      for (const [e, t] of this.unwrapQueue) {
+        if (!e.dataset.fx || e.__fxText !== t) continue;
+        // Содержимое уже заменили (например, строку свернули) – не возвращать старое.
+        if (e.__fxMarker && e.contains(e.__fxMarker)) e.innerHTML = e.__fxSaved;
+        delete e.dataset.fx;
+        e.__fxSaved = undefined;
+        e.__fxMarker = null;
       }
-    }, k * step + this.GROW_MS + 80);
+      this.unwrapQueue.clear(); // наблюдатель увидит тот же текст – не анимирует
+    });
   },
 };
 // Сразу (скрипт – в конце страницы): иначе первые отрисовки разделов шли до

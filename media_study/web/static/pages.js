@@ -845,6 +845,10 @@ function foldLongRows(root) {
   root.querySelectorAll("table.stats tr:not(.multi) > td:last-child").forEach((td) => {
     const line = parseFloat(getComputedStyle(td).lineHeight) || 20;
     if (td.querySelector(".one-line") || td.clientHeight - 8 < line * 1.5) return;
+    // Буквы ещё растут – закончить, иначе в свёрнутую строку скопируются
+    // недорисованные (она анимируется заново – уже свёрнутой).
+    td.querySelectorAll("[data-fx]").forEach((el) => TextFx.finish(el));
+    if (td.dataset.fx) TextFx.finish(td);
     td.innerHTML = `<div class="multi-first one-line"><span class="one-line-text">${td.innerHTML}</span>` +
       '<button class="multi-toggle" title="Показать целиком">▾</button></div>';
     td.parentElement.classList.add("multi");
