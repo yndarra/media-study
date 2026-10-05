@@ -2480,7 +2480,7 @@ const Pages = {
       { key: "disk", label: "Место на диске", get: (v) => v.disk_total || 0, fmt: (x) => formatSize(x) },
     ];
     const metricOf = (k) => metrics.find((m) => m.key === k) || metrics[0];
-    const ui = (this.statsUi ||= { tab: localStorage.getItem("stats-tab") || "costs", infoMetric: "duration", sort: "duration", dir: -1, authorMetric: "duration" });
+    const ui = (this.statsUi ||= { tab: "costs", infoMetric: "duration", sort: "duration", dir: -1, authorMetric: "duration" });
     const mediaLink = (v) => `#/${v.state === "ready" ? (v.audio_only ? "audio" : "video") : "process"}/${encodeURIComponent(v.id)}`;
 
     const tabs = {
@@ -2500,7 +2500,6 @@ const Pages = {
             <tr class="total-row"><td>Итого</td>${Object.keys(kinds).map((k) => `<td>${money(kindTotal(k))}</td>`).join("")}<td><b>${money(spentVideos)}</b></td></tr></table>`;
         },
       },
-      speed: { label: "Скорость правки", html: () => speedTab(data.results, Math.max(0, barTotal - editedAll)) },
       info: {
         label: "Информация",
         html: () => {
@@ -2517,6 +2516,7 @@ const Pages = {
             "</table>";
         },
       },
+      speed: { label: "Скорость правки", html: () => speedTab(data.results, Math.max(0, barTotal - editedAll)) },
       authors: {
         label: audioMode ? "Исполнители" : "Авторы",
         html: () => {
@@ -2574,8 +2574,32 @@ const Pages = {
 
     // Содержимое вкладки (переключение – без перезагрузки страницы).
     const panel = el.querySelector("#stats-tab");
-    const showTab = () => {
+    const showTab = async (animate = true) => {
+      const from = panel.offsetHeight;
+      if (animate) {
+        // Сначала пусто, содержимое – следующим шагом (до отрисовки кадра):
+        // тогда текст для анимации букв – новый, даже если он тот же самый.
+        panel.replaceChildren();
+        await Promise.resolve();
+      }
       panel.innerHTML = tabs[ui.tab].html();
+      if (animate) {
+        [...panel.children].forEach((child, i) => {
+          child.style.setProperty("--i", i);
+          child.classList.add("enter");
+          const done = (e) => {
+            if (e.target !== child) return;
+            child.classList.remove("enter");
+            child.removeEventListener("animationend", done);
+          };
+          child.addEventListener("animationend", done);
+        });
+        // Высота блока – плавно от прежней к новой.
+        const to = panel.offsetHeight;
+        if (from && Math.abs(to - from) > 1) {
+          panel.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: 350, easing: "cubic-bezier(0.22, 0.61, 0.36, 1)" });
+        }
+      }
       if (ui.tab === "speed" && data.results.length) {
         const list = [...data.results].sort((a, b) => String(a.saved_at).localeCompare(String(b.saved_at)));
         const ms = list.reduce((acc, r) => acc + r.ms, 0);
@@ -2603,9 +2627,6 @@ const Pages = {
     };
     el.querySelectorAll(".tab-bar button").forEach((b) => b.addEventListener("click", () => {
       ui.tab = b.dataset.k;
-      try {
-        localStorage.setItem("stats-tab", ui.tab);
-      } catch (_) {}
       el.querySelectorAll(".tab-bar button").forEach((x) => x.classList.toggle("active", x === b));
       showTab();
     }));
