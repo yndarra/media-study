@@ -32,7 +32,7 @@
 const TextFx = {
   EXCLUDE: "#view-editor, #fraglist, #text-panel, #video-wrap, input, textarea, select, option, script, style, svg, canvas, " +
     "[contenteditable], .no-fx, .flip, .progress-count, .picker-list",
-  MAX_LEAF: 200, // длиннее – без анимации (абзацы, длинные пути)
+  MAX_LEAF: 600, // длиннее – без анимации (очень длинные абзацы)
   MAX_CHARS: 8000, // за одну пачку изменений
   STEP_MS: 14, // задержка между буквами
   MAX_SPREAD_MS: 320, // вся строка вырастает не дольше этого

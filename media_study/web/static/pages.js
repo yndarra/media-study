@@ -125,7 +125,7 @@ function askStorage(info) {
         <!-- Список хранилищ: текущее – сверху, такой же строкой, с синей
              обводкой и градиентом (как карточки медиа); остальные – выбрать. -->
         <div class="storage-options">
-          <div class="storage-option current"><span class="so-name">${escapeHtml(here.label)}${here.main ? " (основное)" : ""} · сейчас здесь</span>` +
+          <div class="storage-option current chosen" data-k="here"><span class="so-name">${escapeHtml(here.label)}${here.main ? " (основное)" : ""} · сейчас здесь</span>` +
           `<span class="so-path">${escapeHtml(here.path)}</span>${here.free !== undefined ? `<span class="so-free">Свободно ${formatSize(here.free)}</span>` : ""}</div>
           ${targets.map(option).join("")}
         </div>
@@ -151,9 +151,11 @@ function askStorage(info) {
       if (e.target === overlay) return finish(null);
       const opt = e.target.closest(".storage-option");
       if (opt) {
-        chosen = targets[Number(opt.dataset.k)];
+        // Текущее хранилище – "никуда не переносить".
+        chosen = opt.dataset.k === "here" ? null : targets[Number(opt.dataset.k)];
         overlay.querySelectorAll(".storage-option").forEach((o) => o.classList.toggle("chosen", o === opt));
-        overlay.querySelector('[data-a="move"]').disabled = false;
+        const move = overlay.querySelector('[data-a="move"]');
+        if (move) move.disabled = !chosen;
         return;
       }
       const action = e.target.closest("[data-a]");
@@ -476,10 +478,17 @@ const Zebra = {
     requestAnimationFrame((t) => this.frame(t));
   },
 
-  frame(now) {
+  // Нарисовать сразу (новая кнопка / перерисованное окно): иначе первый кадр
+  // кнопка без полос – серая, и только потом полосы "заполняют" её.
+  paintNow() {
+    this.frame(performance.now(), true);
+    this.start();
+  },
+
+  frame(now, once = false) {
     const buttons = document.querySelectorAll(".card-action, [data-zebra]");
     if (!buttons.length) {
-      this.running = false;
+      if (!once) this.running = false;
       return;
     }
     for (const button of buttons) {
@@ -505,7 +514,7 @@ const Zebra = {
       st.cycles = (st.cycles + (st.speed * dt) / (2 * st.stripe)) % 1;
       this.draw(button, st, target.color);
     }
-    requestAnimationFrame((t) => this.frame(t));
+    if (!once) requestAnimationFrame((t) => this.frame(t));
   },
 
   draw(button, st, color) {
@@ -1846,6 +1855,7 @@ const Pages = {
     autoGrow(body.querySelector("#title-input"));
     singleLine(body.querySelector("#group-input"));
     animateBars(body.querySelector(".modal-bars"), barsBefore);
+    Zebra.paintNow();
     requestAnimationFrame(() => foldLongRows(body));
     const saveButton = body.querySelector("#info-save");
     const closeAndFlash = () => {

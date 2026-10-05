@@ -2133,3 +2133,18 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
 .storage-option.current { cursor: default; border-color: rgba(96, 165, 250, 0.45);
   background: radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.16), transparent 60%), linear-gradient(160deg, #131925, #121216 70%); }
 .storage-option.current:hover { background: radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.16), transparent 60%), linear-gradient(160deg, #131925, #121216 70%); }
+
+/* Название приложения в меню – ссылка на список медиа (вид прежний). */
+#menu a.brand { color: var(--dim); text-decoration: none; cursor: pointer; padding: 0; background: none; }
+#menu a.brand:hover { color: var(--text); }
+
+/* Окно хранилища: отступ списка от заголовка; выбор – синий фон (без
+   градиента); текущее – всегда синяя обводка; наведение: невыбранное –
+   серее, выбранное – светлее синим. */
+.storage-ask .storage-options { margin-top: 16px; }
+.storage-option.current, .storage-option.current:hover { background: #1f1f25; }
+.storage-option.current { border-color: #3f7fd0; }
+.storage-option.chosen, .storage-option.current.chosen { background: rgba(47, 95, 158, 0.28); border-color: #3f7fd0; }
+.storage-option:not(.chosen):hover { background: #2a2a31; }
+.storage-option.chosen:hover, .storage-option.current.chosen:hover { background: rgba(70, 130, 210, 0.36); }
+.storage-option.current { cursor: pointer; }
