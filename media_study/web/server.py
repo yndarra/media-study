@@ -384,6 +384,10 @@ def _storage_info(project_id: str) -> dict:
     from . import storage
 
     here = storage.location(DATA_DIR, project_id)
+    # Свободное место на текущем – для строки "сейчас здесь" в окне хранилища.
+    for s in storage.storages(DATA_DIR):
+        if os.path.normcase(s["path"]) == os.path.normcase(here["path"]) and "free" in s:
+            here["free"], here["total"] = s["free"], s["total"]
     move = storage.MOVES.get(project_id)
     return {
         "here": here,

@@ -122,10 +122,14 @@ function askStorage(info) {
     overlay.innerHTML = `<div class="ask storage-ask" role="dialog">
         <div class="ask-icon">${disk}</div>
         <div class="ask-title">Хранилище</div>
-        <div class="ask-text"><b>${escapeHtml(here.label)}</b>${here.main ? " (основное)" : ""}
-          <div class="muted small">${escapeHtml(here.path)}</div></div>
-        ${targets.length ? `<div class="storage-options">${targets.map(option).join("")}</div>`
-          : '<div class="ask-text muted small">Других хранилищ нет – добавьте папку на другом диске в «Настройках».</div>'}
+        <!-- Список хранилищ: текущее – сверху, такой же строкой, с синей
+             обводкой и градиентом (как карточки медиа); остальные – выбрать. -->
+        <div class="storage-options">
+          <div class="storage-option current"><span class="so-name">${escapeHtml(here.label)}${here.main ? " (основное)" : ""} · сейчас здесь</span>` +
+          `<span class="so-path">${escapeHtml(here.path)}</span>${here.free !== undefined ? `<span class="so-free">Свободно ${formatSize(here.free)}</span>` : ""}</div>
+          ${targets.map(option).join("")}
+        </div>
+        ${targets.length ? "" : '<div class="ask-text muted small">Других хранилищ нет – добавьте папку на другом диске в «Настройках».</div>'}
         <div class="ask-actions"><button class="step-btn" data-a="close">Закрыть</button>` +
         `${targets.length ? '<button class="step-btn primary" data-a="move" disabled>Перенести</button>' : ""}</div>
       </div>`;
