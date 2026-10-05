@@ -2108,3 +2108,7 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
    следующий ряд (порядок в разметке); только прозрачность. */
 :root { --enter-step: 70ms; }
 .enter { animation-duration: 0.6s; animation-timing-function: ease-out; animation-delay: calc(var(--i) * var(--enter-step)); }
+
+/* Время в карточке медиа – как название (размер, жирность, обычные цифры),
+   отличается только цветом. */
+.card-time { font-variant-numeric: normal; margin-right: 0; }
