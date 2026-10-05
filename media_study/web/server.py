@@ -1325,6 +1325,10 @@ def anki_overview():
             continue
         item["translated"] = _anki_flags_cache.get("translated", {}).get(item["id"], 0)
         item["disk_total"] = _disk_total(item["id"])
+        # Буква диска, где лежит медиа (основное хранилище или ссылка на другой диск).
+        from . import storage as _storage
+
+        item["drive"] = _storage.location(DATA_DIR, item["id"])["label"][:2]
         _card_states(item, flags, translating)
         result.append(item)
     from . import storage

@@ -9,10 +9,11 @@ pip-пакетами nvidia-cublas-cu12 / nvidia-cudnn-cu12 (~1–1,5 ГБ); и�
 bin подключаются при запуске (cuda_dll_dirs).
 
 Нагрузка на видеокарту: в отличие от процессора, "оставить ядра свободными"
-у видеокарты нельзя – она делится по времени, а не по ядрам. Бережный режим
-(whisper_gentle) берёт облегчённую точность (int8_float16 – меньше памяти и
-работы) и делает короткие паузы между кусками распознавания: видеокарта
-успевает отдохнуть, интерфейс и игры не подтормаживают.
+у видеокарты нельзя – она делится по времени, а не по ядрам. Поэтому
+ограничение – в процентах времени (gpu_load_percent): после каждого куска
+распознавания пауза такой длины, чтобы видеокарта работала только эту долю
+времени (50% – кусок считался 0,4 с, пауза 0,4 с); интерфейс и игры не
+подтормаживают, распознавание дольше.
 """
 from __future__ import annotations
 
@@ -31,7 +32,6 @@ MODELS = [
     ("small.en", "small.en – маленькая, только английский", 0.5),
 ]
 CUDA_PACKAGES = ["nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10"]
-GENTLE_PAUSE = 0.35  # с – пауза между кусками в бережном режиме
 
 # Идущие установки: {"what": "model:<имя>" | "cuda", "error": ...}
 INSTALLS: dict[str, dict] = {}
@@ -140,8 +140,8 @@ def install_cuda() -> None:
 def load_model(settings: dict, log=print):
     """
     Модель по настройкам: whisper_model, whisper_device ("cpu" / "cuda"),
-    whisper_gentle. Видеокарта не завелась – откат на процессор (с записью в журнал).
-    Возвращает (модель, устройство, пауза между кусками).
+    gpu_load_percent. Видеокарта не завелась – откат на процессор (с записью в журнал).
+    Возвращает (модель, устройство, доля времени работы 0..1 – см. whisper.py).
     """
     from faster_whisper import WhisperModel
 
@@ -152,13 +152,13 @@ def load_model(settings: dict, log=print):
         log(f"Модель {name} ещё не скачана – скачиваю (один раз)…")
     if settings.get("whisper_device") == "cuda":
         cuda_dll_dirs()
-        gentle = bool(settings.get("whisper_gentle", False))
+        duty = max(10, min(100, int(settings.get("gpu_load_percent") or 100))) / 100
         try:
-            model = WhisperModel(name, device="cuda", compute_type="int8_float16" if gentle else "float16")
-            log(f"Распознавание: {name} на видеокарте" + (" (бережно)" if gentle else ""))
-            return model, "cuda", GENTLE_PAUSE if gentle else 0.0
+            model = WhisperModel(name, device="cuda", compute_type="float16")
+            log(f"Распознавание: {name} на видеокарте" + (f" (нагрузка {round(duty * 100)}%)" if duty < 1 else ""))
+            return model, "cuda", duty
         except Exception as error:
             log(f"Видеокарта не завелась ({error}) – распознаю на процессоре.")
     model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=cpu_threads())
     log(f"Распознавание: {name} на процессоре")
-    return model, "cpu", 0.0
+    return model, "cpu", 1.0

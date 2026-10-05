@@ -222,7 +222,10 @@ DEFAULT_APP_SETTINGS = {
     # на видеокарту (паузы между кусками) – см. media_study/ingest/speech/whisper_models.py.
     "whisper_model": "medium.en",
     "whisper_device": "cpu",
-    "whisper_gentle": False,
+    # Нагрузка на видеокарту при распознавании, %: меньше 100 – после каждого
+    # куска пауза, чтобы видеокарта была занята только эту долю времени
+    # (настройка "Производительность"; вместо прежней галочки "бережно").
+    "gpu_load_percent": 100,
     "elevenlabs_model": "scribe_v2",
     "elevenlabs_language": "",  # не используется: язык ElevenLabs определяет сам
     "elevenlabs_keyterms": True,  # подсказывать имена/термины из словаря (+20% к цене)

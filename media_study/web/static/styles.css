@@ -2087,3 +2087,6 @@ a.step-btn { padding-bottom: 0; }
 #server-stop svg { transform: translateY(0.3px); }
 #undo-btn svg, #redo-btn svg { transform: translateY(-1.4px); }
 #speakers-btn svg { transform: translate(-0.4px, 0.5px); }
+
+/* Производительность: списки ядер и нагрузки – узкие. */
+.narrow-picker { max-width: 220px; }

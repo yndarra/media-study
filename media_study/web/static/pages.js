@@ -890,7 +890,7 @@ function videoNotes(v, withDisk = true) {
   const q = v.stage3 || {};
   const queue = q.state === "waiting_anki" ? "Ждёт Anki" : "";
   const parts = [
-    withDisk && v.disk_total !== undefined ? `Место на диске: ${formatSize(v.disk_total)}` : "",
+    withDisk && v.disk_total !== undefined ? (v.drive ? `Место на диске ${v.drive} ${formatSize(v.disk_total)}` : `Место на диске: ${formatSize(v.disk_total)}`) : "",
     v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
     v.flag_translation ? `<span class="translation-text">Перевод: ${v.flag_translation}</span>` : "",
     queue ? escapeHtml(queue) : "",
@@ -2598,9 +2598,10 @@ const Pages = {
         </section>
         <section class="set-card">
           <h2>Производительность</h2>
-          ${field("set-reserve", "Свободные ядра процессора",
-            `<div class="with-unit"><input id="set-reserve" type="number" min="0" max="${Math.max(0, (navigator.hardwareConcurrency || 8) - 1)}" step="1" value="${Number(s.reserve_cpu_cores ?? 2)}"><span>из ${navigator.hardwareConcurrency || "?"}</span></div>`,
-            "Распознавание речи и перекодирование их не занимают – система не захлёбывается. Клипы для Anki кодирует видеокарта")}
+          ${field("set-reserve", "Свободные ядра процессора", '<div class="picker-host narrow-picker" data-for="set-reserve"></div>',
+            "Распознавание речи на процессоре и перекодирование их не занимают – система не захлёбывается")}
+          ${field("set-gpu-load", "Нагрузка на видеокарту", '<div class="picker-host narrow-picker" data-for="set-gpu-load"></div>',
+            "Распознавание на видеокарте: меньше 100% – после каждого куска пауза, видеокарта занята только эту долю времени (игры и система не подтормаживают, распознавание дольше)")}
           <div class="field"><label class="check"><input id="set-priority" type="checkbox" ${s.low_priority !== false ? "checked" : ""}> Пониженный приоритет обработки</label></div>
         </section>
         <!-- Цвета на карточках Anki – отдельный блок в две мини-карточки;
@@ -2651,8 +2652,6 @@ const Pages = {
             ${field("set-wh-device", "Устройство", '<div class="picker-host" data-for="set-wh-device"></div>',
               '<span id="set-wh-gpu-note">Проверяю видеокарту…</span> <button id="set-wh-cuda" class="step-btn small-btn hidden">Установить библиотеки CUDA</button>')}
           </div>
-          <div class="field asr-wh"><label class="check"><input id="set-wh-gentle" type="checkbox" ${s.whisper_gentle ? "checked" : ""}> Бережная нагрузка на видеокарту</label>
-            <div class="field-hint">Паузы между кусками и облегчённая точность – система и игры не подтормаживают, распознавание чуть дольше</div></div>
           <div class="field-row asr-el">
             ${field("set-el-model", "Модель ElevenLabs", '<div class="picker-host" data-for="set-el-model"></div>', "Из списка или своя (название модели в API ElevenLabs)")}
             <div></div>
@@ -2860,6 +2859,16 @@ const Pages = {
       options: [[0, "Лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
         .map(([h, label]) => ({ value: String(h), label })),
     });
+    // Производительность: свободные ядра и нагрузка на видеокарту – списки.
+    const cores = navigator.hardwareConcurrency || 8;
+    Picker.create(host("set-reserve"), {
+      id: "set-reserve", value: String(Math.min(cores - 1, Number(s.reserve_cpu_cores ?? 2))),
+      options: Array.from({ length: cores }, (_, k) => ({ value: String(k), label: `${k} из ${cores}` })),
+    });
+    Picker.create(host("set-gpu-load"), {
+      id: "set-gpu-load", value: String(s.gpu_load_percent || 100),
+      options: [100, 75, 50, 25].map((p) => ({ value: String(p), label: p === 100 ? "100% – без ограничения" : `${p}%` })),
+    });
     // Модели OpenRouter: по компании, внутри – по цене (дешевле – выше); список
     // общий для обоих полей, грузится при первом открытии.
     let modelsPromise = null;
@@ -2929,7 +2938,7 @@ const Pages = {
         asr_engine: document.getElementById("set-asr").value,
         whisper_model: document.getElementById("set-wh-model").value,
         whisper_device: document.getElementById("set-wh-device").value,
-        whisper_gentle: document.getElementById("set-wh-gentle").checked,
+        gpu_load_percent: Number(document.getElementById("set-gpu-load").value) || 100,
         elevenlabs_key: document.getElementById("set-el-key").value.trim(),
         elevenlabs_model: document.getElementById("set-el-model").value.trim() || "scribe_v2",
         elevenlabs_language: "", // язык – всегда определяет сам

@@ -30,7 +30,7 @@ def transcribe(video_path: Path, model_size: str = "medium.en") -> dict:
     # (speech/whisper_models.py); на процессоре – не на всех ядрах.
     settings = dict(app_settings(Path(video_path).parent.parent))
     settings.setdefault("whisper_model", model_size)
-    model, device, pause = load_model(settings, log=lambda m: print(m, flush=True))
+    model, device, duty = load_model(settings, log=lambda m: print(m, flush=True))
     segments_iter, info = model.transcribe(
         str(video_path),
         language="en",
@@ -48,10 +48,14 @@ def transcribe(video_path: Path, model_size: str = "medium.en") -> dict:
     rows = []
     import time
 
+    last = time.monotonic()
     for index, segment in enumerate(segments_iter, start=1):
-        # Бережный режим видеокарты: короткая передышка между кусками.
-        if pause:
-            time.sleep(pause)
+        # Ограничение нагрузки на видеокарту: после куска – пауза, чтобы
+        # видеокарта работала только долю duty времени (50% – пауза = работе).
+        if duty < 1:
+            worked = time.monotonic() - last
+            time.sleep(min(10.0, worked * (1 / duty - 1)))
+            last = time.monotonic()
         # Распознавание идёт по порядку — процент по концу последней фразы.
         if info.duration:
             report(Path(video_path).parent, "transcribe", 100.0 * segment.end / info.duration)
