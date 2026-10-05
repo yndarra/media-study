@@ -2148,3 +2148,15 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
 .storage-option:not(.chosen):hover { background: #2a2a31; }
 .storage-option.chosen:hover, .storage-option.current.chosen:hover { background: rgba(70, 130, 210, 0.36); }
 .storage-option.current { cursor: pointer; }
+
+/* Целые пиксели вместо дробных (дробные высоты ставили блоки на доли
+   пикселя, и монитор округлял их по-разному – "середина" плыла): строка
+   названия 18 px (было 1,35 × 13 = 17,55), отступ под ним 12 px (был 11,86),
+   подсказки полей – 17 px (было 1,4 × 12 = 16,8). */
+.card-title { line-height: 18px; }
+.card-title + .progress, .card-title + .card-status, .card-title + .muted { margin-top: 12px; }
+#process-list .card-title + .progress { margin-top: 12px; }
+.field-hint { line-height: 17px; }
+#process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status { margin-top: 12px; }
+/* "Редактировать" в окне – ссылка-кнопка: отступ, как у обычных кнопок (текст по центру цифр). */
+.modal-actions a.step-btn, #info-edit { padding-top: 0; padding-bottom: 1px; }
