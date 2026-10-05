@@ -825,6 +825,7 @@ function renderSmooth(box, html, first = false) {
   const snap = first ? new Map() : barSnapshot(box, true);
   box.innerHTML = html;
   animateBars(box, snap);
+  if (typeof Zebra !== "undefined") Zebra.paintNow();
   const elapsed = box.__enterAt ? performance.now() - box.__enterAt : Infinity;
   if (!first && elapsed < CARDS_ENTER_MS) cardsEnter(box, elapsed);
 }
@@ -1502,15 +1503,6 @@ const Pages = {
           }
           const notes = card.querySelector(".muted.small:last-child");
           if (notes) notes.classList.add("fade-in");
-          const tmp = document.createElement("div");
-          tmp.innerHTML = was;
-          const ghost = tmp.firstElementChild;
-          ghost.classList.add("shrink-out");
-          ghost.removeAttribute("data-id"); // не кнопка: не нажимается, не рисуется заново
-          ghost.disabled = true;
-          if (notes) card.insertBefore(ghost, notes);
-          else card.appendChild(ghost);
-          ghost.addEventListener("animationend", (e) => e.target === ghost && ghost.remove());
         }
       }
       this.lastActions = now;

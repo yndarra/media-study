@@ -2160,3 +2160,17 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
 #process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status { margin-top: 12px; }
 /* "Редактировать" в окне – ссылка-кнопка: отступ, как у обычных кнопок (текст по центру цифр). */
 .modal-actions a.step-btn, #info-edit { padding-top: 0; padding-bottom: 1px; }
+
+/* Кнопка шага на карточке появляется только прозрачностью – размер и место
+   не меняются (текст на ней вырастает по буквам, textfx.js). */
+@keyframes grow-in { from { opacity: 0; } to { opacity: 1; } }
+.card-action.grow-in { animation: grow-in 0.45s ease-out; }
+
+/* Выросшие буквы – без анимации (вид тот же): иначе браузер держал тысячи
+   законченных анимаций активными – лишняя нагрузка, подлагивания. */
+[data-fxdone] .fxc { animation: none; }
+
+/* Полосы всегда рисуются отдельным слоем – так же, как во время анимации
+   заполнения: последний кадр анимации и итог совпадают пиксель в пиксель
+   (иначе в конце был лёгкий "дёрг" краёв). */
+.seg-left, .hbar-fill { will-change: transform; }
