@@ -2094,3 +2094,12 @@ a.step-btn { padding-bottom: 0; }
 /* Подпись в полосах (Отредактировано / Передано / Переведено) была ниже
    середины на 0,5 px (по высоте цифр) – чуть выше. */
 .progress-label { transform: translateY(-0.5px); }
+
+/* Строки таблиц – целой высоты (33 px: 5 + 20 + 7 + линия 1): с дробными
+   отступами и общими на две строки линиями (border-collapse) высота была
+   32,98 px, строки вставали на дробные позиции, и монитор округлял их по-
+   разному – одни строки казались выше других. Текст (по высоте цифр) –
+   выше середины на 0,3 px, ровнее в целых пикселях не поставить. */
+table.stats { border-collapse: separate; border-spacing: 0; }
+table.stats td, table.stats th { padding-top: 5px; padding-bottom: 7px; }
+table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bottom: 7px; } /* строка 34 px – цифры ровно посередине */
