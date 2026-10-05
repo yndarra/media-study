@@ -166,12 +166,40 @@ const TextFx = {
   // Сначала все чтения (какие единицы обрезаются многоточием и не влезают),
   // потом все записи (обёртка букв): иначе браузер пересчитывал бы раскладку
   // страницы на каждой строке – отсюда подлагивания при появлении разделов.
+  //
+  // Когда начинать: вместе с появлением своего блока (у блока .enter своя
+  // задержка – блоки появляются по очереди, и текст последних раньше успевал
+  // дорасти до того, как блок проявится), а внутри блока – сверху вниз
+  // (строка ниже – чуть позже; весь текст разом подтормаживал).
   run(jobs) {
     const plan = jobs.map(([el, text, from, elapsed]) => {
       const box = this.clipBox(el);
-      return [el, text, from, elapsed, box && this.overflows(box) ? box : null];
+      return [el, text, from, elapsed - this.startDelay(el), box && this.overflows(box) ? box : null];
     });
     for (const [el, text, from, elapsed, clip] of plan) this.animate(el, text, from, elapsed, clip);
+  },
+
+  ROW_MS_PER_PX: 0.7, // сверху вниз: на каждый пиксель ниже начала блока
+  MAX_ROW_DELAY_MS: 700,
+
+  // Через сколько мс начать рост букв этой единицы.
+  startDelay(el) {
+    let delay = 0;
+    const block = el.closest(".enter");
+    if (block) {
+      // Сколько блоку ещё ждать своей очереди (его анимация уже могла начаться).
+      const anim = block.getAnimations().find((a) => a.animationName && a.animationName.startsWith("card-in"));
+      if (anim) {
+        const wait = anim.effect.getComputedTiming().delay - (anim.currentTime || 0);
+        if (wait > 0) delay += wait;
+      }
+    }
+    const area = block || el.closest(".modal-body, .set-card, .card, .view") || null;
+    if (area && area !== el) {
+      const dy = el.getBoundingClientRect().top - area.getBoundingClientRect().top;
+      if (dy > 0) delay += Math.min(this.MAX_ROW_DELAY_MS, dy * this.ROW_MS_PER_PX);
+    }
+    return delay;
   },
 
   // Закончить анимацию единицы сразу (её содержимое сейчас будут перестраивать).
