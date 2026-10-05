@@ -671,7 +671,7 @@ function barSnapshot(root, live = false) {
     const key = barKey(bar);
     const full = bar.getBoundingClientRect().width;
     bar.querySelectorAll(".seg").forEach((seg) => snap.set(`${key}|${seg.classList[1]}`,
-      live && full ? (seg.getBoundingClientRect().width / full) * 100 : parseFloat(seg.dataset.w) || 0));
+      live && full && seg.getAnimations().length ? (seg.getBoundingClientRect().width / full) * 100 : parseFloat(seg.dataset.w) || 0));
     const count = bar.querySelector(".progress-count");
     if (count) snap.set(`${key}|#`, parseFloat(count.dataset.shown ?? count.dataset.done) || 0);
   });
@@ -900,8 +900,7 @@ function videoNotes(v, withDisk = true) {
 
 // Заголовок карточки видео: длительность перед названием.
 function cardTitle(v) {
-  return `<div class="card-title"><span class="card-time">${formatDuration(v.duration)}</span> ${escapeHtml(v.title)}` +
-    `${v.audio_only ? ' <span class="muted small">· аудио</span>' : ""}</div>`;
+  return `<div class="card-title" data-fx-line><span class="card-time">${formatDuration(v.duration)}</span> ${escapeHtml(v.title)}</div>`;
 }
 
 // Поле, которое растёт по содержимому (название видео, ссылки): высота —
@@ -1093,11 +1092,13 @@ const shortDate = (iso) => {
 function hbars(items, legend = "") {
   const total = (i) => i.segs.reduce((acc, x) => acc + (x.value || 0), 0);
   const max = Math.max(0, ...items.map(total)) || 1;
-  return `<div class="hbars">${legend ? `<div class="hbar-legend">${legend}</div>` : ""}${items.map((i) => {
+  // Ширина колонки значения – по самому длинному значению (в символах).
+  const valueChars = Math.max(4, ...items.map((i) => String(i.text).replace(/<[^>]+>/g, "").length));
+  return `<div class="hbars" style="--hbar-val:${valueChars + 1}ch">${legend ? `<div class="hbar-legend">${legend}</div>` : ""}${items.map((i) => {
     const label = i.href ? `<a href="${i.href}">${escapeHtml(i.label)}</a>` : escapeHtml(i.label);
-    return `<div class="hbar-row"><div class="hbar-label" title="${escapeHtml(i.label)}">${label}</div><div class="hbar-track">` +
+    return `<div class="hbar-row"><div class="hbar-label" title="${escapeHtml(i.label)}">${label}</div><div class="hbar-track"><div class="hbar-fill">` +
       i.segs.map((x) => `<div class="hbar-seg ${x.cls || ""}" style="width:${((x.value || 0) / max * 100).toFixed(2)}%" title="${escapeHtml(x.title || "")}"></div>`).join("") +
-      `</div><div class="hbar-value">${i.text}</div></div>`;
+      `</div></div><div class="hbar-value">${i.text}</div></div>`;
   }).join("") || '<p class="muted small">Нет данных</p>'}</div>`;
 }
 
@@ -2411,10 +2412,10 @@ const Pages = {
     const metrics = [
       { key: "duration", label: "Длительность", get: (v) => v.duration || 0, fmt: (x) => formatDuration(x) },
       { key: "fragments", label: "Фрагментов", get: (v) => v.fragments_total || 0, fmt: num },
-      { key: "edited", label: "Отредактировано, %", get: (v) => (v.bar_total ? (edited(v) / v.bar_total) * 100 : 0), fmt: (x) => `${Math.round(x)}%` },
+      { key: "edited", label: "Ред., %", get: (v) => (v.bar_total ? (edited(v) / v.bar_total) * 100 : 0), fmt: (x) => `${Math.round(x)}%` },
       { key: "anki", label: "В Anki", get: (v) => v.in_anki || 0, fmt: num },
       { key: "translated", label: "Переведено", get: (v) => v.translated || 0, fmt: num },
-      { key: "editor", label: "Время в редакторе", get: (v) => v.editor_seconds || 0, fmt: (x) => formatMinutes(x * 1000) },
+      { key: "editor", label: "В редакторе", get: (v) => v.editor_seconds || 0, fmt: (x) => formatMinutes(x * 1000) },
       { key: "cost", label: "Потрачено", get: (v) => costTotal(v.costs), fmt: money },
       { key: "disk", label: "Место на диске", get: (v) => v.disk_total || 0, fmt: (x) => formatSize(x) },
     ];
@@ -2491,8 +2492,7 @@ const Pages = {
           row("Готово к правке", num(ready.length)),
           row("В обработке и ждут", num(all.length - ready.length)),
           row("Длительность", formatDuration(sum(all, (v) => v.duration))),
-          row("Время в редакторе", formatMinutes(sum(all, (v) => v.editor_seconds) * 1000)),
-          row("Место на диске", formatSize(sum(all, (v) => v.disk_total))),
+          row("Место на дисках", formatSize(sum(all, (v) => v.disk_total))),
         ])}
         ${card("Правка", [
           row("Фрагментов", num(sum(ready, (v) => v.fragments_total))),

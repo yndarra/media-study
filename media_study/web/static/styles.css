@@ -2056,3 +2056,15 @@ html { scrollbar-gutter: stable; }
 .fxc { display: inline-block; white-space: pre; transform-origin: 50% 100%;
   animation: fx-grow 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
 @keyframes fx-grow { from { transform: translateY(70%) scaleY(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Блоки (карточки, разделы, строки) появляются по очереди только
+   прозрачностью – на своём месте, без подъёма снизу. */
+@keyframes card-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes card-in-top { from { opacity: 0; } to { opacity: 1; } }
+.enter { position: static; }
+
+/* Полосы статистики: колонка значения – по самому длинному значению
+   (--hbar-val из hbars), полосы ближе к числам; заполняются при показе. */
+.hbar-row { grid-template-columns: minmax(140px, 30%) 1fr var(--hbar-val, 96px); }
+.hbar-fill { display: flex; width: 100%; height: 100%; transform-origin: 0 50%; animation: hbar-grow 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes hbar-grow { from { transform: scaleX(0); } to { transform: none; } }
