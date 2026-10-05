@@ -179,6 +179,7 @@ const TextFx = {
     if (!el || !(el.dataset.fx || el.hasAttribute("data-fxdone"))) return;
     clearTimeout(el.__fxTimer);
     if (this.wrapped(el)) el.innerHTML = el.__fxSaved;
+    this.releaseNowrap(el);
     delete el.dataset.fx;
     el.removeAttribute("data-fxdone");
     el.__fxSaved = undefined;
@@ -207,7 +208,26 @@ const TextFx = {
   },
 
   // Обрезать текст так, как его обрежет CSS (первые n букв + "…"); вернуть n.
+  // Однострочный блок (многоточие или line-clamp: 1) меряется в одну строку
+  // без переноса (CSS режет и посреди слова; с переносом по словам целое
+  // слово уезжало на скрытую строку, и название обрезалось слишком коротко)
+  // и так и остаётся на время анимации; запас 2 px – буквы-блоки чуть шире.
   truncate(el, box) {
+    const cs = getComputedStyle(box);
+    const single = cs.textOverflow === "ellipsis" || cs.webkitLineClamp === "1";
+    if (single && box.style.whiteSpace !== "nowrap") {
+      box.__fxWhiteSpace = box.style.whiteSpace;
+      box.style.whiteSpace = "nowrap";
+      el.__fxNowrapBox = box;
+    }
+    // Ширина самого текста (а не прокрутки блока – та не бывает меньше блока).
+    const room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+    const range = document.createRange();
+    const fits = () => {
+      if (!single) return !this.overflows(box);
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().width <= room;
+    };
     const nodes = this.textNodes(el);
     const full = nodes.map((n) => n.data);
     const total = full.reduce((s, t) => s + t.length, 0);
@@ -227,7 +247,7 @@ const TextFx = {
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2);
       apply(mid);
-      if (this.overflows(box)) hi = mid - 1;
+      if (!fits()) hi = mid - 1;
       else lo = mid;
     }
     apply(lo);
@@ -238,6 +258,7 @@ const TextFx = {
   // clip – блок, который обрезает текст многоточием (уже известно, что не влезает).
   animate(el, text, from, elapsed = 0, clip = null) {
     if (el.__fxSaved !== undefined && this.wrapped(el)) el.innerHTML = el.__fxSaved; // прошлые обёртки – прочь
+    this.releaseNowrap(el);
     el.__fxText = text;
     el.__fxSaved = el.innerHTML;
     el.__fxStart = performance.now() - elapsed;
@@ -303,6 +324,14 @@ const TextFx = {
       this.unwrapQueue.clear();
       this.observer.takeRecords(); // только атрибуты – разбирать нечего
     });
+  },
+
+  // Блок, который держали в одну строку на время обрезки/анимации, – как был.
+  releaseNowrap(el) {
+    const box = el.__fxNowrapBox;
+    if (!box) return;
+    box.style.whiteSpace = box.__fxWhiteSpace || "";
+    el.__fxNowrapBox = null;
   },
 
   // Окно поменяло размер – обрезанный многоточием текст пересчитать: всё
