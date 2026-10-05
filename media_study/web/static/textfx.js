@@ -132,13 +132,19 @@ const TextFx = {
     const chars = [...tail.replace(/\s/g, "")].length || 1;
     const step = Math.min(this.STEP_MS, this.MAX_SPREAD_MS / chars);
     let k = 0;
-    for (const token of tail.split(/(\s+)/)) {
-      if (!token) continue;
-      if (/^\s+$/.test(token)) {
+    // Слово вместе с пробелом после него – одним блоком (буквы-блоки иначе
+    // переносились бы посреди слова); пробел внутри – такая же "буква", и
+    // строка не дёргается, когда он встаёт на место. Пробелы в начале и конце
+    // и переводы строк – обычным текстом (их схлопывает/переносит CSS).
+    const lead = tail.match(/^\s*/)[0];
+    const trail = tail.slice(lead.length).match(/\s*$/)[0];
+    if (lead) frag.append(lead);
+    const body = tail.slice(lead.length, tail.length - trail.length);
+    for (const token of body.match(/\S+[^\S\n]*|\n\s*/g) || []) {
+      if (token.startsWith("\n")) {
         frag.append(token);
         continue;
       }
-      // Слово – одним блоком (буквы-блоки иначе переносились бы посреди слова).
       const word = document.createElement("span");
       word.className = "fxw";
       for (const ch of token) {
@@ -150,6 +156,7 @@ const TextFx = {
       }
       frag.append(word);
     }
+    if (trail) frag.append(trail);
     el.replaceChildren(frag);
     clearTimeout(el.__fxTimer);
     el.__fxTimer = setTimeout(() => {

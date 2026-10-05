@@ -734,7 +734,12 @@ function viewEnter(el, items = null) {
   (items || [...el.children]).forEach((child, i) => {
     child.style.setProperty("--i", i);
     child.classList.add("enter");
-    child.addEventListener("animationend", () => child.classList.remove("enter"), { once: true });
+    const done = (e) => {
+      if (e.target !== child) return; // анимация вложенного (буквы, полосы) – не наша
+      child.classList.remove("enter");
+      child.removeEventListener("animationend", done);
+    };
+    child.addEventListener("animationend", done);
   });
 }
 
@@ -750,20 +755,35 @@ function flashCard(box) {
 }
 
 // Раздел открыли: карточки появляются по очереди (лёгкий подъём и проявление).
-function cardsEnter(box) {
+// elapsed – сколько мс появление уже идёт (перерисовка посреди него: новые
+// карточки продолжают ту же анимацию с того же места, а не встают рывком).
+function cardsEnter(box, elapsed = 0) {
+  if (!elapsed) box.__enterAt = performance.now();
   box.querySelectorAll("a.card, .group-title").forEach((el, i) => {
     el.style.setProperty("--i", Math.min(i, 20));
+    if (elapsed) el.style.animationDelay = `calc(var(--i) * 35ms - ${Math.round(elapsed)}ms)`;
     el.classList.add("enter");
-    el.addEventListener("animationend", () => el.classList.remove("enter"), { once: true });
+    const done = (e) => {
+      if (e.target !== el) return; // анимация вложенного (буквы, полосы) – не наша
+      el.classList.remove("enter");
+      el.style.animationDelay = "";
+      el.removeEventListener("animationend", done);
+    };
+    el.addEventListener("animationend", done);
   });
 }
+const CARDS_ENTER_MS = 20 * 35 + 380; // последняя карточка (--i = 20) + длительность
 
 // Перерисовать список без мигания: полосы доезжают от прежних значений
 // (first – первый показ раздела: заполняются от нуля).
+// Полосы – от ширины, которая сейчас на экране (могли ещё заполняться);
+// карточки, которые ещё появлялись, – продолжают появляться.
 function renderSmooth(box, html, first = false) {
-  const snap = first ? new Map() : barSnapshot(box);
+  const snap = first ? new Map() : barSnapshot(box, true);
   box.innerHTML = html;
   animateBars(box, snap);
+  const elapsed = box.__enterAt ? performance.now() - box.__enterAt : Infinity;
+  if (!first && elapsed < CARDS_ENTER_MS) cardsEnter(box, elapsed);
 }
 
 function formatSize(bytes) {
@@ -1442,7 +1462,7 @@ const Pages = {
           ghost.disabled = true;
           if (notes) card.insertBefore(ghost, notes);
           else card.appendChild(ghost);
-          ghost.addEventListener("animationend", () => ghost.remove(), { once: true });
+          ghost.addEventListener("animationend", (e) => e.target === ghost && ghost.remove());
         }
       }
       this.lastActions = now;
