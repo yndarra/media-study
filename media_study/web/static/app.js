@@ -1883,7 +1883,9 @@ const Heartbeat = {
     }
     // Поменялся интерфейс (html/js/css) без перезапуска сервера – тоже
     // перезагрузиться, но не посреди набора текста и не с несохранённым.
-    if (info.ui !== this.ui && info.newest && info.ready) this.reloadPending = true;
+    // Любая открытая вкладка (не только самая новая): иначе вторая вкладка
+    // так и оставалась со старым интерфейсом, и обновлять приходилось руками.
+    if (info.ui !== this.ui && info.ready) this.reloadPending = true;
     if (this.reloadPending && info.instance === this.instance) {
       if (this.safeToReload()) this.reload();
       return;

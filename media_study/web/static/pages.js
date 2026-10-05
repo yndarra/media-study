@@ -280,6 +280,16 @@ const Router = {
   },
 
   async route(full = false) {
+    // Интерфейс обновился, пока вкладка ждала (например, в настройках) –
+    // перезагрузиться при переходе в другой раздел (адрес уже новый).
+    if (typeof Heartbeat !== "undefined" && Heartbeat.reloadPending && !location.hash.startsWith("#/settings")) {
+      const a = document.activeElement;
+      const typing = a && (a.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName));
+      if (!typing && !document.querySelector(".ask-overlay")) {
+        Heartbeat.reload();
+        return;
+      }
+    }
     const parts = (location.hash.replace(/^#\/?/, "") || "videos").split("/");
     const [page, id] = [parts[0], decodeURIComponent(parts[1] || "")];
     // Уходим из настроек, а там несохранённое – спросить; "остаться" – вернуть адрес.
