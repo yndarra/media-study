@@ -2068,3 +2068,22 @@ html { scrollbar-gutter: stable; }
 .hbar-row { grid-template-columns: minmax(140px, 30%) 1fr var(--hbar-val, 96px); }
 .hbar-fill { display: flex; width: 100%; height: 100%; transform-origin: 0 50%; animation: hbar-grow 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
 @keyframes hbar-grow { from { transform: scaleX(0); } to { transform: none; } }
+
+/* Центр текста – по высоте цифр (замер: отступ от верха цифры до верхней
+   границы = отступу от низа цифры до нижней): строки таблиц были выше на
+   0,3 px, "Итого" – на 0,8 (лишняя линия над строкой), кнопки – выше на 0,5,
+   кнопки-переключатели – ниже на 0,5. */
+table.stats td, table.stats th { padding-top: 5.3px; padding-bottom: 6.7px; }
+table.grid-table tr.total-row td { border-top: none; }
+.step-btn, a.step-btn { padding-bottom: 1px; }
+.seg-switch button, .mode-switch.seg-switch button { padding-bottom: 2px; }
+a.step-btn { padding-bottom: 0; }
+
+/* Иконки – по центру (замер центра нарисованной части): в меню – на одной
+   высоте с серединой цифр текста (были выше на 0,5 px, кроме "Статистики");
+   кнопки сервера и "назад/вперёд" редактора – по центру кнопки. */
+#menu a[data-menu]:not([data-menu="stats"]) svg, #menu .menu-icon-host svg { transform: translateY(0.5px); }
+#server-restart svg { transform: translateY(0.6px); }
+#server-stop svg { transform: translateY(0.3px); }
+#undo-btn svg, #redo-btn svg { transform: translateY(-1.4px); }
+#speakers-btn svg { transform: translate(-0.4px, 0.5px); }
