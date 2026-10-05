@@ -2174,3 +2174,9 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
    заполнения: последний кадр анимации и итог совпадают пиксель в пиксель
    (иначе в конце был лёгкий "дёрг" краёв). */
 .seg-left, .hbar-fill { will-change: transform; }
+
+/* Подпись в полосах – в целых пикселях (сдвиг на полпикселя монитор
+   округлял неровно): сверху 1 px, строка 18 px – цифры ровно посередине. */
+.progress-label { top: 1px; line-height: 18px; transform: none; }
+/* Полосы с подписью – 21 px (нечётная высота: цифры ровно посередине при целых пикселях). */
+.progress.segmented { height: 21px; }

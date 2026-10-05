@@ -125,7 +125,7 @@ function askStorage(info) {
         <!-- Список хранилищ: текущее – сверху, такой же строкой, с синей
              обводкой и градиентом (как карточки медиа); остальные – выбрать. -->
         <div class="storage-options">
-          <div class="storage-option current chosen" data-k="here"><span class="so-name">${escapeHtml(here.label)}${here.main ? " (основное)" : ""} · сейчас здесь</span>` +
+          <div class="storage-option current chosen" data-k="here"><span class="so-name">${escapeHtml(here.label)}${here.main ? " (основное)" : ""}</span>` +
           `<span class="so-path">${escapeHtml(here.path)}</span>${here.free !== undefined ? `<span class="so-free">Свободно ${formatSize(here.free)}</span>` : ""}</div>
           ${targets.map(option).join("")}
         </div>
@@ -486,6 +486,17 @@ const Zebra = {
     if (this.running) return;
     this.running = true;
     requestAnimationFrame((t) => this.frame(t));
+  },
+
+  // Начать круг заново с серой фазы: левая полоса кончается ровно у левого
+  // края кнопки (offset = период − ширина полосы) и вот-вот войдёт.
+  restartGray(button) {
+    const type = button.dataset.zebra;
+    const target = this.PARAMS[type];
+    if (!target) return;
+    const key = `${button.dataset.id || button.id}:${type.replace(/Busy|Ready/, "")}`;
+    const period = 2 * target.stripe;
+    this.state.set(key, { stripe: target.stripe, speed: target.speed, cycles: (period - target.stripe) / period, last: performance.now() });
   },
 
   // Нарисовать сразу (новая кнопка / перерисованное окно): иначе первый кадр
@@ -1870,6 +1881,8 @@ const Pages = {
     autoGrow(body.querySelector("#title-input"));
     singleLine(body.querySelector("#group-input"));
     animateBars(body.querySelector(".modal-bars"), barsBefore);
+    // Окно только что открыли – полосы кнопок с серой фазы (при обновлении – как шли).
+    if (!reuse) body.querySelectorAll("[data-zebra]").forEach((b) => Zebra.restartGray(b));
     Zebra.paintNow();
     foldLongRows(body);
     const saveButton = body.querySelector("#info-save");
