@@ -2771,7 +2771,11 @@ const Pages = {
           <div class="field-hint">Новые карточки – сразу в этих цветах; уже готовые – кнопкой ниже (после «Сохранить»)</div>
           <div class="el-check-row"><button id="set-recolor" class="step-btn">Перекрасить готовые карточки</button><span id="set-recolor-note" class="muted small"></span></div>
         </section>
-        <section class="set-card half-card empty-card"></section>
+        <!-- Интерфейс: язык (меняется сразу, без "Сохранить" – страница перезагружается). -->
+        <section class="set-card half-card">
+          <h2>Интерфейс</h2>
+          ${field("set-ui-lang", "Язык интерфейса", '<div class="picker-host narrow-picker" data-for="set-ui-lang"></div>', "")}
+        </section>
         <section class="set-card wide-card">
           <h2>Хранилище</h2>
           <!-- Диски: название и путь, заполненность (занято всего / из них медиа), убрать. -->
@@ -3013,6 +3017,13 @@ const Pages = {
       options: [[0, "Лучшее доступное"], [2160, "4K (2160p)"], [1440, "2K (1440p)"], [1080, "Full HD (1080p)"], [720, "HD (720p)"]]
         .map(([h, label]) => ({ value: String(h), label })),
     });
+    // Язык интерфейса (i18n.js): сразу, страница перезагружается.
+    Picker.create(host("set-ui-lang"), {
+      id: "set-ui-lang", value: I18n.lang,
+      options: [{ value: "ru", label: "Русский" }, { value: "en", label: "English" }],
+      onChange: (v) => v !== I18n.lang && I18n.set(v),
+    });
+    el.querySelector("#set-ui-lang").dataset.watch = "no"; // не "несохранённое изменение"
     // Производительность: свободные ядра и нагрузка на видеокарту – списки.
     const cores = navigator.hardwareConcurrency || 8;
     Picker.create(host("set-reserve"), {
