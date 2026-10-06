@@ -171,7 +171,10 @@ def last_touched_index(manifest: Manifest) -> int:
     """
     if manifest.settings.get("finished") and manifest.fragments:
         return len(manifest.fragments) - 1
-    return max((i for i, f in enumerate(manifest.fragments) if is_touched(f)), default=-1)
+    # Набор от сообщества: выверенная его часть – как просмотренная (packs.py).
+    through = manifest.settings.get("reviewed_through")
+    touched = max((i for i, f in enumerate(manifest.fragments) if is_touched(f)), default=-1)
+    return max(touched, int(through)) if through is not None else touched
 
 
 def export_index(project_dir: Path) -> list[dict]:

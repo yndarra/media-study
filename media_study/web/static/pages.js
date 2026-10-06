@@ -985,6 +985,34 @@ function singleLine(el) {
 
 // Следит за полями формы: кнопки "Сохранить"/"Отменить" активны, только когда
 // что-то изменено. snapshot() — запомнить текущее как сохранённое.
+// Наборы от сообщества (media_study/packs.py): выгрузить набор видео файлом.
+async function downloadPack(id, note) {
+  const res = await fetch(`/api/p/${encodeURIComponent(id)}/pack`);
+  if (!res.ok) throw new Error(await res.text());
+  const name = decodeURIComponent((res.headers.get("Content-Disposition") || "").split("''")[1] || `${id}.mspack.json`);
+  const warnings = decodeURIComponent(res.headers.get("X-Pack-Warnings") || "");
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  if (note) note(warnings ? `Набор сохранён. ${warnings}` : `Набор сохранён: ${name}`);
+}
+
+// Выбрать файл набора (.mspack.json) – текст файла или null.
+function pickPackFile() {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.addEventListener("change", async () => resolve(input.files[0] ? await input.files[0].text() : null));
+    input.click();
+  });
+}
+
 function formWatch(root, buttons, onChange = null) {
   const fields = () => [...root.querySelectorAll("input, textarea, select")].filter((el) => el.dataset.watch !== "no");
   const value = (el) => (el.type === "checkbox" ? String(el.checked) : el.value);
@@ -1875,6 +1903,7 @@ const Pages = {
         <button id="info-anki" class="step-btn fold zebra-host gone"><canvas class="zebra"></canvas><span>Передать в Anki</span></button>
         <button id="info-translate" class="step-btn fold zebra-host gone"><canvas class="zebra"></canvas><span>Перевести</span></button>
         <span id="info-note" class="muted small"></span>
+        <button id="info-pack" class="step-btn fold" title="Набор для других: разметка, тексты и переводы этого видео файлом (без самого видео)">Набор</button>
         <button id="info-storage" class="step-btn fold zebra-host" title="Где хранится видео; перенос на другой диск"><canvas class="zebra"></canvas><span>Хранилище</span></button>
         <button id="info-save" class="step-btn fold gone">Сохранить</button>
       </div>`;
@@ -1976,6 +2005,17 @@ const Pages = {
       if (!busy && !moving) setNote("");
     };
     const editLink = body.querySelector("#info-edit");
+    body.querySelector("#info-pack").addEventListener("click", async (e) => {
+      const button = e.currentTarget;
+      button.disabled = true;
+      try {
+        await downloadPack(id, (text) => setNote(text));
+      } catch (err) {
+        setNote(`Набор не выгрузился: ${err.message}`);
+      } finally {
+        button.disabled = false;
+      }
+    });
     render();
 
     const refresh = async () => {
@@ -2158,11 +2198,26 @@ const Pages = {
           : `<button class="step-btn primary process-go zebra-host" data-zebra="process" id="process-go"><canvas class="zebra"></canvas><span>${escapeHtml(v.next_step || "Обработать")}</span></button>`}
         <span class="muted small note"></span>
         ${v.state === "processing" ? '<span class="process-status"></span>' : ""}
+        ${v.state === "processing" ? "" : '<button class="step-btn process-pack" title="Разметить по набору от сообщества (файл .mspack.json) – без распознавания речи">Применить набор</button>'}
         <button id="process-storage" class="step-btn zebra-host${v.state === "processing" ? " hidden" : ""}" title="Где хранится видео; перенос на другой диск"><canvas class="zebra"></canvas><span>Хранилище</span></button>
         <button class="step-btn info-save hidden">Сохранить</button>
       </div>`;
     body.querySelectorAll("textarea.grow:not(.fixed)").forEach(autoGrow);
     singleLine(body.querySelector("#group-input"));
+    const packButton = body.querySelector(".process-pack");
+    if (packButton) packButton.addEventListener("click", async () => {
+      const text = await pickPackFile();
+      if (!text) return;
+      const out = body.querySelector(".modal-actions .note");
+      try {
+        const res = await fetch(`/api/p/${encodeURIComponent(id)}/pack`, { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+        if (!res.ok) throw new Error(JSON.parse(await res.text()).detail);
+        if (out) out.textContent = "Набор применяется – видео обрабатывается по нему";
+        setTimeout(() => this.route && Router.route(true), 800);
+      } catch (err) {
+        if (out) out.textContent = `Не получилось: ${err.message}`;
+      }
+    });
     // Пришло свежее место на диске – числа в таблице на месте.
     diskFresh.then((d) => {
       const table = body.querySelector("#proc-disk");
@@ -2353,6 +2408,11 @@ const Pages = {
             <button id="file-go" class="step-btn" disabled>Добавить</button>
           </div>
         </section>
+        <section class="set-card half-card">
+          <h2>Набор от сообщества</h2>
+          <p class="muted small">Готовая разметка чужого видео (файл .mspack.json): видео скачается по ссылке из набора, фрагменты, тексты и переводы – из набора, без распознавания речи. Набор для своего файла – добавьте файл, затем «Применить набор» в «Обработке».</p>
+          <div class="author-row"><button id="pack-go" class="step-btn">Выбрать набор</button></div>
+        </section>
       </div>
       <div id="add-note" class="muted small"></div>`;
     viewEnter(el); // заголовок, описание и содержимое появляются по очереди
@@ -2389,6 +2449,19 @@ const Pages = {
       if (!url) return;
       try {
         done((await Api.download(url)).id);
+      } catch (err) {
+        fail(err);
+      }
+    });
+    document.getElementById("pack-go").addEventListener("click", async () => {
+      const text = await pickPackFile();
+      if (!text) return;
+      try {
+        const res = await fetch("/api/packs/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+        if (!res.ok) throw new Error(await res.text());
+        const r = await res.json();
+        if (r.needs_file) note.textContent = `Набор «${r.title}» – для своего файла: добавьте файл, затем «Применить набор» в «Обработке».`;
+        else note.innerHTML = `Набор принят: ${escapeHtml(r.id)} скачивается и размечается. Ход – в <a href="#/process">Обработке</a>.`;
       } catch (err) {
         fail(err);
       }

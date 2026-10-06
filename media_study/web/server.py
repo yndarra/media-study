@@ -607,6 +607,77 @@ def download(body: DownloadRequest):
     return {"id": project_id}
 
 
+@app.get("/api/p/{project_id}/pack")
+def export_pack(project_id: str):
+    """Набор от сообщества из этого видео (файл .mspack.json, без медиа – см. media_study/packs.py)."""
+    from fastapi.responses import Response
+    from urllib.parse import quote
+
+    from media_study import packs
+
+    p = project(project_id)
+    pack, warnings = packs.export_pack(p.dir)
+    name = packs.pack_filename(pack)
+    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"}
+    if warnings:
+        headers["X-Pack-Warnings"] = quote(" | ".join(warnings))
+    return Response(json.dumps(pack, ensure_ascii=False), media_type="application/json", headers=headers)
+
+
+@app.post("/api/packs/import")
+async def import_pack(request: Request):
+    """
+    Набор от сообщества: видео по ссылке из набора скачивается и сразу
+    размечается по набору (без распознавания). Набор для своего файла (без
+    ссылки) – добавьте файл, затем "Применить набор" в окне "Обработки".
+    """
+    from media_study import packs
+    from media_study.ingest.build_manifest import _extract_video_id
+
+    try:
+        pack = json.loads(await request.body())
+        packs.validate(pack)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error) or "не удалось прочитать набор")
+    url = (pack.get("media") or {}).get("source_url", "").strip()
+    if not url.startswith("http"):
+        return {"id": None, "needs_file": True, "title": (pack.get("project") or {}).get("title", "")}
+    project_id = _extract_video_id(url)
+    project_dir = DATA_DIR / project_id
+    if (project_dir / "manifest.json").exists():
+        raise HTTPException(status_code=400, detail="это видео уже есть – чтобы разметить его заново по набору, удалите его")
+    from . import storage
+
+    project_dir = storage.new_project_dir(DATA_DIR, project_id, audio=(pack.get("media") or {}).get("kind") == "audio")
+    (project_dir / "pack.json").write_text(json.dumps(pack, ensure_ascii=False), encoding="utf-8")
+    args = [url]
+    settings = library.app_settings(DATA_DIR)
+    if settings.get("download_max_height"):
+        args += ["--max-height", str(int(settings["download_max_height"]))]
+    _spawn_phase1(project_dir, args)
+    return {"id": project_id}
+
+
+@app.post("/api/p/{project_id}/pack")
+async def apply_pack(project_id: str, request: Request):
+    """Применить набор к уже добавленному (ещё не обработанному) видео или аудио – и обработать по нему."""
+    from media_study import packs
+
+    project_dir = DATA_DIR / project_id
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail="видео не найдено")
+    if (project_dir / "manifest.json").exists():
+        raise HTTPException(status_code=400, detail="видео уже обработано")
+    try:
+        pack = json.loads(await request.body())
+        packs.validate(pack)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error) or "не удалось прочитать набор")
+    (project_dir / "pack.json").write_text(json.dumps(pack, ensure_ascii=False), encoding="utf-8")
+    _spawn_phase1(project_dir, ["--process"])
+    return {"ok": True}
+
+
 @app.put("/api/import")
 async def import_file(request: Request, name: str):
     """

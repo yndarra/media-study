@@ -157,6 +157,29 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
     encoded = reencode_mod.ingest_source_video(master, proxy_path)
     fps, total_frames = encoded["fps"], encoded["total_frames"]
 
+    # Набор от сообщества (packs.py): фрагменты, тексты и переводы – из него,
+    # распознавание речи и нарезка не нужны.
+    pack_path = project_dir / "pack.json"
+    if pack_path.exists():
+        from media_study.packs import build_manifest_from_pack
+        from media_study.web.library import app_settings
+
+        report(project_dir, "assets", None, force=True)
+        build_waveform(proxy_path, project_dir / "waveform.bin", fps, total_frames)  # и для сдвига копий
+        video_info = VideoInfo(
+            youtube_url=info.get("webpage_url", ""), video_id=info.get("id") or project_dir.name,
+            title=info.get("title", project_dir.name), fps=fps, total_frames=total_frames,
+            source_file=proxy_path.name, master_file=master.name, subtitle_source="pack",
+        )
+        manifest = build_manifest_from_pack(
+            project_dir, json.loads(pack_path.read_text(encoding="utf-8")), video_info,
+            app_settings(project_dir.parent)["context_padding_seconds"], log=lambda m: print(m, flush=True),
+        )
+        build_audio_track(master, project_dir / "audio.pcm")
+        manifest.save(project_dir / "manifest.json")
+        report(project_dir, "done", 100, force=True)
+        return manifest
+
     if not (raw_dir / "whisper_transcript.json").exists():
         report(project_dir, "transcribe", 0, force=True)
     whisper_transcript = transcribe_mod.transcribe_and_save(proxy_path, raw_dir / "whisper_transcript.json")
