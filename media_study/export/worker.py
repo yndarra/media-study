@@ -230,7 +230,7 @@ class Worker:
         if not drop:
             return False
         try:
-            anki.delete_notes([e["anki_note_id"] for e in drop if e.get("anki_note_id")])
+            anki.delete_notes([n for e in drop for n in (e.get("anki_note_id"), e.get("anki_rev_note_id")) if n])
         except anki.AnkiUnavailable:
             return False
         for entry in drop:
@@ -258,7 +258,8 @@ class Worker:
                 key=lambda e: (start.get(e["fragment_id"], e.get("start_frame", 0)), e["clip"]),
             )
             if notes:
-                projects.append([e["anki_note_id"] for e in notes])
+                # Прямая карточка, за ней её обратная (export/reverse.py).
+                projects.append([n for e in notes for n in (e["anki_note_id"], e.get("anki_rev_note_id")) if n])
         if not projects:
             return
         # Порядок видео — по наименьшему id карточки (кто раньше попал в Anki).
@@ -383,6 +384,17 @@ class Worker:
             write_json(index_path, index)
             did = True
             self.reorder_needed = True
+        # Обратные карточки – по прямым (создать/обновить), если включены.
+        if did and self._anki_available():
+            from . import reverse
+
+            try:
+                if reverse.sync_project(project):
+                    self.reorder_needed = True
+            except anki.AnkiUnavailable:
+                pass
+            except RuntimeError as error:
+                print(f"Обратные карточки: {error}", flush=True)
         waiting = any((not e.get("anki_note_id") and not e.get("orphan")) or e.get("anki_update_pending") for e in index)
         self.status(project, "waiting_anki" if waiting else "idle",
                     "Жду Anki, чтобы создать карточки" if waiting else "", seconds_per_frame=spf)

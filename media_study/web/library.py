@@ -240,6 +240,9 @@ DEFAULT_APP_SETTINGS = {
     "gpu_load_percent": 100,
     # Языки (core/lang.py): язык речи по умолчанию – для видео и для аудио,
     # язык карточек (на какой переводить); у видео можно задать свои.
+    # Обратные карточки (export/reverse.py): перевод на лице – для видео и аудио.
+    "reverse_cards_video": False,
+    "reverse_cards_audio": False,
     "speech_lang_video": "en",
     "speech_lang_audio": "en",
     "card_lang": "ru",

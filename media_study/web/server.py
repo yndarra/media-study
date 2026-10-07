@@ -907,7 +907,21 @@ def update_settings(body: dict):
         body["openrouter_key_file"] = str(secrets.OPENROUTER_KEY)
     old = library.app_settings(DATA_DIR)
     old_padding = old["context_padding_seconds"]
+    before = library.app_settings(DATA_DIR)
     saved = library.save_app_settings(DATA_DIR, body)
+    # Обратные карточки только что включили – создать их для уже переведённых (в фоне).
+    if any(saved.get(k) and not before.get(k) for k in ("reverse_cards_video", "reverse_cards_audio")):
+        def make_reverse():
+            from media_study.export import anki, reverse
+
+            try:
+                reverse.sync_all(DATA_DIR)
+            except anki.AnkiUnavailable:
+                print("Обратные карточки: Anki закрыт – создадутся при следующей передаче", flush=True)
+            except RuntimeError as error:
+                print(f"Обратные карточки: {error}", flush=True)
+
+        threading.Thread(target=make_reverse, daemon=True).start()
     if saved["anki_deck_root"] != old["anki_deck_root"] or saved.get("anki_deck_root_audio") != old.get("anki_deck_root_audio"):
         _deck_sync_run()
     if saved["context_padding_seconds"] != old_padding:
@@ -938,6 +952,9 @@ def anki_recolor():
         _recolor.update(running=True, done=0, total=0, changed=0, error="")
         try:
             _recolor["changed"] = anki.recolor_all(progress=lambda done, total: _recolor.update(done=done, total=total))
+            from media_study.export import reverse
+
+            reverse.sync_all(DATA_DIR)  # обратные – в новых цветах
         except Exception as error:  # Anki закрыт и т.п.
             _recolor["error"] = str(error)[:300]
         finally:

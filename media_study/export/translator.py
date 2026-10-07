@@ -461,6 +461,7 @@ def apply_direct(project_dir: Path, proposals: list[dict], cards: list[dict]) ->
     Перевод целого видео: переданным в Anki — сразу на оборот (метка
     агент_перевод, короткое тире на всей карточке), остальным — в хранилище.
     """
+    touched_reverse = False
     by_fragment = {c["fragment_id"]: c for c in cards}
     stored = []
     for p in proposals:
@@ -470,6 +471,14 @@ def apply_direct(project_dir: Path, proposals: list[dict], cards: list[dict]) ->
             anki.invoke("updateNoteFields", note={"id": card["note_id"], "fields": {
                 anki.FRONT_FIELD: normalize_dashes(card["front_old"]), anki.BACK_FIELD: normalize_dashes(p["back_new"])}})
             anki.recolor_notes([card["note_id"]])  # цвета и строка говорящих – по новому обороту
+            touched_reverse = True
             anki.invoke("addTags", notes=[card["note_id"]], tags=TRANSLATED_TAG)
     store_translations(project_dir, stored)
+    if touched_reverse:
+        from . import reverse
+
+        try:
+            reverse.sync_project(project_dir)
+        except RuntimeError:
+            pass  # Anki закрыт и т.п. – обратные доделает следующий проход
     return len(stored)

@@ -2746,6 +2746,10 @@ const Pages = {
             "Карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются")}
           ${field("set-deck-audio", "Колода для аудио", `<input id="set-deck-audio" class="wide" value="${escapeHtml(s.anki_deck_root_audio || "")}">`,
             "Песни и другие аудио: &lt;колода&gt;::&lt;исполнитель&gt;::&lt;название&gt;")}
+          <div class="field"><div class="field-label">Обратные карточки</div>
+            <label class="check"><input id="set-rev-video" type="checkbox" ${s.reverse_cards_video ? "checked" : ""}> Видео</label>
+            <label class="check"><input id="set-rev-audio" type="checkbox" ${s.reverse_cards_audio ? "checked" : ""}> Аудио</label>
+            <div class="field-hint">Вторая карточка: на лице перевод, на обороте клип и оригинал – сразу за прямой, когда у неё есть перевод (свой тип заметок «media-study (обратная)»)</div></div>
           <div id="deck-sync" class="small"></div>
         </section>
         <section class="set-card">
@@ -3132,6 +3136,8 @@ const Pages = {
         whisper_model: document.getElementById("set-wh-model").value,
         whisper_device: document.getElementById("set-wh-device").value,
         gpu_load_percent: Number(document.getElementById("set-gpu-load").value) || 100,
+        reverse_cards_video: document.getElementById("set-rev-video").checked,
+        reverse_cards_audio: document.getElementById("set-rev-audio").checked,
         speech_lang_video: document.getElementById("set-speech-video").value,
         speech_lang_audio: document.getElementById("set-speech-audio").value,
         card_lang: document.getElementById("set-card-lang").value,

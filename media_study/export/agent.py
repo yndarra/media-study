@@ -296,6 +296,7 @@ def apply(data_dir: Path, approve: list[int], reject: list[int], edits: dict | N
     метка агент_перевод; флаг "перевод" снимается: зелёный -> без флага,
     красный -> оранжевый). Отклонённые — просто убираются из списка.
     """
+    touched_projects: set[str] = set()
     proposals_path = data_dir / PROPOSALS_FILE
     proposals = load_json(proposals_path, [])
     approve, reject = set(approve), set(reject)
@@ -312,6 +313,8 @@ def apply(data_dir: Path, approve: list[int], reject: list[int], edits: dict | N
         anki.invoke("updateNoteFields", note={"id": p["note_id"], "fields": {
             anki.FRONT_FIELD: normalize_dashes(p["front_new"]), anki.BACK_FIELD: normalize_dashes(p["back_new"])}})
         anki.recolor_notes([p["note_id"]])  # цвета и строка говорящих – по новому обороту
+        if p.get("project"):
+            touched_projects.add(p["project"])
         anki.invoke("addTags", notes=[p["note_id"]], tags=AGENT_TAG)
         if p.get("flag"):  # перевод по флагу: зелёный снимается, красный -> оранжевый
             new_flag = 2 if p["flag"] == 1 else 0
@@ -320,6 +323,14 @@ def apply(data_dir: Path, approve: list[int], reject: list[int], edits: dict | N
         done.append(p["note_id"])
     left = [p for p in proposals if p["note_id"] not in approve and p["note_id"] not in reject]
     save_json(proposals_path, left)
+    # Обратные карточки одобренных видео – по новым оборотам (export/reverse.py).
+    from . import reverse
+
+    for name in touched_projects:
+        try:
+            reverse.sync_project(Path(data_dir) / name)
+        except RuntimeError:
+            pass
     return {"applied": len(done), "rejected": len(reject), "left": len(left)}
 
 

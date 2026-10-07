@@ -395,7 +395,7 @@ def resequence(note_ids: list[int], dry_run: bool = False) -> int:
     # чужие (и все чужие после них) сдвигаются за наш блок, их порядок сохраняется.
     ours = {c["cardId"] for c in cards}
     taken = set(assigned)
-    others = invoke("cardsInfo", cards=invoke("findCards", query=f"is:new -tag:{TAG} prop:pos>={min(assigned)}"))
+    others = invoke("cardsInfo", cards=invoke("findCards", query=f"is:new -tag:{TAG} -tag:{TAG}-rev prop:pos>={min(assigned)}"))
     others = sorted((c for c in others if c["cardId"] not in ours), key=lambda c: c["due"])
     clash = next((c for c in others if c["due"] in taken), None)
     if clash:
