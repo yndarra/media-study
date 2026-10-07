@@ -2193,3 +2193,16 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
 
 /* Окно обработки: языки видео – с отступом от галочек. */
 .process-form .proc-langs { margin-top: 12px; }
+
+/* Буквы вырастают снизу без отдельного слоя (раньше – сжатие transform: на время
+   анимации браузер рисовал каждую букву своим слоем на целом пикселе, а потом –
+   обычным текстом на дробной позиции, и в конце буквы сдвигались на пиксель).
+   Теперь буква поднимается из-под линии слова (сдвиг top, низ слова обрезан)
+   и проявляется цветом: всё время рисуется как обычный текст – конец анимации
+   совпадает с итогом пиксель в пиксель. */
+.fxc { position: relative; transform: none; animation-name: fx-rise; animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes fx-rise { from { top: 0.85em; color: transparent; } }
+.fxw { clip-path: inset(-0.5em -0.2em 0 -0.2em); }
+.card-action .flip .ch { position: relative; transform: none; top: 0.85em; color: transparent;
+  transition: top 0.24s cubic-bezier(0.2, 0.9, 0.3, 1), color 0.16s ease; }
+.card-action .flip .ch.on { top: 0; color: inherit; transform: none; }
