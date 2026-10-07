@@ -37,6 +37,7 @@ const TextFx = {
   STEP_MS: 14, // задержка между буквами
   MAX_SPREAD_MS: 320, // вся строка вырастает не дольше этого
   GROW_MS: 260,
+  DONE: 1e7, // elapsed для "уже доросло" (обернуть без анимации)
   observer: null,
 
   start() {
@@ -118,10 +119,18 @@ const TextFx = {
         }
         continue;
       }
-      // Контейнер перерисовали: запомнить тексты удалённых единиц по ключам.
+      // Контейнер перерисовали: запомнить тексты удалённых единиц по ключам
+      // (кроме показанного заново раздела – там всё анимируется целиком).
+      if (target.__fxFresh) {
+        [...r.addedNodes].forEach((n) => this.unitsIn(n).forEach((u) => touched.has(u) || touched.set(u, "")));
+        continue;
+      }
       const rootKey = `${target.id || (typeof target.className === "string" ? target.className : "") || target.tagName}`;
       [...r.removedNodes].forEach((n, i) => this.unitsIn(n).forEach((u) =>
-        old.set(this.keyOf(u, n, `${rootKey}:${i}`), { text: u.__fxText ?? u.textContent, started: u.dataset.fx ? u.__fxStart : null })));
+        old.set(this.keyOf(u, n, `${rootKey}:${i}`), {
+          text: u.__fxText ?? u.textContent, started: u.dataset.fx ? u.__fxStart : null,
+          wrapped: (!!u.dataset.fx || u.hasAttribute("data-fxdone")) && this.wrapped(u),
+        })));
       [...r.addedNodes].forEach((n, i) => this.unitsIn(n).forEach((u) => {
         if (!touched.has(u)) touched.set(u, { key: this.keyOf(u, n, `${rootKey}:${i}`) });
       }));
@@ -132,10 +141,12 @@ const TextFx = {
       const text = this.textOf(el);
       let before = prev;
       let started = null;
+      let wasWrapped = false;
       if (prev && typeof prev === "object") {
         const was = old.get(prev.key);
         before = was ? was.text : "";
         started = was ? was.started : null;
+        wasWrapped = !!(was && was.wrapped);
       }
       if (!text.trim() || text.length > this.MAX_LEAF) {
         el.__fxText = text;
@@ -144,6 +155,10 @@ const TextFx = {
       if (before === text) {
         // Тот же текст – без анимации; но если прежний ещё рос – продолжить с того же места.
         if (started !== null && started !== undefined) jobs.push([el, text, 0, performance.now() - started]);
+        // Прежний уже дорос, но буквы были обёрнуты – новый тоже обернуть, сразу
+        // в конечном виде: обычный текст встаёт на чуть другие доли пикселя
+        // (кернинг), и при каждой перерисовке окна буквы "съезжались".
+        else if (wasWrapped) jobs.push([el, text, 0, this.DONE]);
         else el.__fxText = text;
         continue;
       }
@@ -174,7 +189,8 @@ const TextFx = {
   run(jobs) {
     const plan = jobs.map(([el, text, from, elapsed]) => {
       const box = this.clipBox(el);
-      return [el, text, from, elapsed - this.startDelay(el), box && this.overflows(box) ? box : null];
+      const delay = elapsed >= this.DONE ? 0 : this.startDelay(el);
+      return [el, text, from, elapsed - delay, box && this.overflows(box) ? box : null];
     });
     for (const [el, text, from, elapsed, clip] of plan) this.animate(el, text, from, elapsed, clip);
   },
@@ -200,6 +216,15 @@ const TextFx = {
       if (dy > 0) delay += Math.min(this.MAX_ROW_DELAY_MS, dy * this.ROW_MS_PER_PX);
     }
     return delay;
+  },
+
+  // Содержимое el только что перерисовали как новое (раздел показан заново):
+  // сверять со старым текстом не нужно. Отметка живёт до конца текущей задачи –
+  // наблюдатель разбирает изменения раньше (его микрозадача поставлена ещё при
+  // перерисовке).
+  fresh(el) {
+    el.__fxFresh = true;
+    queueMicrotask(() => { el.__fxFresh = false; });
   },
 
   // Закончить анимацию единицы сразу (её содержимое сейчас будут перестраивать).
@@ -251,10 +276,14 @@ const TextFx = {
     // Ширина самого текста (а не прокрутки блока – та не бывает меньше блока).
     const room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
     const range = document.createRange();
+    // Ширина Range – на экране, с масштабом (окно в это время ещё
+    // увеличивается при появлении), а room – без него: привести к одному.
+    // Иначе в первый раз влезало на букву больше, чем потом.
+    const scale = box.getBoundingClientRect().width / (box.offsetWidth || 1) || 1;
     const fits = () => {
       if (!single) return !this.overflows(box);
       range.selectNodeContents(el);
-      return range.getBoundingClientRect().width <= room;
+      return range.getBoundingClientRect().width / scale <= room;
     };
     const nodes = this.textNodes(el);
     const full = nodes.map((n) => n.data);

@@ -2206,3 +2206,6 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
 .card-action .flip .ch { position: relative; transform: none; top: 0.85em; color: transparent;
   transition: top 0.24s cubic-bezier(0.2, 0.9, 0.3, 1), color 0.16s ease; }
 .card-action .flip .ch.on { top: 0; color: inherit; transform: none; }
+
+/* Окно видео: первый вид кнопок – без перехода (см. videoModal). */
+.modal-actions.fold-instant .fold { transition: none !important; }

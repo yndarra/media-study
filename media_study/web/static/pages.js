@@ -271,9 +271,20 @@ const Router = {
     // Нажали на раздел, который уже открыт, – он показывается заново, с той же
     // анимацией появления, что при переходе из другого раздела (несохранённые
     // настройки не трогаем).
-    document.querySelectorAll("#menu a[data-menu]").forEach((link) => link.addEventListener("click", () => {
-      if (location.hash !== link.getAttribute("href")) return;
+    // Раздел считается открытым и тогда, когда адрес другой, но ведёт туда же:
+    // после закрытия окна видео адрес – #/videos или #/audio, а ссылка меню –
+    // #/media (раньше такой клик лишь тихо перерисовывал список – казалось,
+    // что ничего не произошло).
+    document.querySelectorAll("#menu a[data-menu]").forEach((link) => link.addEventListener("click", (e) => {
+      const same = location.hash === link.getAttribute("href");
+      const sameSection = link.classList.contains("active") && !document.getElementById("modal-overlay");
+      if (!same && !sameSection) return;
       if (State.view === "settings" && Pages.settingsGuard && Pages.settingsGuard.isDirty()) return;
+      if (!same) {
+        // Адрес – как у ссылки, но без hashchange (иначе раздел показался бы дважды).
+        e.preventDefault();
+        history.replaceState(null, "", link.getAttribute("href"));
+      }
       this.route(true);
     }));
     this.route();
@@ -489,14 +500,17 @@ const Zebra = {
   },
 
   // Начать круг заново с серой фазы: левая полоса кончается ровно у левого
-  // края кнопки (offset = период − ширина полосы) и вот-вот войдёт.
-  restartGray(button) {
+  // края кнопки (offset = период − ширина полосы) и стоит там hold мс (кнопка
+  // сначала просто серая), потом начинает выдвигаться сбоку.
+  GRAY_HOLD_MS: 1000,
+  restartGray(button, hold = this.GRAY_HOLD_MS) {
     const type = button.dataset.zebra;
     const target = this.PARAMS[type];
     if (!target) return;
     const key = `${button.dataset.id || button.id}:${type.replace(/Busy|Ready/, "")}`;
     const period = 2 * target.stripe;
-    this.state.set(key, { stripe: target.stripe, speed: target.speed, cycles: (period - target.stripe) / period, last: performance.now() });
+    const now = performance.now();
+    this.state.set(key, { stripe: target.stripe, speed: target.speed, cycles: (period - target.stripe) / period, last: now, holdUntil: now + hold });
   },
 
   // Нарисовать сразу (новая кнопка / перерисованное окно): иначе первый кадр
@@ -532,7 +546,8 @@ const Zebra = {
       st.stripe = Math.exp(Math.log(st.stripe) + (Math.log(target.stripe) - Math.log(st.stripe)) * k);
       st.speed += (target.speed - st.speed) * k;
       // Фаза – в долях шага: при смене ширины полосы растягиваются, а не прыгают.
-      st.cycles = (st.cycles + (st.speed * dt) / (2 * st.stripe)) % 1;
+      // Пока идёт серая пауза (restartGray) – полосы стоят.
+      if (!(st.holdUntil > now)) st.cycles = (st.cycles + (st.speed * dt) / (2 * st.stripe)) % 1;
       this.draw(button, st, target.color);
     }
     if (!once) requestAnimationFrame((t) => this.frame(t));
@@ -785,6 +800,10 @@ const MODAL_SETTLE_MS = 1600;
 // Раздел открыли: заголовок, описание и остальное содержимое страницы
 // появляются по очереди (так же, как карточки).
 function viewEnter(el, items = null) {
+  // Раздел показан заново – весь его текст появляется посимвольно, даже если
+  // он такой же, как в прошлый раз (иначе TextFx сверял новый текст со старым
+  // из скрытого раздела и описание "через раз" появлялось без анимации).
+  TextFx.fresh(el);
   (items || [...el.children]).forEach((child, i) => {
     child.style.setProperty("--i", i);
     child.classList.add("enter");
@@ -833,6 +852,10 @@ const CARDS_ENTER_MS = 60 * 70 + 600; // последняя карточка (--
 // Полосы – от ширины, которая сейчас на экране (могли ещё заполняться);
 // карточки, которые ещё появлялись, – продолжают появляться.
 function renderSmooth(box, html, first = false) {
+  // Ничего не поменялось – не перестраивать (перестройка – лишняя работа и
+  // риск сдвига букв на долю пикселя).
+  if (!first && box.__html === html && box.isConnected) return;
+  box.__html = html;
   const snap = first ? new Map() : barSnapshot(box, true);
   box.innerHTML = html;
   animateBars(box, snap);
@@ -1495,7 +1518,7 @@ const Pages = {
       <p class="muted small page-note">${audio
         ? "Обработанные аудио (песни и т.п.), сгруппированные по исполнителю. Полосы – как у видео: докуда дошла правка, сколько фрагментов стали карточками Anki и переведены. Нажмите на аудио, чтобы открыть подробности и перейти к правке."
         : "Обработанные видео, сгруппированные по автору. Полоса «Отредактировано» – докуда дошла правка (синее – принято без правок, жёлтое – изменено, красное – удалено), «Передано в Anki» – сколько фрагментов уже стали карточками. Нажмите на видео, чтобы открыть подробности, изменить название или автора и перейти к правке."}</p>
-      <div id="videos-list"><p class="muted">Загрузка…</p></div>`;
+      <div id="videos-list"></div>`;
     viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     el.querySelector("#open-flags").addEventListener("click", () => this.checkFlags());
     el.querySelector("#open-translate").addEventListener("click", () => this.translateModal());
@@ -1826,7 +1849,10 @@ const Pages = {
         if (!body.isConnected || body.dataset.gen !== gen) return;
         // Сравнить только то, что пришло (сводка – по её полям): совпало – не перерисовывать.
         const keys = Object.keys(d.summary || {});
-        const strip = (x) => JSON.stringify({ ...x, _at: 0, summary: keys.map((k) => (x.summary || {})[k]) });
+        // Свободное место на дисках (storage) меняется постоянно – окно из-за
+        // него не перерисовывается (оно нужно только окошку "Хранилище", а
+        // там своё обновление).
+        const strip = (x) => JSON.stringify({ ...x, _at: 0, storage: 0, summary: keys.map((k) => (x.summary || {})[k]) });
         if (strip(d) === strip(cached)) return;
         const head = body.querySelector(".modal-head");
         if ((watcher && watcher.isDirty()) || (head && head.contains(document.activeElement))) return;
@@ -1871,6 +1897,9 @@ const Pages = {
     // Перерисовка со свежими данными (reuse): полосы доезжают от того, что
     // сейчас на экране, а не заполняются заново с нуля.
     const barsBefore = reuse ? barSnapshot(body.querySelector(".modal-bars"), true) : new Map();
+    // Какие кнопки действий уже были видны (перерисовка): они остаются как
+    // есть, проявляется только новая.
+    const shownBefore = new Set(reuse ? [...body.querySelectorAll(".modal-actions .fold:not(.gone)")].map((b) => b.id) : []);
     body.innerHTML = `
       <div class="modal-head">
         <label>Название <textarea id="title-input" class="grow" rows="1" data-single>${escapeHtml(v.title)}</textarea></label>
@@ -2012,6 +2041,20 @@ const Pages = {
     const editLink = body.querySelector("#info-edit");
     body.querySelector("#info-pack").addEventListener("click", async (e) => {
       const button = e.currentTarget;
+      // Сначала окошко: что войдёт в набор и для чего он; скачивается – по кнопке.
+      const fragments = last.active_total || 0;
+      const box = '<svg viewBox="0 0 20 20"><path d="M3.5 6.5L10 3.5l6.5 3v7L10 16.5l-6.5-3z"/><path d="M3.5 6.5L10 9.5l6.5-3M10 9.5v7"/></svg>';
+      const answer = await askConfirm({
+        title: "Набор",
+        icon: box,
+        text: `Файл для других: разметка ${fragments} ${plural(fragments, "фрагмента", "фрагментов", "фрагментов")}, ` +
+          "исправленные тексты, переводы и словарь этого " + (v.audio_only ? "аудио" : "видео") +
+          " – <b>без самого " + (v.audio_only ? "аудио" : "видео") + "</b>.<br><br>Другой человек добавит то же " +
+          (v.audio_only ? "аудио" : "видео") + " и при обработке нажмёт «Применить набор» – сдвиг по времени найдётся сам.",
+        yes: "Скачать",
+        no: "Закрыть",
+      });
+      if (answer !== "yes") return;
       button.disabled = true;
       try {
         await downloadPack(id, (text) => setNote(text));
@@ -2021,7 +2064,18 @@ const Pages = {
         button.disabled = false;
       }
     });
+    // Первый вид кнопок – сразу на своих местах, без раскрытия по ширине
+    // (иначе "Передать в Anki" / "Перевести" вырастали после появления окна и
+    // ещё раз – при перерисовке свежими данными). Новые кнопки проявляются из
+    // пустоты; раскрытие по ширине – только при смене состояния позже.
+    const actions = body.querySelector(".modal-actions");
+    actions.classList.add("fold-instant");
     render();
+    void actions.offsetWidth; // применить без перехода
+    actions.classList.remove("fold-instant");
+    actions.querySelectorAll(".fold:not(.gone)").forEach((b) => {
+      if (reuse && !shownBefore.has(b.id)) b.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: "ease" });
+    });
 
     const refresh = async () => {
       if (!body.isConnected || body.dataset.gen !== gen) return;
@@ -2124,7 +2178,7 @@ const Pages = {
       <p class="muted small page-note">${kind === "audio"
         ? "Добавленные аудио: распознавание речи, сверка с текстом (агент ищет текст песни сам или по вашей ссылке) и нарезка на фразы. Нажмите на аудио, чтобы прикрепить ссылки и запустить обработку."
         : "Добавленные видео: копия для редактора, распознавание речи, сверка с текстом и нарезка на фразы. Нажмите на видео, чтобы прикрепить ссылки на текст для сверки (например, страницу Notion) и запустить обработку."}</p>
-      <div id="process-list"><p class="muted">Загрузка…</p></div>`;
+      <div id="process-list"></div>`;
     viewEnter(el); // заголовок, описание и содержимое появляются по очереди
     const render = async () => {
       const box = document.getElementById("process-list");

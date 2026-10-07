@@ -688,6 +688,14 @@ window.I18N_DICT.en =
 "Украинский": "Ukrainian",
 "Обратные карточки": "Reverse cards",
 "Вторая карточка: на лице перевод, на обороте клип и оригинал – сразу за прямой, когда у неё есть перевод (свой тип заметок «media-study (обратная)»)": "A second card: the translation on the front, the clip and the original on the back – right after the forward card once it has a translation (its own note type “media-study (обратная)”)",
+"Файл для других: разметка {0} фрагмента, исправленные тексты, переводы и словарь этого видео –": "A file for others: the markup of {0} fragments, the corrected texts, translations and the glossary of this video –",
+"Файл для других: разметка {0} фрагментов, исправленные тексты, переводы и словарь этого видео –": "A file for others: the markup of {0} fragments, the corrected texts, translations and the glossary of this video –",
+"без самого видео": "without the video itself",
+"Другой человек добавит то же видео и при обработке нажмёт «Применить набор» – сдвиг по времени найдётся сам.": "Another person adds the same video and clicks “Apply pack” when processing it – the time offset is found automatically.",
+"Файл для других: разметка {0} фрагмента, исправленные тексты, переводы и словарь этого аудио –": "A file for others: the markup of {0} fragments, the corrected texts, translations and the glossary of this audio –",
+"Файл для других: разметка {0} фрагментов, исправленные тексты, переводы и словарь этого аудио –": "A file for others: the markup of {0} fragments, the corrected texts, translations and the glossary of this audio –",
+"без самого аудио": "without the audio itself",
+"Другой человек добавит то же аудио и при обработке нажмёт «Применить набор» – сдвиг по времени найдётся сам.": "Another person adds the same audio and clicks “Apply pack” when processing it – the time offset is found automatically.",
 "Набор ": "Pack "
 }
 ;
