@@ -985,6 +985,11 @@ function singleLine(el) {
 
 // Следит за полями формы: кнопки "Сохранить"/"Отменить" активны, только когда
 // что-то изменено. snapshot() — запомнить текущее как сохранённое.
+// Языки речи и карточек (core/lang.py) – для списков выбора.
+const MEDIA_LANGS = [["en", "Английский"], ["ja", "Японский"], ["ru", "Русский"], ["zh", "Китайский"], ["ko", "Корейский"],
+  ["de", "Немецкий"], ["fr", "Французский"], ["es", "Испанский"], ["it", "Итальянский"], ["pt", "Португальский"], ["uk", "Украинский"]];
+const langOptions = () => MEDIA_LANGS.map(([value, label]) => ({ value, label }));
+
 // Наборы от сообщества (media_study/packs.py): выгрузить набор видео файлом.
 async function downloadPack(id, note) {
   const res = await fetch(`/api/p/${encodeURIComponent(id)}/pack`);
@@ -2189,6 +2194,11 @@ const Pages = {
           <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></label>
         </div></div>
         <label class="check"><input type="checkbox" class="no-gaps" ${v.no_gaps ? "checked" : ""}> Без пустых фрагментов <span class="muted small">(без музыки, шумов и других фрагментов без текста)</span></label>
+        <!-- Языки этого видео: на каком говорят и на какой переводить карточки. -->
+        <div class="field-row proc-langs">
+          <div class="field"><div class="field-label">Язык речи</div><div class="picker-host" data-for="proc-speech-lang"></div></div>
+          <div class="field"><div class="field-label">Язык карточек</div><div class="picker-host" data-for="proc-card-lang"></div></div>
+        </div>
       </div>
       ${disk ? `<h2>Место на диске</h2><table class="stats" id="proc-disk">
         ${row("Оригинал", formatSize(disk.master))}${row("Копия для редактора", formatSize(disk.editor))}${row("Всего", `<b>${formatSize(disk.total)}</b>`)}
@@ -2290,6 +2300,11 @@ const Pages = {
     search.addEventListener("change", () => syncModes(search));
     syncModes(null);
     const saveButton = body.querySelector(".info-save");
+    // Языки – до снимка формы (иначе выбор сразу считался бы изменением).
+    for (const [id2, value] of [["proc-speech-lang", v.speech_lang || "en"], ["proc-card-lang", v.card_lang || "ru"]]) {
+      const hostEl = body.querySelector(`.picker-host[data-for="${id2}"]`);
+      if (hostEl) Picker.create(hostEl, { id: id2, value, options: langOptions() });
+    }
     watcher = formWatch(body.querySelector(".process-form"), []);
     // "Сохранить" – вместо "Хранилище", только когда есть изменения; во время
     // переноса "Хранилище" – "Отменить" с быстрой серой зеброй, остальное серое.
@@ -2358,7 +2373,11 @@ const Pages = {
       const group = body.querySelector("#group-input").value.trim();
       if (title && group) await Api.saveProjectInfo(id, { title, group });
       const mode = deep.checked ? "deep" : search.checked ? "search" : "";
-      await Api.saveSources(id, body.querySelector(".sources").value.split("\n"), mode, body.querySelector(".no-gaps").checked);
+      const langs = {
+        speech_lang: (body.querySelector("#proc-speech-lang") || {}).value || null,
+        card_lang: (body.querySelector("#proc-card-lang") || {}).value || null,
+      };
+      await Api.saveSources(id, body.querySelector(".sources").value.split("\n"), mode, body.querySelector(".no-gaps").checked, langs);
       watcher.snapshot();
     };
     saveButton.addEventListener("click", async () => {
@@ -2773,8 +2792,14 @@ const Pages = {
         </section>
         <!-- Интерфейс: язык (меняется сразу, без "Сохранить" – страница перезагружается). -->
         <section class="set-card half-card">
-          <h2>Интерфейс</h2>
+          <h2>Языки</h2>
           ${field("set-ui-lang", "Язык интерфейса", '<div class="picker-host narrow-picker" data-for="set-ui-lang"></div>', "")}
+          <div class="field-row">
+            ${field("set-speech-video", "Язык речи – видео", '<div class="picker-host" data-for="set-speech-video"></div>', "")}
+            ${field("set-speech-audio", "Язык речи – аудио", '<div class="picker-host" data-for="set-speech-audio"></div>', "")}
+          </div>
+          ${field("set-card-lang", "Язык карточек", '<div class="picker-host narrow-picker" data-for="set-card-lang"></div>',
+            "На какой язык переводить. У каждого видео можно задать свои – в окне обработки")}
         </section>
         <section class="set-card wide-card">
           <h2>Хранилище</h2>
@@ -3024,6 +3049,9 @@ const Pages = {
       onChange: (v) => v !== I18n.lang && I18n.set(v),
     });
     el.querySelector("#set-ui-lang").dataset.watch = "no"; // не "несохранённое изменение"
+    Picker.create(host("set-speech-video"), { id: "set-speech-video", value: s.speech_lang_video || "en", options: langOptions() });
+    Picker.create(host("set-speech-audio"), { id: "set-speech-audio", value: s.speech_lang_audio || "en", options: langOptions() });
+    Picker.create(host("set-card-lang"), { id: "set-card-lang", value: s.card_lang || "ru", options: langOptions() });
     // Производительность: свободные ядра и нагрузка на видеокарту – списки.
     const cores = navigator.hardwareConcurrency || 8;
     Picker.create(host("set-reserve"), {
@@ -3104,6 +3132,9 @@ const Pages = {
         whisper_model: document.getElementById("set-wh-model").value,
         whisper_device: document.getElementById("set-wh-device").value,
         gpu_load_percent: Number(document.getElementById("set-gpu-load").value) || 100,
+        speech_lang_video: document.getElementById("set-speech-video").value,
+        speech_lang_audio: document.getElementById("set-speech-audio").value,
+        card_lang: document.getElementById("set-card-lang").value,
         elevenlabs_key: document.getElementById("set-el-key").value.trim(),
         elevenlabs_model: document.getElementById("set-el-model").value.trim() || "scribe_v2",
         elevenlabs_language: "", // язык – всегда определяет сам

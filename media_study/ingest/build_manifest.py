@@ -94,7 +94,7 @@ def assemble_manifest(
     from media_study.core.text_polish import polish_text
 
     for entry in entries:
-        if entry.get("text", "").strip():
+        if entry.get("text", "").strip() and settings.get("speech_has_case", True):
             entry["text"] = polish_text(entry["text"])
     fragments = segment_mod.build_fragments(entries, fps, total_frames, padding, first_id=first_id)
     if start_frame == 0:
@@ -200,7 +200,9 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
     elif subtitle_path is None:
         subtitle_source = "none"
     else:
-        subtitle_source = "youtube_manual" if download_mod._pick_subtitle_track(info.get("subtitles") or {}) else "youtube_auto"
+        from media_study.core.lang import speech_lang as _lang
+
+        subtitle_source = "youtube_manual" if download_mod._pick_subtitle_track(info.get("subtitles") or {}, _lang(project_dir)) else "youtube_auto"
 
     video_info = VideoInfo(
         youtube_url=info.get("webpage_url", ""),
@@ -214,9 +216,12 @@ def process_project(project_dir: Path, transcript_path: Path | None = None) -> M
     )
     from media_study.web.library import app_settings, project_settings
 
+    from media_study.core.lang import has_case, speech_lang
+
     manifest = assemble_manifest(
         whisper_transcript, source_words, fps, total_frames, video_info,
-        settings={"context_padding_seconds": app_settings(project_dir.parent)["context_padding_seconds"]},
+        settings={"context_padding_seconds": app_settings(project_dir.parent)["context_padding_seconds"],
+                  "speech_has_case": has_case(speech_lang(project_dir))},
         boundary_cache=raw_dir / "sat_boundary_probs.json",
         unvoiced=unvoiced_speakers(project_dir),
     )

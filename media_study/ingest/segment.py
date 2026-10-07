@@ -20,6 +20,7 @@ import re
 from media_study.core.context_bounds import CONTEXT_PADDING_SECONDS, context_for
 from media_study.core.frames import frames_for_seconds
 from media_study.core.text_clean import clean_text
+from media_study.core.lang import join_texts, join_words
 from media_study.core.manifest import Fragment, STATUS_ACTIVE
 
 MAX_GAP_SECONDS = 0.7
@@ -75,7 +76,7 @@ def _segment_from_words(words: list[dict]) -> dict:
     return {
         "start": words[0]["start"],
         "end": words[-1]["end"],
-        "text": " ".join(w["word"] for w in words),
+        "text": join_words(w["word"] for w in words),
         "source_segment_ids": [w["id"] for w in words],
     }
 
@@ -116,7 +117,7 @@ def merge_glitches(segments: list[dict], min_filler_seconds: float = MIN_FILLER_
             result[first] = {
                 "start": a["start"],
                 "end": max(a["end"], b["end"]),
-                "text": " ".join(t for t in (a["text"], b["text"]) if t),
+                "text": join_texts(a["text"], b["text"]),
                 "source_segment_ids": [*a["source_segment_ids"], *b["source_segment_ids"]],
             }
             del result[second]
@@ -128,7 +129,7 @@ def merge_glitches(segments: list[dict], min_filler_seconds: float = MIN_FILLER_
 def _merge_into(base: dict, extra: dict) -> None:
     """Сливает extra в base на месте: текст конкатенируется, конец расширяется."""
     base["end_frame"] = max(base["end_frame"], extra["end_frame"])
-    base["text"] = " ".join(t for t in (base["text"], extra["text"]) if t)
+    base["text"] = join_texts(base["text"], extra["text"])
     base["source_segment_ids"] = [*base["source_segment_ids"], *extra["source_segment_ids"]]
 
 

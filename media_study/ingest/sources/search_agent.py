@@ -341,6 +341,17 @@ def _samples(whisper_transcript: dict) -> str:
     return "\n".join(picked)
 
 
+def _common_prompt(project_dir: Path) -> str:
+    """Общая подсказка агента – с языком видео (по умолчанию английский, core/lang.py)."""
+    from media_study.core.lang import accusative, speech_lang
+
+    language = speech_lang(project_dir)
+    if language == "en":
+        return COMMON_PROMPT
+    return COMMON_PROMPT.replace("Пользователь учит английский", f"Пользователь учит {accusative(language)}") + (
+        f"\nРечь в видео – {accusative(language)} язык: ищи текст на этом языке (не перевод).")
+
+
 def ask_agent(data_dir: Path, project_dir: Path, mode: str, links: list[str], whisper_transcript: dict,
               missing: list[str] | None = None) -> dict:
     """Запрос к модели поиска (с веб-поиском OpenRouter). Возвращает {"sources": [...], "note": ...}."""
@@ -368,7 +379,7 @@ def ask_agent(data_dir: Path, project_dir: Path, mode: str, links: list[str], wh
         user += "Примеры реплик из распознанной речи видео (с ошибками распознавания):\n" + _samples(whisper_transcript)
     body = {
         "model": model,
-        "messages": [{"role": "system", "content": COMMON_PROMPT + "\n\n" + (
+        "messages": [{"role": "system", "content": _common_prompt(project_dir) + "\n\n" + (
             GAP_PROMPT if missing else DEEP_PROMPT if mode == "deep" else SEARCH_PROMPT)},
                      {"role": "user", "content": user}],
         "plugins": [{"id": "web", "max_results": 10}],

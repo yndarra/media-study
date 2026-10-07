@@ -14,6 +14,7 @@
 """
 from difflib import SequenceMatcher
 from pathlib import Path
+from media_study.core.lang import join_texts
 import re
 
 from media_study.core.text_clean import clean_text
@@ -91,7 +92,9 @@ def _join(words: list[dict]) -> str:
     for index, word in enumerate(words):
         new_line = word["newline_before"]
         if parts:
-            parts.append("\n" if new_line else " ")
+            # Между словами – пробел, кроме японского/китайского (core/lang.py).
+            prev = parts[-1][-1:] if parts[-1] else ""
+            parts.append("\n" if new_line else ("" if join_texts(prev, word["word"][:1]) == prev + word["word"][:1] else " "))
         if word.get("speaker") and (new_line or index == 0):
             parts.append(f"{word['speaker']}: ")
         parts.append(word["word"])

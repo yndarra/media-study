@@ -25,9 +25,10 @@ PREFERRED_SUBTITLE_FORMATS = ("json3", "vtt")
 PREFERRED_LANGS = ("en", "en-US", "en-orig")
 
 
-def _pick_subtitle_track(tracks_by_lang: dict) -> tuple[str, dict] | None:
-    """Выбирает первый доступный язык/формат из списка предпочтений."""
-    for lang in PREFERRED_LANGS:
+def _pick_subtitle_track(tracks_by_lang: dict, lang: str = "en") -> tuple[str, dict] | None:
+    """Выбирает первый доступный язык/формат: язык речи, его варианты (en-US, en-orig…)."""
+    variants = [lang] + sorted(k for k in tracks_by_lang if k.startswith(lang + "-"))
+    for lang in (PREFERRED_LANGS if lang == "en" else tuple(variants)):
         formats = tracks_by_lang.get(lang)
         if not formats:
             continue
@@ -102,8 +103,14 @@ def download_video(url: str, dest_dir: Path, max_height: int | None = None) -> d
 
     subtitle_path = None
     subtitle_source = "none"
-    manual = _pick_subtitle_track(info.get("subtitles") or {})
-    auto = _pick_subtitle_track(info.get("automatic_captions") or {})
+    from media_study.core.lang import speech_lang
+
+    try:
+        language = speech_lang(dest_dir)
+    except Exception:  # проект ещё не настроен
+        language = "en"
+    manual = _pick_subtitle_track(info.get("subtitles") or {}, language)
+    auto = _pick_subtitle_track(info.get("automatic_captions") or {}, language)
     chosen = manual or auto
     if chosen:
         ext, track = chosen

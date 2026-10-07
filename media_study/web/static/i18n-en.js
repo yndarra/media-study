@@ -671,6 +671,21 @@ window.I18N_DICT.en =
 "{0}/мин – {1} фрагм. за {2} мин (лучший)": "{0}/min – {1} fragm. in {2} min (best)",
 "{0}/мин – {1} фрагм. за {2} ч {3} мин (лучший)": "{0}/min – {1} fragm. in {2} h {3} min (best)",
 "{0}, раздел {1}": "{0}, section {1}",
+"Языки": "Languages",
+"Язык речи": "Speech language",
+"Язык речи – видео": "Speech language – video",
+"Язык речи – аудио": "Speech language – audio",
+"Язык карточек": "Card language",
+"На какой язык переводить. У каждого видео можно задать свои – в окне обработки": "The language to translate into. Each video can have its own – in the processing window",
+"Японский": "Japanese",
+"Китайский": "Chinese",
+"Корейский": "Korean",
+"Немецкий": "German",
+"Французский": "French",
+"Испанский": "Spanish",
+"Итальянский": "Italian",
+"Португальский": "Portuguese",
+"Украинский": "Ukrainian",
 "Набор ": "Pack "
 }
 ;

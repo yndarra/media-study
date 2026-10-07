@@ -2190,3 +2190,6 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
 .speed-line .area { animation: plot-rise 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both, fade-in 0.9s ease-out both; }
 .speed-line .line, .speed-line .area { transform-box: view-box; transform-origin: 50% calc(100% - 30px); }
 @keyframes plot-rise { from { transform: scaleY(0); } to { transform: none; } }
+
+/* Окно обработки: языки видео – с отступом от галочек. */
+.process-form .proc-langs { margin-top: 12px; }

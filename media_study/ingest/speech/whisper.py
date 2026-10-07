@@ -28,12 +28,18 @@ def transcribe(video_path: Path, model_size: str = "medium.en") -> dict:
 
     # Модель и устройство (процессор / видеокарта, бережно) – из настроек
     # (speech/whisper_models.py); на процессоре – не на всех ядрах.
+    from media_study.core.lang import speech_lang
+
     settings = dict(app_settings(Path(video_path).parent.parent))
     settings.setdefault("whisper_model", model_size)
+    language = speech_lang(Path(video_path).parent)
+    if language != "en" and (settings["whisper_model"].endswith(".en") or settings["whisper_model"].startswith("distil")):
+        print(f"Модель {settings['whisper_model']} – только английский; для языка {language} – large-v3", flush=True)
+        settings["whisper_model"] = "large-v3"
     model, device, duty = load_model(settings, log=lambda m: print(m, flush=True))
     segments_iter, info = model.transcribe(
         str(video_path),
-        language="en",
+        language=language,
         beam_size=5,
         vad_filter=False,
         word_timestamps=True,

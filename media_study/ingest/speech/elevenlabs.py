@@ -31,6 +31,7 @@ from pathlib import Path
 API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 CHECK_URL = "https://api.elevenlabs.io/v1/user"
 DEFAULT_MODEL = "scribe_v2"
+from media_study.core.lang import join_words
 from media_study.core.secrets import ELEVENLABS_KEY as KEY_PATH
 # Новая фраза (сегмент) – после конца предложения или паузы дольше этого.
 SEGMENT_GAP = 0.8
@@ -122,7 +123,7 @@ def _to_whisper_format(reply: dict) -> dict:
                 "index": len(segments) + 1,
                 "start": float(current[0]["start"]),
                 "end": float(current[-1]["end"]),
-                "text": " ".join(w["word"] for w in current),
+                "text": join_words(w["word"] for w in current),
                 "words": list(current),
             })
             current.clear()

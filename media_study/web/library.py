@@ -82,6 +82,15 @@ def show_speakers(project_dir: Path) -> bool:
     return bool(settings.get(f"default_speakers_{kind}", kind == "video"))
 
 
+def _lang_of(project_dir: Path, which: str) -> str:
+    from media_study.core.lang import card_lang, speech_lang
+
+    try:
+        return speech_lang(project_dir) if which == "speech" else card_lang(project_dir)
+    except Exception:
+        return "en" if which == "speech" else "ru"
+
+
 def agent_mode(value) -> str:
     """
     Режим помощи агента: "", "deep" или "search" (старое True — "search").
@@ -229,6 +238,11 @@ DEFAULT_APP_SETTINGS = {
     # куска пауза, чтобы видеокарта была занята только эту долю времени
     # (настройка "Производительность"; вместо прежней галочки "бережно").
     "gpu_load_percent": 100,
+    # Языки (core/lang.py): язык речи по умолчанию – для видео и для аудио,
+    # язык карточек (на какой переводить); у видео можно задать свои.
+    "speech_lang_video": "en",
+    "speech_lang_audio": "en",
+    "card_lang": "ru",
     "elevenlabs_model": "scribe_v2",
     "elevenlabs_language": "",  # не используется: язык ElevenLabs определяет сам
     "elevenlabs_keyterms": True,  # подсказывать имена/термины из словаря (+20% к цене)
@@ -364,6 +378,9 @@ def _summary(project_dir: Path) -> dict:
             "agent": agent_mode(settings.get("agent")),
             "no_gaps": bool(settings.get("no_gaps")),
             "audio_only": bool(info.get("audio_only")),
+            # Языки (core/lang.py): действующие для этого видео.
+            "speech_lang": _lang_of(project_dir, "speech"),
+            "card_lang": _lang_of(project_dir, "card"),
         }
     manifest = Manifest.load(manifest_path)
     fragments = manifest.fragments

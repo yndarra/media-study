@@ -31,6 +31,7 @@ to our helicopter.").
 """
 from __future__ import annotations
 
+from media_study.core.lang import join_words
 import hashlib
 import json
 import math
@@ -294,7 +295,7 @@ def segment_words(
         result.append({
             "start": chunk[0]["start"],
             "end": chunk[-1]["end"],
-            "text": " ".join(x["word"] for x in chunk),
+            "text": join_words(x["word"] for x in chunk),
             "source_segment_ids": [x["id"] for x in chunk],
         })
     return result

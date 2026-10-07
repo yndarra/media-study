@@ -714,6 +714,9 @@ class SourcesRequest(BaseModel):
     # Без пустых фрагментов: при нарезке фрагменты без текста (музыка, шумы)
     # не создаются.
     no_gaps: bool = False
+    # Языки видео (core/lang.py): речь и карточки; None – не менять.
+    speech_lang: str | None = None
+    card_lang: str | None = None
 
 
 @app.patch("/api/p/{project_id}/sources")
@@ -726,6 +729,10 @@ def update_sources(project_id: str, body: SourcesRequest):
     settings["sources"] = [s.strip() for s in body.sources if s.strip()]
     settings["agent"] = library.agent_mode(body.agent)
     settings["no_gaps"] = bool(body.no_gaps)
+    for key in ("speech_lang", "card_lang"):
+        value = getattr(body, key)
+        if value:
+            settings[key] = value
     library.save_project_settings(project_dir, settings)
     return library.summary(project_dir)
 

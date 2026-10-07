@@ -69,6 +69,27 @@ SYSTEM_PROMPT = """Ты – профессиональный литератур�
 - glossary – только НОВЫЕ имена и термины мира, которых нет в словаре, с выбранным переводом (или пометкой «не переводится»)."""
 
 
+def system_prompt(project_dir: Path | None) -> str:
+    """
+    Подсказка переводчику для пары языков видео. Английский -> русский –
+    как настроено (SYSTEM_PROMPT); другая пара – та же подсказка с другими
+    языками и оговоркой, что примеры – для английского.
+    """
+    if project_dir is None:
+        return SYSTEM_PROMPT
+    from media_study.core.lang import accusative, genitive, card_lang, speech_lang
+
+    src, dst = speech_lang(project_dir), card_lang(project_dir)
+    if (src, dst) == ("en", "ru"):
+        return SYSTEM_PROMPT
+    prompt = SYSTEM_PROMPT.replace("с английского на русский", f"с {genitive(src)} на {accusative(dst)}")
+    prompt = prompt.replace("Пользователь учит английский", f"Пользователь учит {accusative(src)}")
+    return prompt + (
+        f"\n\nЯЗЫКИ\n- Язык реплик – {accusative(src)}; перевод, значения терминов (meaning), буквальный перевод и "
+        f"пояснения – на {accusative(dst)}. Правила и примеры выше даны для английского и русского – применяй их по смыслу "
+        "к этой паре языков (например, «имена латиницей» – как в оригинале).")
+
+
 def _glossary_path(data_dir: Path, project_dir: Path) -> Path:
     from media_study.web.library import group_of
 
@@ -185,12 +206,12 @@ def _batch_prompt(cards: list[dict], glossary: dict) -> str:
     return "\n".join(parts)
 
 
-def request_body(model: str, transcript: str, cards: list[dict], glossary: dict) -> dict:
+def request_body(model: str, transcript: str, cards: list[dict], glossary: dict, project_dir: Path | None = None) -> dict:
     """Тело запроса chat/completions: правила и текст видео — с пометкой для кэша."""
     return {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt(project_dir)},
             {"role": "user", "content": [
                 {"type": "text", "text": "ПОЛНЫЙ ТЕКСТ ВИДЕО:\n" + transcript, "cache_control": {"type": "ephemeral"}},
                 {"type": "text", "text": _batch_prompt(cards, glossary)},
@@ -286,7 +307,7 @@ def translate_realtime(data_dir: Path, project_dir: Path, cards: list[dict], mod
         terms = glossary if glossary is not None else load_glossary(data_dir, project_dir)
         # Модель изредка возвращает битый JSON (пропущена запятая и т.п.) — пачка повторяется.
         for attempt in range(MAX_ATTEMPTS):
-            reply = _post(data_dir, "/chat/completions", request_body(model, transcript, group, terms))
+            reply = _post(data_dir, "/chat/completions", request_body(model, transcript, group, terms, project_dir))
             cost = float((reply.get("usage") or {}).get("cost") or 0)
             spent += cost
             try:
@@ -317,7 +338,7 @@ def submit_batch(data_dir: Path, project_dir: Path, cards: list[dict], model: st
     groups = chunks(cards)
     requests = []
     for group in groups:
-        body = request_body(model, transcript, group, glossary)
+        body = request_body(model, transcript, group, glossary, project_dir)
         body.pop("model")
         body.pop("usage", None)
         requests.append({"custom_id": f"{group[0]['id']}-{group[-1]['id']}", "body": body})
