@@ -8,3 +8,5 @@ __pycache__/
 .pytest_cache/
 # ключи сервисов (media_study/core/secrets.py)
 secrets/
+# выводы tools/i18n_extract.py и tools/i18n_crawl.py (генерируются)
+tools/i18n_*.txt
