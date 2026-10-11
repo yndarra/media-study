@@ -2800,6 +2800,8 @@ const Pages = {
             "Карточки идут в &lt;колода&gt;::&lt;автор&gt;::&lt;видео&gt;; при смене уже созданные колоды всех видео переименовываются")}
           ${field("set-deck-audio", "Колода для аудио", `<input id="set-deck-audio" class="wide" value="${escapeHtml(s.anki_deck_root_audio || "")}">`,
             "Песни и другие аудио: &lt;колода&gt;::&lt;исполнитель&gt;::&lt;название&gt;")}
+          ${field("set-anki-model", "Тип заметок", '<div class="picker-host" data-for="set-anki-model"></div>',
+            "Первое поле типа – лицо (клип и текст), второе – оборот (перевод). Пусто – возьмётся из Anki (Basic или первый в списке) и запомнится. Применяется к новым карточкам")}
           <div class="field"><div class="field-label">Обратные карточки</div>
             <label class="check"><input id="set-rev-video" type="checkbox" ${s.reverse_cards_video ? "checked" : ""}> Видео</label>
             <label class="check"><input id="set-rev-audio" type="checkbox" ${s.reverse_cards_audio ? "checked" : ""}> Аудио</label>
@@ -3109,6 +3111,11 @@ const Pages = {
     el.querySelector("#set-ui-lang").dataset.watch = "no"; // не "несохранённое изменение"
     Picker.create(host("set-speech-video"), { id: "set-speech-video", value: s.speech_lang_video || "en", options: langOptions() });
     Picker.create(host("set-speech-audio"), { id: "set-speech-audio", value: s.speech_lang_audio || "en", options: langOptions() });
+    // Тип заметок: список – из Anki (при открытии), можно вписать и вручную.
+    Picker.create(host("set-anki-model"), {
+      id: "set-anki-model", value: s.anki_model || "", editable: true, placeholder: "Из Anki (Basic или первый в списке)",
+      load: async () => (await Api.json("/api/anki/models")).models.map((m) => ({ value: m, label: m })),
+    });
     Picker.create(host("set-card-lang"), { id: "set-card-lang", value: s.card_lang || "ru", options: langOptions() });
     // Производительность: свободные ядра и нагрузка на видеокарту – списки.
     const cores = navigator.hardwareConcurrency || 8;
@@ -3168,6 +3175,7 @@ const Pages = {
         saved = await Api.saveSettings({
         anki_deck_root: document.getElementById("set-deck").value.trim(),
         anki_deck_root_audio: document.getElementById("set-deck-audio").value.trim(),
+        anki_model: document.getElementById("set-anki-model").value.trim(),
         anki_color_en: document.getElementById("set-color-en").value,
         anki_color_ru: document.getElementById("set-color-ru").value,
         anki_color_dash: document.getElementById("set-color-dash").value,

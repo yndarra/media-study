@@ -3,9 +3,10 @@
 Карточки Anki через AnkiConnect (дополнение Anki, http://127.0.0.1:8765).
 
 Карточки создаются в своей колоде (путь — settings.anki_deck манифеста, по
-умолчанию "Claude::2. VIDEOS::<автор>::<видео>") с обычным типом заметок
-пользователя "1.0 Левобережье" (поля "Лицо" и "Оборот"), как и все его
-карточки. Существующие колоды не трогаются.
+умолчанию "Claude::2. VIDEOS::<автор>::<видео>") с типом заметок из настроек
+(anki_model; не задан – берётся из Anki: "Basic"/"Базовая" или первый
+попавшийся, и запоминается). Первое поле типа – лицо, второе – оборот.
+Существующие колоды не трогаются.
 
 Лицо карточки: клип (проигрывается автоматически при открытии) и на новой
 строке английский текст фрагмента. Оборот пока пустой — перевод добавится
@@ -13,7 +14,7 @@
 компьютере (встроенный плеер mpv понимает H.265), и мобильные версии;
 HTML-тег <video> в Anki на компьютере H.265/H.264 не показывает.
 
-Своих полей у "Левобережья" нет, поэтому код видео и номер фрагмента
+Своих полей под служебные данные у типа нет, поэтому код видео и номер фрагмента
 хранятся в теге media-study::<код видео>::<фрагмент> (плюс общий тег
 media-study) — по нему проверка флагов находит, какой фрагмент вернуть на
 правку, и обновляет эту же карточку на её месте. Имя файла клипа в Anki
@@ -28,9 +29,11 @@ from pathlib import Path
 
 # Адрес можно подменить (для проверок с поддельным AnkiConnect).
 ANKI_CONNECT_URL = os.environ.get("MEDIA_STUDY_ANKI_URL", "http://127.0.0.1:8765")
-MODEL_NAME = "1.0 Левобережье"
-FRONT_FIELD = "Лицо"
-BACK_FIELD = "Оборот"
+# Тип заметок и его поля – не постоянные: anki.MODEL_NAME, anki.FRONT_FIELD и
+# anki.BACK_FIELD считаются при обращении (см. model() и __getattr__ ниже).
+# Обычные имена типов "по умолчанию" в Anki на разных языках интерфейса.
+BASIC_MODELS = ("Basic", "Базовая", "Основная", "Простая")
+BASIC_STEMS = ("basic", "базов")
 TAG = "media-study"
 # Карточка фрагмента без текста (пауза, звуки) — тоже карточка, с этой меткой.
 TAG_NO_TEXT = "без_текста"
@@ -59,9 +62,66 @@ def invoke(action: str, **params):
     return reply.get("result")
 
 
+def _data_dir() -> Path:
+    # Сервер и его фоновые процессы получают папку data через окружение.
+    return Path(os.environ.get("MEDIA_STUDY_DATA_DIR") or Path(__file__).resolve().parents[2] / "data")
+
+
+_model_cache: dict = {}  # {"name", "front", "back", "setting", "at"}
+MODEL_CACHE_SECONDS = 10  # настройку могли поменять – перечитывается не чаще
+
+
+def model() -> dict:
+    """
+    Тип заметок для карточек: {"name", "front", "back"}.
+
+    Имя – из настроек (anki_model). Не задано – берётся из Anki: обычный
+    "Basic" / "Базовая", если есть, иначе первый попавшийся – и записывается в
+    настройки (дальше не меняется, пока его не поменяют там). Лицо – первое
+    поле типа, оборот – второе. Anki закрыт, а тип ещё не известен –
+    AnkiUnavailable.
+    """
+    import time
+
+    from media_study.web import library
+
+    if _model_cache and time.time() - _model_cache["at"] < MODEL_CACHE_SECONDS:
+        return _model_cache
+    data_dir = _data_dir()
+    setting = (library.app_settings(data_dir).get("anki_model") or "").strip()
+    if _model_cache and setting and _model_cache["setting"] == setting:
+        _model_cache["at"] = time.time()
+        return _model_cache
+    name = setting
+    names = invoke("modelNames")
+    if not name:
+        if not names:
+            raise RuntimeError("в Anki нет ни одного типа заметок")
+        # Обычный базовый тип; переименованный ("1.1 Базовый") – самый короткий
+        # из похожих по названию; нет и такого – первый попавшийся.
+        similar = sorted((n for n in names if any(stem in n.lower() for stem in BASIC_STEMS)), key=len)
+        name = next((n for n in BASIC_MODELS if n in names), similar[0] if similar else names[0])
+        if data_dir.is_dir():
+            library.save_app_settings(data_dir, {"anki_model": name})
+    elif name not in names:
+        raise RuntimeError(f"в Anki нет типа заметок «{name}» (выберите другой в Настройках)")
+    fields = invoke("modelFieldNames", modelName=name)
+    if len(fields) < 2:
+        raise RuntimeError(f"у типа заметок «{name}» меньше двух полей (нужны лицо и оборот)")
+    _model_cache.update(name=name, front=fields[0], back=fields[1], setting=name, at=time.time())
+    return _model_cache
+
+
+def __getattr__(attr: str):
+    # anki.MODEL_NAME / anki.FRONT_FIELD / anki.BACK_FIELD – по текущему типу заметок.
+    key = {"MODEL_NAME": "name", "FRONT_FIELD": "front", "BACK_FIELD": "back"}.get(attr)
+    if key is None:
+        raise AttributeError(attr)
+    return model()[key]
+
+
 def ensure_model() -> None:
-    if MODEL_NAME not in invoke("modelNames"):
-        raise RuntimeError(f"в Anki нет типа заметок «{MODEL_NAME}»")
+    model()  # нет типа из настроек / мало полей – RuntimeError с объяснением
 
 
 def ensure_deck(deck: str) -> None:
@@ -133,8 +193,8 @@ def add_clip_note(deck: str, clip_path, media_name: str, text: str, project: str
         "addNote",
         note={
             "deckName": deck,
-            "modelName": MODEL_NAME,
-            "fields": dict(zip((FRONT_FIELD, BACK_FIELD), decorate(front_html(media_name, text, with_clip=not unvoiced), back,
+            "modelName": model()["name"],
+            "fields": dict(zip((model()["front"], model()["back"]), decorate(front_html(media_name, text, with_clip=not unvoiced), back,
                                                                    speakers if _speakers_shown([f"{TAG}::{project}::{fragment_id}"], {}) else []))),
             "tags": note_tags(project, fragment_id, speakers, **flags) + list(extra_tags or []),
             "options": {"allowDuplicate": False},
@@ -159,7 +219,7 @@ def flagged_notes() -> list[dict]:
         for card in cards:
             note = notes.get(card["note"], {})
             project, fragment_id = parse_tags(note.get("tags", []))
-            front = card["fields"].get(FRONT_FIELD, {}).get("value", "")
+            front = card["fields"].get(model()["front"], {}).get("value", "")
             # Клип с лица могли удалить (реплика без озвучки) — это не ошибка.
             match = re.search(r"\[sound:[^\]]*\]", front)
             sound = match.group(0) if match else ""
@@ -187,7 +247,7 @@ def update_clip_note(note_id: int, clip_path, media_name: str, text: str,
     text, speakers, flags = card_content(text, known_speakers, unvoiced)
     if not unvoiced:
         invoke("storeMediaFile", filename=media_name, path=str(clip_path), deleteExisting=True)
-    invoke("updateNoteFields", note={"id": note_id, "fields": {FRONT_FIELD: front_html(media_name, text, with_clip=not unvoiced)}})
+    invoke("updateNoteFields", note={"id": note_id, "fields": {model()["front"]: front_html(media_name, text, with_clip=not unvoiced)}})
     recolor_notes([note_id], speakers={note_id: speakers})
     if project and fragment_id:
         invoke("updateNoteTags", note=note_id, tags=note_tags(project, fragment_id, speakers, **flags))
@@ -207,7 +267,7 @@ def update_clip_note(note_id: int, clip_path, media_name: str, text: str,
 
 def migrate_old_notes() -> int:
     """
-    Переводит карточки старого типа "media-study" на "1.0 Левобережье" (те же
+    Переводит карточки старого типа "media-study" на текущий тип заметок (те же
     заметки, их id и история повторений сохраняются). Возвращает, сколько.
     """
     if OLD_MODEL_NAME not in invoke("modelNames"):
@@ -217,8 +277,8 @@ def migrate_old_notes() -> int:
         fields = {name: value["value"] for name, value in note["fields"].items()}
         invoke("updateNoteModel", note={
             "id": note["noteId"],
-            "modelName": MODEL_NAME,
-            "fields": {FRONT_FIELD: f"{fields.get('Video', '')}<br>{fields.get('Text', '')}", BACK_FIELD: fields.get("Back", "")},
+            "modelName": model()["name"],
+            "fields": {model()["front"]: f"{fields.get('Video', '')}<br>{fields.get('Text', '')}", model()["back"]: fields.get("Back", "")},
             "tags": note_tags(fields.get("Project", ""), fields.get("Fragment", "")),
         })
     return len(ids)
@@ -414,7 +474,7 @@ def resequence(note_ids: list[int], dry_run: bool = False) -> int:
 
 # -- цвета на карточках -----------------------------------------------------------
 #
-# Тип заметок "1.0 Левобережье" общий со всеми карточками пользователя – его
+# Тип заметок может быть общим со всеми карточками пользователя – его
 # стиль не трогаем; цвета ставятся прямо в поля карточек приложения
 # (встроенный стиль у span с классом ms-…, по классу их потом находят и
 # перекрашивают). Английское – светло-фиолетовое, русское (перевод, значения
@@ -564,8 +624,8 @@ def recolor_notes(note_ids: list[int], speakers: dict | None = None, colors: dic
         for note in invoke("notesInfo", notes=ids[start:start + 100]):
             if TAG not in [t.lower() for t in note.get("tags", [])]:
                 continue  # только карточки приложения
-            front = note["fields"].get(FRONT_FIELD, {}).get("value", "")
-            back = note["fields"].get(BACK_FIELD, {}).get("value", "")
+            front = note["fields"].get(model()["front"], {}).get("value", "")
+            back = note["fields"].get(model()["back"], {}).get("value", "")
             names = (speakers or {}).get(note["noteId"])
             if names is None and not (unmark(front)[1] or unmark(back)[1]):
                 names = speakers_from_tags(note.get("tags", []))
@@ -573,7 +633,7 @@ def recolor_notes(note_ids: list[int], speakers: dict | None = None, colors: dic
                 names = []
             new_front, new_back = decorate(front, back, names, c)
             if (new_front, new_back) != (front, back):
-                invoke("updateNoteFields", note={"id": note["noteId"], "fields": {FRONT_FIELD: new_front, BACK_FIELD: new_back}})
+                invoke("updateNoteFields", note={"id": note["noteId"], "fields": {model()["front"]: new_front, model()["back"]: new_back}})
                 changed += 1
         if progress:
             progress(min(len(ids), start + 100), len(ids))

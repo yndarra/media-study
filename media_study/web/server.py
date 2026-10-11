@@ -314,7 +314,7 @@ def _translated_ids(project_id: str) -> list[str]:
     if cached and now - cached[0] < TRANSLATED_TTL:
         return cached[1]
     try:
-        note_ids = anki.invoke("findNotes", query=f'"tag:{anki.TAG}::{project_id}::*" -{anki.BACK_FIELD}:')
+        note_ids = anki.invoke("findNotes", query=f'"tag:{anki.TAG}::{project_id}::*" -"{anki.BACK_FIELD}:"')
         notes = anki.invoke("notesInfo", notes=note_ids) if note_ids else []
         ids = [fid for _, fid in (anki.parse_tags(n.get("tags", [])) for n in notes) if fid]
     except (anki.AnkiUnavailable, RuntimeError):
@@ -853,6 +853,18 @@ def openrouter_models():
     return models
 
 
+@app.get("/api/anki/models")
+def anki_models():
+    """Типы заметок из Anki – для списка в настройках (нужны хотя бы два поля: лицо и оборот)."""
+    from media_study.export import anki
+
+    try:
+        names = anki.invoke("modelNames")
+    except anki.AnkiUnavailable:
+        raise HTTPException(503, "Anki закрыт")
+    return {"models": sorted(names, key=str.lower)}
+
+
 @app.get("/api/settings")
 def get_settings():
     # Ключ OpenRouter отдаётся только локальной странице настроек (поле со "скрыть/показать").
@@ -1293,7 +1305,7 @@ def _anki_flag_counts() -> dict:
         # Переведённые карточки — с заполненным оборотом.
         for project_dir in DATA_DIR.iterdir():
             if (project_dir / "export" / "index.json").exists():
-                query = f'"tag:{anki.TAG}::{project_dir.name}::*" -{anki.BACK_FIELD}:'
+                query = f'"tag:{anki.TAG}::{project_dir.name}::*" -"{anki.BACK_FIELD}:"'
                 translated[project_dir.name] = len(anki.invoke("findNotes", query=query))
     except (anki.AnkiUnavailable, RuntimeError):
         _anki_flags_cache["at"] = _time.time()

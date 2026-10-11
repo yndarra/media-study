@@ -696,6 +696,9 @@ window.I18N_DICT.en =
 "Файл для других: разметка {0} фрагментов, исправленные тексты, переводы и словарь этого аудио –": "A file for others: the markup of {0} fragments, the corrected texts, translations and the glossary of this audio –",
 "без самого аудио": "without the audio itself",
 "Другой человек добавит то же аудио и при обработке нажмёт «Применить набор» – сдвиг по времени найдётся сам.": "Another person adds the same audio and clicks “Apply pack” when processing it – the time offset is found automatically.",
+"Тип заметок": "Note type",
+"Первое поле типа – лицо (клип и текст), второе – оборот (перевод). Пусто – возьмётся из Anki (Basic или первый в списке) и запомнится. Применяется к новым карточкам": "The first field of the type is the front (clip and text), the second is the back (translation). Empty – taken from Anki (Basic or the first in the list) and remembered. Applies to new cards",
+"Из Anki (Basic или первый в списке)": "From Anki (Basic or the first in the list)",
 "Набор ": "Pack "
 }
 ;
