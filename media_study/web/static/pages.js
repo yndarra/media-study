@@ -2262,7 +2262,9 @@ const Pages = {
         ${v.audio_only ? '<div class="muted">Аудио</div>' : ""}
         ${v.state === "processing" ? processingBar(v) : ""}
         <label class="check"><input type="checkbox" class="agent-search" ${v.agent === "search" ? "checked" : ""}> Поиск достоверных источников с помощью агента <span class="muted small">(ссылки не нужны)</span></label>
-        <div class="sources-box"><div class="sources-inner">
+        <!-- Свёрнут сразу в разметке, если агент ищет сам: иначе блок сначала
+             рисовался раскрытым и окно на глазах уменьшалось. -->
+        <div class="sources-box${v.agent === "search" ? " collapsed" : ""}"><div class="sources-inner">
           <label class="muted small">Текст для сверки (ссылки, по одной в строке)</label>
           <textarea class="sources grow" rows="1" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
           <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></label>
