@@ -588,15 +588,45 @@ const Zebra = {
     const period = 2 * st.stripe;
     const slant = this.SLANT * h;
     const offset = st.cycles * period;
+    const stripes = new Path2D();
     for (let x = offset - period - slant; x < w + period; x += period) {
-      ctx.beginPath();
-      ctx.moveTo(x + slant, 0);
-      ctx.lineTo(x + slant + st.stripe, 0);
-      ctx.lineTo(x + st.stripe, h);
-      ctx.lineTo(x, h);
-      ctx.closePath();
-      ctx.fill();
+      stripes.moveTo(x + slant, 0);
+      stripes.lineTo(x + slant + st.stripe, 0);
+      stripes.lineTo(x + st.stripe, h);
+      stripes.lineTo(x, h);
+      stripes.closePath();
     }
+    ctx.fill(stripes);
+    // Кнопки окна: холст лежит поверх рамки кнопки, поэтому обводка рисуется
+    // здесь же и идёт вместе с полосами – над серым серая (как у обычной
+    // кнопки), над цветной полосой – светлее её цвета.
+    if (!button.classList.contains("zebra-host")) return;
+    if (button.__zebraRadius === undefined) button.__zebraRadius = parseFloat(getComputedStyle(button).borderTopLeftRadius) || 0;
+    const ring = new Path2D();
+    ring.roundRect(0.5, 0.5, w - 1, h - 1, Math.max(0, button.__zebraRadius - 0.5));
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = this.EDGE_GRAY;
+    ctx.stroke(ring);
+    ctx.save();
+    ctx.clip(stripes);
+    ctx.strokeStyle = this.edgeColor(color);
+    ctx.stroke(ring);
+    ctx.restore();
+  },
+
+  EDGE_GRAY: "#45454e", // рамка обычной кнопки
+  _edges: new Map(),
+
+  // Цвет обводки над цветной полосой: тот же цвет, на треть ближе к белому.
+  edgeColor(color) {
+    let edge = this._edges.get(color);
+    if (!edge) {
+      const n = parseInt(color.slice(1), 16);
+      const mix = (c) => Math.round(c + (255 - c) * 0.33);
+      edge = `rgb(${mix(n >> 16)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)})`;
+      this._edges.set(color, edge);
+    }
+    return edge;
   },
 };
 
@@ -945,6 +975,20 @@ function foldLongRows(root) {
     td.innerHTML = `<div class="multi-first one-line"><span class="one-line-text">${td.innerHTML}</span>` +
       '<button class="multi-toggle" title="Показать целиком">▾</button></div>';
     td.parentElement.classList.add("multi");
+  });
+}
+
+// Окно только что открыли: разделитель под каждой строкой таблицы
+// проявляется тогда же, когда начинает появляться текст этой строки (сверху
+// вниз, см. TextFx.startDelay), а не весь сразу вместе с окном.
+function rowLinesEnter(root) {
+  root.querySelectorAll("table.stats tr").forEach((tr) => {
+    const cell = tr.firstElementChild;
+    if (!cell) return;
+    const delay = Math.round(TextFx.startDelay(cell));
+    tr.style.setProperty("--row-delay", `${delay}ms`);
+    tr.classList.add("row-in");
+    setTimeout(() => tr.classList.remove("row-in"), delay + 900);
   });
 }
 
@@ -1960,8 +2004,8 @@ const Pages = {
     autoGrow(body.querySelector("#title-input"));
     singleLine(body.querySelector("#group-input"));
     animateBars(body.querySelector(".modal-bars"), barsBefore);
-    // Окно только что открыли – полосы кнопок с серой фазы (при обновлении – как шли).
     foldLongRows(body);
+    if (!reuse) rowLinesEnter(body);
     const saveButton = body.querySelector("#info-save");
     const closeAndFlash = () => {
       Pages.flashId = id;
@@ -2261,15 +2305,15 @@ const Pages = {
         </div>
         ${v.audio_only ? '<div class="muted">Аудио</div>' : ""}
         ${v.state === "processing" ? processingBar(v) : ""}
-        <label class="check"><input type="checkbox" class="agent-search" ${v.agent === "search" ? "checked" : ""}> Поиск достоверных источников с помощью агента <span class="muted small">(ссылки не нужны)</span></label>
+        <label class="check"><input type="checkbox" class="agent-search" ${v.agent === "search" ? "checked" : ""}> <span class="check-text" data-fx-line>Поиск достоверных источников с помощью агента <span class="muted small">(ссылки не нужны)</span></span></label>
         <!-- Свёрнут сразу в разметке, если агент ищет сам: иначе блок сначала
              рисовался раскрытым и окно на глазах уменьшалось. -->
         <div class="sources-box${v.agent === "search" ? " collapsed" : ""}"><div class="sources-inner">
           <label class="muted small">Текст для сверки (ссылки, по одной в строке)</label>
           <textarea class="sources grow" rows="1" placeholder="https://…notion.site/…">${escapeHtml((v.sources || []).join("\n"))}</textarea>
-          <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></label>
+          <label class="check"><input type="checkbox" class="agent-deep" ${v.agent === "deep" ? "checked" : ""}> <span class="check-text" data-fx-line>Глубокий поиск с помощью агента <span class="muted small">(агент + ваши ссылки)</span></span></label>
         </div></div>
-        <label class="check"><input type="checkbox" class="no-gaps" ${v.no_gaps ? "checked" : ""}> Без пустых фрагментов <span class="muted small">(без музыки, шумов и других фрагментов без текста)</span></label>
+        <label class="check"><input type="checkbox" class="no-gaps" ${v.no_gaps ? "checked" : ""}> <span class="check-text" data-fx-line>Без пустых фрагментов <span class="muted small">(без музыки, шумов и других фрагментов без текста)</span></span></label>
         <!-- Языки этого видео: на каком говорят и на какой переводить карточки. -->
         <div class="field-row proc-langs">
           <div class="field"><div class="field-label">Язык речи</div><div class="picker-host" data-for="proc-speech-lang"></div></div>
@@ -2294,6 +2338,7 @@ const Pages = {
     // как у кнопок окна видео (раньше продолжали с того места, где шли).
     body.querySelectorAll("[data-zebra]").forEach((b) => Zebra.restartGray(b));
     Zebra.paintNow();
+    rowLinesEnter(body);
     const packButton = body.querySelector(".process-pack");
     if (packButton) packButton.addEventListener("click", async () => {
       const text = await pickPackFile();
@@ -2312,7 +2357,15 @@ const Pages = {
     diskFresh.then((d) => {
       const table = body.querySelector("#proc-disk");
       if (!d || !table || !body.isConnected) return;
-      table.innerHTML = row("Оригинал", formatSize(d.master)) + row("Копия для редактора", formatSize(d.editor)) + row("Всего", `<b>${formatSize(d.total)}</b>`);
+      // Только изменившиеся значения – строки не пересоздаются (их появление
+      // и разделители не начинаются заново).
+      const values = [formatSize(d.master), formatSize(d.editor), `<b>${formatSize(d.total)}</b>`];
+      table.querySelectorAll("tr").forEach((tr, k) => {
+        const cell = tr.lastElementChild;
+        const probe = document.createElement("td");
+        probe.innerHTML = values[k] ?? "";
+        if (cell && values[k] !== undefined && cell.textContent !== probe.textContent) cell.innerHTML = values[k];
+      });
     });
     foldLongRows(body);
     // Градиент окна – по этапу, как у карточки в "Обработке" (рыжий – скачивание,

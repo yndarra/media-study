@@ -2248,3 +2248,20 @@ body.frag-edit-sound { background: #26180d; }
 /* "Обработка": строка состояния ("Добавлено, ждёт обработки") – чуть ближе к
    названию, и карточка от этого ниже (карточка с полосой хода – как была). */
 #process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status { margin-top: 8px; margin-bottom: 0; }
+
+/* Редактор: говорящие на карточках выключены – имён в трёх фразах нет (ячейка
+   имени скрыта, символы остаются в тексте фрагмента). */
+#context-preview.nowho .ctx .who { display: none; }
+
+/* Разделители строк таблицы в окне проявляются вместе со своей строкой (rowLinesEnter). */
+@keyframes row-line { from { border-bottom-color: transparent; } }
+table.stats tr.row-in > td, table.stats tr.row-in > th { animation: row-line 0.5s ease both; animation-delay: var(--row-delay, 0ms); }
+
+/* Подпись галочки одним элементом (появляется по буквам): серое пояснение –
+   обычным пробелом после текста, без поправки на отступ flex. */
+label.check .check-text .muted { margin-left: 0; }
+
+/* Окно обработки: галочка ровно посередине высоты заглавных букв подписи, на
+   целых пикселях: буква 9 px (нечётная) – галочка 15 px, строка 21 px. */
+.process-form label.check { line-height: 21px; }
+.process-form label.check input[type=checkbox] { width: 15px; height: 15px; transform: translateY(2px); }

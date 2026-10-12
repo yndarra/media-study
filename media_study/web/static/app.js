@@ -698,10 +698,18 @@ const App = {
     // Говорящие на карточках включены – три фразы в два столбца: имена
     // (прижаты вправо) и реплики (столбец – по центру экрана). Выключены –
     // как раньше, одним столбцом.
+    // Выключены (у видео) – имён в тексте нет совсем: строки так же разбиты на
+    // ячейки, но ячейка имени скрыта (символы остаются в тексте фрагмента, в
+    // поле их не видно и каретка в них не попадает). У аудио при выключенном
+    // режиме текст показывается целиком ("Chorus: …" в песне – не говорящий).
     const columns = !!State.manifest.video.show_speakers;
-    const modeChanged = TextEditor.columns !== columns;
-    TextEditor.columns = columns;
+    const hideWho = !columns && !State.manifest.video.audio_only;
+    const modeChanged = this._whoColumn !== columns || TextEditor.hideWho !== hideWho;
+    this._whoColumn = columns;
+    TextEditor.columns = columns || hideWho;
+    TextEditor.hideWho = hideWho;
     $("context-preview").classList.toggle("cols", columns);
+    $("context-preview").classList.toggle("nowho", hideWho);
     if (force) TextEditor.resetHistory();
     if (force || document.activeElement !== cur) {
       TextEditor.load(f.original_text, f.text, f.heard_ranges, f.text_marks);
@@ -712,7 +720,7 @@ const App = {
     cur.contentEditable = isLocked(f) ? "false" : "plaintext-only";
     for (const [id, dir] of [["prev-text", -1], ["next-text", 1]]) {
       const n = this._neighbor(dir);
-      this._renderNeighbor($(id), n.text, columns);
+      this._renderNeighbor($(id), n.text, columns || hideWho);
       $(id).classList.toggle("deleted-neighbor", n.deleted);
     }
     // Стык объединённого фрагмента: кнопка "Склеить в одну фразу" и мигание.
@@ -728,14 +736,16 @@ const App = {
       return;
     }
     el.textContent = "";
-    for (const line of text.split("\n")) {
+    const lines = text.split("\n");
+    for (const [k, line] of lines.entries()) {
       const prefix = speakerPrefix(line);
       const who = document.createElement("span");
       who.className = "who";
       who.textContent = prefix ? line.slice(0, prefix.length).trimEnd() : "";
       const say = document.createElement("span");
       say.className = "say";
-      say.textContent = prefix ? line.slice(prefix.length) : line;
+      // Перенос строки – в конце ячейки реплики (без сетки строки идут подряд).
+      say.textContent = (prefix ? line.slice(prefix.length) : line) + (k < lines.length - 1 ? "\n" : "");
       el.append(who, say);
     }
   },
@@ -774,7 +784,7 @@ const App = {
   // (предыдущей, этой и следующей) плюс поля по TEXT_BOX_PAD с каждой стороны;
   // не шире места. Своя фраза длиннее – поле растёт само (fit-content).
   fitTextBox() {
-    if (TextEditor.columns) return this.fitColumns();
+    if (this._whoColumn) return this.fitColumns();
     const textWidth = (el) => {
       if (!el.textContent.trim()) return 0;
       const range = document.createRange();
@@ -1543,8 +1553,8 @@ $("merge-prev").addEventListener("click", () => App.merge("prev"));
 $("merge-next").addEventListener("click", () => App.merge("next"));
 $("split-btn").addEventListener("click", () => App.split());
 $("delete-soft").addEventListener("click", () => App.deleteSoft());
-TextEditor.onRender = () => { if (TextEditor.columns && State.manifest) App.fitColumns(); };
-window.addEventListener("resize", () => { if (TextEditor.columns && State.manifest && State.view === "editor") App.fitColumns(); });
+TextEditor.onRender = () => { if (App._whoColumn && State.manifest) App.fitColumns(); };
+window.addEventListener("resize", () => { if (App._whoColumn && State.manifest && State.view === "editor") App.fitColumns(); });
 $("unvoiced-btn").addEventListener("click", () => App.toggleUnvoiced());
 $("unvoiced-btn").innerHTML = ICONS.unvoiced;
 $("sound-btn").innerHTML = ICONS.soundOnly;

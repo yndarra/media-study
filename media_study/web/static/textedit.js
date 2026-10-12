@@ -284,6 +284,7 @@ const TextEditor = {
   // центру). Порядок символов в разметке тот же, что в тексте, – позиции
   // каретки считаются как раньше (каждый токен – один символ).
   columns: false,
+  hideWho: false, // ячейки имён скрыты (говорящие на карточках выключены)
   onRender: null, // после перерисовки поля (редактор подгоняет ширину столбцов)
 
   // Строки фразы: [{from, split, to}] – токены [from, split) идут в ячейку
@@ -424,10 +425,16 @@ const TextEditor = {
     const range = document.createRange();
     let node = walker.nextNode();
     while (node) {
+      // Скрытая ячейка имени: каретке там не место – встаёт в начало реплики.
+      if (this.hideWho && node.parentElement.closest(".who")) {
+        remaining = Math.max(0, remaining - node.nodeValue.length);
+        node = walker.nextNode();
+        continue;
+      }
       // В два столбца строка кончается своей ячейкой: каретка "после переноса" –
       // это начало следующей ячейки, а не хвост этой (иначе она рисовалась бы
       // в конце предыдущей строки).
-      const lineEnd = this.columns && remaining === node.nodeValue.length && node.nodeValue.endsWith("\n");
+      const lineEnd = this.columns && !this.hideWho && remaining === node.nodeValue.length && node.nodeValue.endsWith("\n");
       if (remaining <= node.nodeValue.length && !lineEnd) {
         range.setStart(node, remaining);
         range.collapse(true);
