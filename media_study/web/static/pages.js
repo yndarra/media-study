@@ -489,6 +489,21 @@ const Zebra = {
     process: { stripe: 161.5, speed: 48.75, color: "#2f5f9e" },
   },
   SLANT: 0.406, // как у "/": по горизонтали на 1 по вертикали
+  // Кнопки окна ("Редактировать", "Передать в Anki", "Перевести", "Обработать"):
+  // ширина и скорость полос – пропорционально ширине кнопки. Эталон –
+  // "Редактировать" (117 px) с её скоростью: кнопка шире – полосы шире и
+  // быстрее, уже – уже и медленнее, так что все кнопки заполняются за одно
+  // и то же время и идут в такт.
+  SCALED: ["edit", "editReturned", "process", "sendReady", "translateReady"],
+  REF_WIDTH: 117,
+
+  // Вид полос кнопки с поправкой на её ширину.
+  targetFor(button, type) {
+    const base = this.PARAMS[type];
+    if (!base || !this.SCALED.includes(type) || !button.offsetWidth) return base;
+    const k = button.offsetWidth / this.REF_WIDTH;
+    return { stripe: base.stripe * k, speed: base.speed * k, color: base.color };
+  },
   EASE_SECONDS: 1.1, // за сколько примерно доходит до новой ширины/скорости
   state: new Map(), // видео + вид кнопки -> {stripe, speed, cycles, last}
   running: false,
@@ -505,7 +520,7 @@ const Zebra = {
   GRAY_HOLD_MS: 1000,
   restartGray(button, hold = this.GRAY_HOLD_MS) {
     const type = button.dataset.zebra;
-    const target = this.PARAMS[type];
+    const target = this.targetFor(button, type);
     if (!target) return;
     const key = `${button.dataset.id || button.id}:${type.replace(/Busy|Ready/, "")}`;
     const period = 2 * target.stripe;
@@ -530,7 +545,7 @@ const Zebra = {
       // Вид полос: кнопки шага на карточках – по классам; остальные – data-zebra.
       const type = button.dataset.zebra ||
         (button.classList.contains("translate") ? "translate" : button.classList.contains("move") ? "move" : "send");
-      const target = this.PARAMS[button.dataset.zebra || type + (button.classList.contains("busy") ? "Busy" : "")];
+      const target = this.targetFor(button, button.dataset.zebra || type + (button.classList.contains("busy") ? "Busy" : ""));
       if (!target) continue;
       // Ключ – без Busy/Ready: смена вида кнопки плавно меняет ширину и скорость полос.
       const key = `${button.dataset.id || button.id}:${type.replace(/Busy|Ready/, "")}`;
