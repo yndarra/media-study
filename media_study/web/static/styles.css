@@ -2246,6 +2246,5 @@ body.frag-edit-sound { background: #26180d; }
 .zebra-host[data-zebra] > canvas.zebra { inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); border-radius: inherit; }
 
 /* "Обработка": строка состояния ("Добавлено, ждёт обработки") – чуть ближе к
-   названию; снизу добавлено столько же, чтобы карточка осталась той же высоты,
-   что и карточка с полосой хода. */
-#process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status { margin-top: 8px; margin-bottom: 4px; }
+   названию, и карточка от этого ниже (карточка с полосой хода – как была). */
+#process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status { margin-top: 8px; margin-bottom: 0; }
