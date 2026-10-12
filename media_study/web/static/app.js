@@ -281,8 +281,25 @@ const App = {
   // там, где остановились в прошлый раз.
   async openProject(id) {
     if (State.project === id && State.manifest) {
-      // Вернулись в редактор того же видео, а файл отпускали – снова подключить и встать на фрагмент.
-      if (Player.reattach() && State.fragmentIndex >= 0) await this.open(State.fragmentIndex);
+      // Вернулись в редактор того же видео: фрагменты перечитываются с
+      // сервера – пока редактор был закрыт, их могли передать в Anki из окна
+      // видео, перевести, вернуть (раньше показывалось прежнее состояние, и
+      // переданный фрагмент числился вернувшимся).
+      const reattached = Player.reattach();
+      const focusId = currentFragment() ? currentFragment().id : null;
+      await this.flushSaves();
+      const fresh = await this._call(Api.getManifest());
+      if (fresh && State.project === id) {
+        State.manifest = fresh;
+        const index = Math.max(0, fresh.fragments.findIndex((f) => f.id === focusId));
+        this.updateSpeakersButton();
+        // Файл отпускали – фрагмент открывается заново; иначе только перерисовать.
+        if (reattached || index !== State.fragmentIndex) await this.open(index);
+        else this.renderAll(false);
+        FragList.schedule();
+      } else if (reattached && State.fragmentIndex >= 0) {
+        await this.open(State.fragmentIndex);
+      }
       return;
     }
     await this.flushSaves();

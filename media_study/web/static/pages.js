@@ -1000,6 +1000,10 @@ document.addEventListener("click", (e) => {
   if (single) {
     // Свёрнутая в одну строку: плавно до полной высоты и обратно.
     const text = single.querySelector(".one-line-text");
+    // Текст после побуквенного появления остаётся обрезанным ("…") и в одну
+    // строку (TextFx) – вернуть его целиком, иначе раскрывать нечего.
+    text.querySelectorAll("[data-fx], [data-fxdone]").forEach((el) => TextFx.finish(el));
+    TextFx.finish(text);
     const from = text.offsetHeight;
     const open = single.classList.toggle("open");
     button.classList.toggle("open", open);
@@ -2130,8 +2134,13 @@ const Pages = {
     const actions = body.querySelector(".modal-actions");
     actions.classList.add("fold-instant");
     render();
+    // Перерисовка свежими данными: кнопка, которая была видна и больше не
+    // нужна, сворачивается плавно, а не пропадает разом.
+    const leaving = [...actions.querySelectorAll(".fold.gone")].filter((b) => shownBefore.has(b.id));
+    leaving.forEach((b) => b.classList.remove("gone"));
     void actions.offsetWidth; // применить без перехода
     actions.classList.remove("fold-instant");
+    leaving.forEach((b) => b.classList.add("gone"));
     // Окно только что открыли – полосы всех трёх кнопок ("Редактировать",
     // "Передать в Anki", "Перевести") начинают с серой фазы и секунду стоят
     // (при обновлении – как шли). Идущее действие ("Отменить") – без паузы.
