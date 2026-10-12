@@ -987,7 +987,8 @@ function videoNotes(v, withDisk = true) {
   const q = v.stage3 || {};
   const queue = q.state === "waiting_anki" ? "Ждёт Anki" : "";
   const parts = [
-    withDisk && v.disk_total !== undefined ? (v.drive ? `Место на диске ${v.drive} ${formatSize(v.disk_total)}` : `Место на диске: ${formatSize(v.disk_total)}`) : "",
+    // Есть вернувшиеся из Anki – место на диске не показываем (строка одна, важнее они).
+    withDisk && !v.flagged && v.disk_total !== undefined ? (v.drive ? `Место на диске ${v.drive} ${formatSize(v.disk_total)}` : `Место на диске: ${formatSize(v.disk_total)}`) : "",
     v.flagged ? `<span class="flagged-text">Вернулись из Anki: ${v.flagged}</span>` : "",
     v.flag_translation ? `<span class="translation-text">Перевод: ${v.flag_translation}</span>` : "",
     queue ? escapeHtml(queue) : "",
