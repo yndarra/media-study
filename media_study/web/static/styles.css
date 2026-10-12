@@ -2244,3 +2244,8 @@ body.frag-edit-sound { background: #26180d; }
    на пиксель. Скругление – как у кнопки. */
 .zebra-host[data-zebra] { overflow: visible; }
 .zebra-host[data-zebra] > canvas.zebra { inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); border-radius: inherit; }
+
+/* "Обработка": строка состояния ("Добавлено, ждёт обработки") – чуть ближе к
+   названию; снизу добавлено столько же, чтобы карточка осталась той же высоты,
+   что и карточка с полосой хода. */
+#process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status { margin-top: 8px; margin-bottom: 4px; }

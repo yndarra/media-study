@@ -2288,6 +2288,10 @@ const Pages = {
       </div>`;
     body.querySelectorAll("textarea.grow:not(.fixed)").forEach(autoGrow);
     singleLine(body.querySelector("#group-input"));
+    // Окно открыли – полосы "Обработать" начинают с серой фазы и секунду стоят,
+    // как у кнопок окна видео (раньше продолжали с того места, где шли).
+    body.querySelectorAll("[data-zebra]").forEach((b) => Zebra.restartGray(b));
+    Zebra.paintNow();
     const packButton = body.querySelector(".process-pack");
     if (packButton) packButton.addEventListener("click", async () => {
       const text = await pickPackFile();
