@@ -1775,8 +1775,23 @@ def get_manifest(project_id: str):
     return data
 
 
+@app.post("/api/p/{project_id}/fragments/{fragment_id}/sound-only")
+def set_sound_only(project_id: str, fragment_id: str, body: UnvoicedRequest):
+    """Отметка "только озвучка" (в карточке – звук без картинки)."""
+    manifest = _call(lambda: project(project_id).store.set_sound_only(fragment_id, body.value))
+    return manifest.by_id(fragment_id).to_dict()
+
+
 class SpeakersRequest(BaseModel):
     on: bool
+
+
+def _fragment_signature(fragment) -> str:
+    """Отпечаток правки фрагмента (всё, кроме отметок этапа 3) – изменился ли он с момента снимка."""
+    import hashlib
+
+    data = {k: v for k, v in fragment.to_dict().items() if k not in ("exported", "anki_flagged")}
+    return hashlib.md5(json.dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 @app.post("/api/p/{project_id}/speakers")
@@ -1789,21 +1804,49 @@ def set_speakers(project_id: str, body: SpeakersRequest):
     """
     p = project(project_id)
     settings = library.project_settings(p.dir)
-    if bool(settings.get("show_speakers", library.show_speakers(p.dir))) == body.on and "show_speakers" in settings:
-        return {"manifest": None, "returned": 0, "on": body.on}
+    previous = bool(settings.get("show_speakers", library.show_speakers(p.dir)))
+    if previous == body.on and "show_speakers" in settings:
+        return {"manifest": None, "returned": 0, "restored": 0, "on": body.on}
     settings["show_speakers"] = body.on
     library.save_project_settings(p.dir, settings)
     from media_study.core.manifest import STATUS_ACTIVE
 
+    # Снимок прошлого переключения: режим нажали случайно и вернули обратно –
+    # фрагменты, которые с тех пор не трогали, снова считаются переданными в
+    # Anki (их карточки не менялись). Изменённые остаются вернувшимися.
+    undo_path = p.dir / "speakers_undo.json"
+    undo = library.read_json(undo_path, None)
     manifest = p.store.load()
     ids = [f.id for f in manifest.fragments if f.exported and f.status == STATUS_ACTIVE]
+    before = {f.id: {"flagged": bool(f.anki_flagged)} for f in manifest.fragments if f.id in set(ids)}
+    for entry in library.export_index(p.dir):
+        if entry["fragment_id"] in before:
+            before[entry["fragment_id"]]["redo"] = bool(entry.get("redo"))
     if ids:
         p.store.return_from_stage3(ids)
         try:
             _pull_texts_from_anki(project_id, ids)
         except Exception as error:  # Anki закрыт – правки из Anki подтянутся при следующем возврате
             print(f"Говорящие: тексты из Anki не подтянуты ({error})", flush=True)
-    return {"manifest": get_manifest(project_id), "returned": len(ids), "on": body.on}
+    manifest = p.store.load()
+    restored = {}
+    if undo and bool(undo.get("on")) == body.on:
+        snapshot = undo.get("fragments") or {}
+        for f in manifest.fragments:
+            state = snapshot.get(f.id)
+            if state and f.id not in before and not f.exported and f.status == STATUS_ACTIVE and _fragment_signature(f) == state.get("sig"):
+                restored[f.id] = state
+        if restored:
+            p.store.restore_to_stage3(restored)
+    # Новый снимок – по только что вернувшимся (их отпечаток – уже после
+    # подтягивания текстов из Anki); вернуть их можно, снова выбрав прежний режим.
+    if ids:
+        current = {f.id: f for f in manifest.fragments}
+        snapshot = {i: {**before[i], "sig": _fragment_signature(current[i])} for i in ids if i in current}
+        undo_path.write_text(json.dumps({"on": previous, "fragments": snapshot}, ensure_ascii=False), encoding="utf-8")
+    elif undo_path.exists():
+        undo_path.unlink()
+    return {"manifest": get_manifest(project_id), "returned": len(ids), "restored": len(restored), "on": body.on}
 
 
 @app.patch("/api/p/{project_id}/fragments/{fragment_id}")

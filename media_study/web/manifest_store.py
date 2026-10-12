@@ -430,6 +430,19 @@ class ManifestStore:
         manifest, before = self._begin()
         fragment = self._editable(manifest, fragment_id)
         fragment.unvoiced = bool(value)
+        if fragment.unvoiced:
+            fragment.sound_only = None  # клипа нет вовсе – "только озвучка" теряет смысл
+        self._commit(manifest, before, fragment_id)
+        return manifest
+
+    @_locked
+    def set_sound_only(self, fragment_id: str, value: bool) -> Manifest:
+        """Кнопка "только озвучка": в Anki – звук без картинки (отменяется Ctrl+Z)."""
+        manifest, before = self._begin()
+        fragment = self._editable(manifest, fragment_id)
+        fragment.sound_only = bool(value)
+        if fragment.sound_only:
+            fragment.unvoiced = None
         self._commit(manifest, before, fragment_id)
         return manifest
 
@@ -802,6 +815,39 @@ class ManifestStore:
             for entry in index:
                 if entry["fragment_id"] in wanted:
                     entry["redo"] = True
+            tmp_path = index_path.with_suffix(".json.tmp")
+            tmp_path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+            replace_file(tmp_path, index_path)
+        return manifest
+
+
+    def restore_to_stage3(self, states: dict[str, dict]) -> Manifest:
+        """
+        Обратное к return_from_stage3 – для отмены случайного переключения
+        режима "говорящие на карточках": фрагменты снова считаются переданными
+        в Anki (их карточки никто не трогал), отметки "вернулся" и redo – как
+        были до возврата. states: {id фрагмента: {"flagged": bool, "redo": bool}}.
+        """
+        import json
+
+        manifest = self.load()
+        for fragment in manifest.fragments:
+            state = states.get(fragment.id)
+            if state is not None:
+                fragment.exported = True
+                fragment.anki_flagged = bool(state.get("flagged"))
+        self.save(manifest)
+        index_path = self.project_dir / "export" / "index.json"
+        if index_path.exists():
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            for entry in index:
+                state = states.get(entry["fragment_id"])
+                if state is None:
+                    continue
+                if state.get("redo"):
+                    entry["redo"] = True
+                else:
+                    entry.pop("redo", None)
             tmp_path = index_path.with_suffix(".json.tmp")
             tmp_path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
             replace_file(tmp_path, index_path)

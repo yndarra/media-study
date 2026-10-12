@@ -313,7 +313,13 @@ class Worker:
             redo = next((e for e in index if e["fragment_id"] == fragment.id and e.get("redo")), None)
             number = int(redo["clip"].split(".")[0]) if redo else max((int(e["clip"].split(".")[0]) for e in index), default=0) + 1
             name = f"{number:04d}"
+            # "Только озвучка" – звуковой клип и у видео (картинка в Anki не идёт).
+            sound = audio_only or bool(fragment.sound_only)
+            ext = ".m4a" if sound else ".mp4"
             clip_path = out_dir / f"{name}{ext}"
+            # Отметку поменяли у вернувшегося фрагмента – прежний клип (другого вида) больше не нужен.
+            if redo and redo["clip"] != clip_path.name:
+                (out_dir / redo["clip"]).unlink(missing_ok=True)
             frames = fragment.algo_end_frame - fragment.algo_start_frame
             started = time.time()
             # Вернувшийся фрагмент с теми же границами (поменялся только текст –
@@ -324,7 +330,7 @@ class Worker:
             if same_clip:
                 height = redo.get("height")
             else:
-                height = render_clip(master, project / "audio.pcm", clip_path, fragment.algo_start_frame, fragment.algo_end_frame, fps, audio_only)
+                height = render_clip(master, project / "audio.pcm", clip_path, fragment.algo_start_frame, fragment.algo_end_frame, fps, sound)
                 # Скорость кодирования — скользящее среднее, по ней редактор считает оставшееся время.
                 spf = 0.7 * spf + 0.3 * (time.time() - started) / max(frames, 1)
             (out_dir / f"{name}.txt").write_text(fragment.text + "\n", encoding="utf-8")
@@ -333,6 +339,7 @@ class Worker:
                 "text_file": f"{name}.txt",
                 "text": fragment.text,
                 "unvoiced": fragment.is_unvoiced,
+                "sound_only": bool(fragment.sound_only),
                 "fragment_id": fragment.id,
                 "start_frame": fragment.algo_start_frame,
                 "end_frame": fragment.algo_end_frame,

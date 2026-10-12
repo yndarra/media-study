@@ -1945,8 +1945,6 @@ const Pages = {
     singleLine(body.querySelector("#group-input"));
     animateBars(body.querySelector(".modal-bars"), barsBefore);
     // Окно только что открыли – полосы кнопок с серой фазы (при обновлении – как шли).
-    if (!reuse) body.querySelectorAll("[data-zebra]").forEach((b) => Zebra.restartGray(b));
-    Zebra.paintNow();
     foldLongRows(body);
     const saveButton = body.querySelector("#info-save");
     const closeAndFlash = () => {
@@ -2012,7 +2010,8 @@ const Pages = {
       const canSend = (s.sendable || 0) > 0;
       fold(ankiButton, running || !(sending || canSend));
       label(ankiButton, sending ? "Отменить" : "Передать в Anki");
-      zebra(ankiButton, sending ? "sendBusy" : canSend && s.ready_to_send ? "sendReady" : "");
+      // Зебра – по тем же правилам, что у "Редактировать": есть что передать – полосы идут.
+      zebra(ankiButton, sending ? "sendBusy" : canSend ? "sendReady" : "");
       ankiButton.classList.toggle("send-ready", !sending && canSend);
       ankiButton.disabled = moving || dirty;
       ankiButton.title = sending ? "Отменить передачу в Anki" : `Передать отредактированные: ${s.sendable || 0}`;
@@ -2020,7 +2019,7 @@ const Pages = {
       const canTranslate = untranslated > 0;
       fold(translateButton, sending || !(running || canTranslate));
       label(translateButton, running ? "Отменить" : "Перевести");
-      zebra(translateButton, running ? "translateBusy" : canTranslate && s.ready_to_translate ? "translateReady" : "");
+      zebra(translateButton, running ? "translateBusy" : canTranslate ? "translateReady" : "");
       translateButton.classList.toggle("translate-ready", !running && canTranslate);
       translateButton.disabled = moving || dirty;
       translateButton.title = running ? "Отменить перевод" : s.to_translate === null ? "Anki закрыт" : `Без перевода: ${untranslated}`;
@@ -2073,6 +2072,11 @@ const Pages = {
     render();
     void actions.offsetWidth; // применить без перехода
     actions.classList.remove("fold-instant");
+    // Окно только что открыли – полосы всех трёх кнопок ("Редактировать",
+    // "Передать в Anki", "Перевести") начинают с серой фазы и секунду стоят
+    // (при обновлении – как шли). Идущее действие ("Отменить") – без паузы.
+    if (!reuse) actions.querySelectorAll("[data-zebra]").forEach((b) => /Busy$/.test(b.dataset.zebra) || Zebra.restartGray(b));
+    Zebra.paintNow();
     actions.querySelectorAll(".fold:not(.gone)").forEach((b) => {
       if (reuse && !shownBefore.has(b.id)) b.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: "ease" });
     });

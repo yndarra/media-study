@@ -123,6 +123,9 @@ const ICONS = {
   speakersOff: '<svg viewBox="0 0 20 20"><circle cx="8" cy="7" r="3"/><path d="M2.5 16.5c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/><path d="M14 6l4 4M18 6l-4 4"/></svg>',
   linkOn: '<svg viewBox="0 0 20 20"><path d="M8.5 11.5l3-3"/><path d="M9.5 6.5l1.2-1.2a3 3 0 0 1 4.2 4.2l-1.2 1.2"/><path d="M10.5 13.5l-1.2 1.2a3 3 0 0 1-4.2-4.2l1.2-1.2"/></svg>',
   linkOff: '<svg viewBox="0 0 20 20"><path d="M9.5 6.5l1.2-1.2a3 3 0 0 1 4.2 4.2l-1.2 1.2"/><path d="M10.5 13.5l-1.2 1.2a3 3 0 0 1-4.2-4.2l1.2-1.2"/><path d="M4 4l2 2M16 16l-2-2"/></svg>',
+  // Не озвучено: динамик с крестиком. Только озвучка: динамик со звуком (в Anki – без картинки).
+  unvoiced: '<svg viewBox="0 0 20 20"><path d="M3 8v4h3l4 3.5v-11L6 8z"/><path d="M13.5 7.5l4 5M17.5 7.5l-4 5"/></svg>',
+  soundOnly: '<svg viewBox="0 0 20 20"><path d="M3 8v4h3l4 3.5v-11L6 8z"/><path d="M13 7.5c.9.7 1.3 1.5 1.3 2.5s-.4 1.8-1.3 2.5"/><path d="M15.2 5.5c1.5 1.2 2.2 2.7 2.2 4.5s-.7 3.3-2.2 4.5"/></svg>',
   play: '<svg viewBox="0 0 20 20"><path d="M6 4l10 6-10 6z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 20 20"><path d="M6.5 4v12M13.5 4v12" stroke-width="3"/></svg>',
   // Остановка на конце отрезка включена / выключена (играть до конца видео).
@@ -296,6 +299,7 @@ const App = {
     State.manifest = manifest;
     // Аудио – вместо картинки фон с кругом по звуку (audiovis.js).
     AudioVisual.enable(!!manifest.video.audio_only);
+    this._audioVisual = !!manifest.video.audio_only;
     // У аудио нет "немых" реплик героя игры – кнопки Rover ("R", "Не озвучено") не нужны.
     document.getElementById("app").classList.toggle("audio-project", !!manifest.video.audio_only);
     this.updateSpeakersButton();
@@ -461,10 +465,12 @@ const App = {
     // в Anki и переведён, фиолетоватый — вернулся из Anki. Только в редакторе.
     const inEditor = State.view === "editor";
     const stage = FragList.stageClass(f);
-    document.body.classList.toggle("frag-deleted", inEditor && deleted && !locked);
+    // Удалённый – красноватый всегда, даже если фрагмент числится переданным
+    // в Anki или переведённым (красный важнее остальных цветов).
+    document.body.classList.toggle("frag-deleted", inEditor && deleted);
     document.body.classList.toggle("frag-locked", inEditor && locked);
     for (const cls of ["bg-anki", "bg-pending", "bg-translated", "bg-returned"]) {
-      document.body.classList.toggle(`frag-${cls}`, inEditor && stage === cls);
+      document.body.classList.toggle(`frag-${cls}`, inEditor && !deleted && !f.sound_only && stage === cls);
     }
     // Цвет правки (удалён – красный, изменён – жёлтый, не озвучен – бирюзовый,
     // принят без правок – синий) важнее фона этапа Anki (зелёный/розовый);
@@ -472,7 +478,8 @@ const App = {
     // Переведённый (розовый) и переданный в Anki (зелёный) фон – важнее всего.
     let editKind = ["bg-returned", "bg-anki", "bg-translated"].includes(stage) ? "" : FragList.editClass(f, State.fragmentIndex, FragList._reviewed());
     if (editKind && editKind !== "deleted" && isUnvoiced(f)) editKind = "unvoiced"; // бирюзовый важнее жёлтого и синего
-    for (const kind of ["accepted", "changed", "unvoiced"]) {
+    if (f.sound_only) editKind = "sound"; // "только озвучка" – рыжеватый, важнее всего, кроме красного
+    for (const kind of ["accepted", "changed", "unvoiced", "sound"]) {
       document.body.classList.toggle(`frag-edit-${kind}`, inEditor && !deleted && editKind === kind);
     }
     document.body.classList.toggle("frag-unvoiced", false);
@@ -581,6 +588,18 @@ const App = {
     $("unvoiced-btn").title = unvoiced
       ? "Отмечено: реплика не озвучена – в Anki без видео, только текст (нажмите, чтобы снять)"
       : "Отметить: реплика не озвучена – в Anki без видео, только текст";
+    const sound = !!f.sound_only;
+    $("sound-btn").classList.toggle("on", sound);
+    $("sound-btn").disabled = isLocked(f);
+    $("sound-btn").title = sound
+      ? "Отмечено: только озвучка – в Anki звук без картинки (нажмите, чтобы снять)"
+      : "Отметить: только озвучка – в Anki звук без картинки";
+    // Вместо картинки – то же, что при правке аудио (фон по звуку).
+    const visual = !!(State.manifest.video.audio_only || sound);
+    if (this._audioVisual !== visual) {
+      this._audioVisual = visual;
+      AudioVisual.enable(visual);
+    }
     // "Прилепить" к соседу: серые, если некуда или граница уже там.
     const snapStart = this.snapTarget(f, "start");
     const snapEnd = this.snapTarget(f, "end");
@@ -676,15 +695,24 @@ const App = {
     // Разница с исходным текстом видна прямо в фразе: новое — зелёное,
     // удалённое — красное (см. textedit.js).
     const cur = $("cur-text");
+    // Говорящие на карточках включены – три фразы в два столбца: имена
+    // (прижаты вправо) и реплики (столбец – по центру экрана). Выключены –
+    // как раньше, одним столбцом.
+    const columns = !!State.manifest.video.show_speakers;
+    const modeChanged = TextEditor.columns !== columns;
+    TextEditor.columns = columns;
+    $("context-preview").classList.toggle("cols", columns);
     if (force) TextEditor.resetHistory();
     if (force || document.activeElement !== cur) {
       TextEditor.load(f.original_text, f.text, f.heard_ranges, f.text_marks);
+      TextEditor.render(cur);
+    } else if (modeChanged) {
       TextEditor.render(cur);
     }
     cur.contentEditable = isLocked(f) ? "false" : "plaintext-only";
     for (const [id, dir] of [["prev-text", -1], ["next-text", 1]]) {
       const n = this._neighbor(dir);
-      $(id).textContent = n.text;
+      this._renderNeighbor($(id), n.text, columns);
       $(id).classList.toggle("deleted-neighbor", n.deleted);
     }
     // Стык объединённого фрагмента: кнопка "Склеить в одну фразу" и мигание.
@@ -692,10 +720,61 @@ const App = {
     this.fitTextBox();
   },
 
+  // Серая соседняя фраза: одним текстом или (в два столбца) по строкам –
+  // ячейка говорящего и ячейка реплики, как у белой.
+  _renderNeighbor(el, text, columns) {
+    if (!columns) {
+      el.textContent = text;
+      return;
+    }
+    el.textContent = "";
+    for (const line of text.split("\n")) {
+      const prefix = speakerPrefix(line);
+      const who = document.createElement("span");
+      who.className = "who";
+      who.textContent = prefix ? line.slice(0, prefix.length).trimEnd() : "";
+      const say = document.createElement("span");
+      say.className = "say";
+      say.textContent = prefix ? line.slice(prefix.length) : line;
+      el.append(who, say);
+    }
+  },
+
+  // Отступ между столбцом говорящих и столбцом реплик, px. Область клика
+  // делится посередине этого отступа: левее – имена, правее – реплики.
+  COLUMN_GAP: 14,
+
+  // Два столбца: общая для трёх фраз ширина столбца имён (по самому длинному
+  // имени) и столбца реплик (по самой длинной строке); столбец реплик стоит
+  // по центру экрана, имена – слева от него (поле сдвинуто влево на половину
+  // столбца имён с отступом). Поля – те же TEXT_BOX_PAD с каждой стороны.
+  fitColumns() {
+    const box = $("context-preview");
+    for (const name of ["--who-w", "--say-w", "--col-gap"]) box.style.removeProperty(name);
+    $("cur-text").style.minWidth = "";
+    let who = 0;
+    let say = 0;
+    for (const id of ["prev-text", "cur-text", "next-text"]) {
+      // Без заданной ширины столбцы – по содержимому (max-content): читаем, что вышло.
+      const [w, s] = getComputedStyle($(id)).gridTemplateColumns.split(" ").map(parseFloat);
+      who = Math.max(who, w || 0);
+      say = Math.max(say, s || 0);
+    }
+    const gap = who > 0 ? this.COLUMN_GAP : 0;
+    const style = getComputedStyle(box);
+    const room = box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    // Поле сдвинуто влево на (имена + отступ) / 2 – слева должно хватить места.
+    say = Math.max(100, Math.min(Math.ceil(say) + 1, room - 2 * (Math.ceil(who) + gap + TEXT_BOX_PAD)));
+    box.style.setProperty("--who-w", `${Math.ceil(who)}px`);
+    box.style.setProperty("--say-w", `${say}px`);
+    box.style.setProperty("--col-gap", `${gap}px`);
+  },
+
   // Поле правимой фразы: ширина – по самой длинной строке из трёх фраз
   // (предыдущей, этой и следующей) плюс поля по TEXT_BOX_PAD с каждой стороны;
   // не шире места. Своя фраза длиннее – поле растёт само (fit-content).
   fitTextBox() {
+    if (TextEditor.columns) return this.fitColumns();
     const textWidth = (el) => {
       if (!el.textContent.trim()) return 0;
       const range = document.createRange();
@@ -1074,6 +1153,18 @@ const App = {
     this.renderAll();
   },
 
+  // Кнопка "Только озвучка": в Anki пойдёт звук без картинки (отменяется Ctrl+Z).
+  async toggleSoundOnly() {
+    const f = currentFragment();
+    if (!f || isLocked(f)) return;
+    await this.flushSaves();
+    const updated = await this._call(Api.setSoundOnly(f.id, !f.sound_only));
+    if (!updated) return;
+    this._applyServer(f, updated);
+    this.refreshHistory();
+    this.renderAll();
+  },
+
   async deleteSoft() {
     await this.flushSaves();
     // Остаёмся на этом же фрагменте — он просто получает пометку «удалено»
@@ -1299,8 +1390,8 @@ const App = {
   // Говорящие на карточках (режим видео, хранится на сервере).
   updateSpeakersButton() {
     const on = !!(State.manifest && State.manifest.video.show_speakers);
+    // Состояние видно по самому значку (звук / крестик), без подсветки.
     $("speakers-btn").innerHTML = on ? ICONS.speakersOn : ICONS.speakersOff;
-    $("speakers-btn").classList.toggle("on", on);
     $("speakers-btn").title = on
       ? "Говорящие на карточках: ВКЛ – имена персонажей серым в конце карточки (нажмите, чтобы убрать со всех карточек этого видео)"
       : "Говорящие на карточках: ВЫКЛ (нажмите, чтобы добавить на все карточки этого видео)";
@@ -1320,7 +1411,10 @@ const App = {
       State.manifest.video.show_speakers = on;
     }
     this.updateSpeakersButton();
+    if (currentFragment()) this.renderText(currentFragment(), false); // столбец говорящих появляется / исчезает
+    // Вернули режим, как был: нетронутые фрагменты снова числятся в Anki.
     this.flash(`Говорящие на карточках: ${on ? "вкл" : "выкл"}` +
+      (result.restored ? ` – ${result.restored} нетронутых фрагментов снова в Anki` : "") +
       (result.returned ? ` – ${result.returned} карточек вернулись, передайте их в Anki снова` : ""));
   },
 
@@ -1449,7 +1543,12 @@ $("merge-prev").addEventListener("click", () => App.merge("prev"));
 $("merge-next").addEventListener("click", () => App.merge("next"));
 $("split-btn").addEventListener("click", () => App.split());
 $("delete-soft").addEventListener("click", () => App.deleteSoft());
+TextEditor.onRender = () => { if (TextEditor.columns && State.manifest) App.fitColumns(); };
+window.addEventListener("resize", () => { if (TextEditor.columns && State.manifest && State.view === "editor") App.fitColumns(); });
 $("unvoiced-btn").addEventListener("click", () => App.toggleUnvoiced());
+$("unvoiced-btn").innerHTML = ICONS.unvoiced;
+$("sound-btn").innerHTML = ICONS.soundOnly;
+$("sound-btn").addEventListener("click", () => App.toggleSoundOnly());
 window.addEventListener("resize", () => State.view === "editor" && App.fitTextBox());
 $("video-wrap").addEventListener("contextmenu", (e) => {
   e.preventDefault();

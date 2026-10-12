@@ -279,18 +279,84 @@ const TextEditor = {
     return token.kind === DEL && token.ch === "\n" ? "↵" : token.ch;
   },
 
+  // Режим двух столбцов (говорящие на карточках включены): каждая строка
+  // фразы – две ячейки сетки: "Имя:" (прижато вправо) и сама реплика (по
+  // центру). Порядок символов в разметке тот же, что в тексте, – позиции
+  // каретки считаются как раньше (каждый токен – один символ).
+  columns: false,
+  onRender: null, // после перерисовки поля (редактор подгоняет ширину столбцов)
+
+  // Строки фразы: [{from, split, to}] – токены [from, split) идут в ячейку
+  // говорящего, [split, to) – в ячейку реплики (вместе с переносом строки).
+  // Говорящий определяется по видимому тексту строки (без красного).
+  _cells() {
+    const tokens = this.tokens;
+    const n = tokens.length;
+    const cells = [];
+    let a = 0;
+    for (;;) {
+      let b = a;
+      while (b < n && !(tokens[b].ch === "\n" && tokens[b].kind !== DEL)) b++;
+      const shown = [];
+      for (let k = a; k < b; k++) if (tokens[k].kind !== DEL) shown.push(k);
+      const prefix = speakerPrefix(shown.map((k) => tokens[k].ch).join(""));
+      const to = b < n ? b + 1 : n;
+      cells.push({ from: a, split: prefix ? shown[prefix.length - 1] + 1 : a, to });
+      if (b >= n) break;
+      a = to;
+    }
+    return cells;
+  },
+
   render(el) {
     el.textContent = "";
+    if (!this.columns) {
+      this._renderRange(el, 0, this.tokens.length);
+    } else {
+      for (const cell of this._cells()) {
+        const who = document.createElement("span");
+        who.className = "who";
+        const say = document.createElement("span");
+        say.className = "say";
+        // Пробелы после двоеточия – в элементе нулевой ширины: двоеточия всех
+        // имён стоят ровно по правому краю столбца (расстояние до реплики
+        // задаёт отступ между столбцами), а символы остаются в разметке.
+        let colon = cell.split;
+        while (colon > cell.from && /[ \t]/.test(this.tokens[colon - 1].ch)) colon--;
+        this._renderRange(who, cell.from, colon);
+        if (colon < cell.split) {
+          const gap = document.createElement("span");
+          gap.className = "gap";
+          this._renderRange(gap, colon, cell.split);
+          who.appendChild(gap);
+        }
+        this._renderRange(say, cell.split, cell.to);
+        el.append(who, say);
+      }
+    }
+    // Если текст кончается переносом, пустая последняя строка без <br> не видна.
     const tokens = this.tokens;
-    let i = 0;
-    while (i < tokens.length) {
+    const last = tokens[tokens.length - 1];
+    if (last && last.ch === "\n" && last.kind !== DEL) {
+      const br = document.createElement("br");
+      br.dataset.sentinel = "1";
+      (this.columns ? el.lastElementChild : el).appendChild(br);
+    }
+    if (this.onRender) this.onRender();
+  },
+
+  // Разметка токенов [from, to) – в parent.
+  _renderRange(el, from, to) {
+    const tokens = this.tokens;
+    let i = from;
+    while (i < to) {
       let j = i;
       let chunk = "";
       // Кусок — подряд идущие токены одного вида (у исходных — и одной
       // отметки "на слух").
       const heardChunk = tokens[i].kind === ORIG && !!tokens[i].heard;
       const hiddenChunk = tokens[i].kind === DEL && !!tokens[i].hidden;
-      while (j < tokens.length && tokens[j].kind === tokens[i].kind && (tokens[i].kind !== ORIG || !!tokens[j].heard === heardChunk)
+      while (j < to && tokens[j].kind === tokens[i].kind && (tokens[i].kind !== ORIG || !!tokens[j].heard === heardChunk)
         && (tokens[i].kind !== DEL || !!tokens[j].hidden === hiddenChunk)) {
         chunk += this._shown(tokens[j]);
         j++;
@@ -328,13 +394,6 @@ const TextEditor = {
       }
       i = j;
     }
-    // Если текст кончается переносом, пустая последняя строка без <br> не видна.
-    const last = tokens[tokens.length - 1];
-    if (last && last.ch === "\n" && last.kind !== DEL) {
-      const br = document.createElement("br");
-      br.dataset.sentinel = "1";
-      el.appendChild(br);
-    }
   },
 
   // Сколько токенов стоит до точки (container, offset): каждый токен в
@@ -365,7 +424,11 @@ const TextEditor = {
     const range = document.createRange();
     let node = walker.nextNode();
     while (node) {
-      if (remaining <= node.nodeValue.length) {
+      // В два столбца строка кончается своей ячейкой: каретка "после переноса" –
+      // это начало следующей ячейки, а не хвост этой (иначе она рисовалась бы
+      // в конце предыдущей строки).
+      const lineEnd = this.columns && remaining === node.nodeValue.length && node.nodeValue.endsWith("\n");
+      if (remaining <= node.nodeValue.length && !lineEnd) {
         range.setStart(node, remaining);
         range.collapse(true);
         const selection = window.getSelection();
@@ -375,6 +438,16 @@ const TextEditor = {
       }
       remaining -= node.nodeValue.length;
       node = walker.nextNode();
+    }
+    // Дальше текста нет: конец поля (в два столбца – пустая последняя ячейка реплики).
+    const lastCell = this.columns && el.lastElementChild;
+    if (lastCell) {
+      range.setStart(lastCell, lastCell.querySelector("br[data-sentinel]") ? 0 : lastCell.childNodes.length);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return;
     }
     range.selectNodeContents(el);
     range.collapse(false);

@@ -209,7 +209,10 @@
           <button id="speaker-next" class="step-btn speaker-btn" title="Говорящий из следующих фрагментов (ещё раз – более поздний)">›</button>
         </div>
         <span class="sep"></span>
-        <button id="unvoiced-btn" class="step-btn unvoiced-btn" title="Реплика не озвучена: в Anki – без видео">Не озвучено</button>
+        <!-- Отметки фрагмента (значки): не озвучено – в Anki только текст; только
+             озвучка – в Anki звук без картинки. -->
+        <button id="unvoiced-btn" class="icon-btn mark-btn" title="Реплика не озвучена: в Anki – без видео"></button>
+        <button id="sound-btn" class="icon-btn mark-btn" title="Только озвучка: в Anki – звук без картинки"></button>
       </div>
       <div class="group right">
         <button id="nav-fwd-1" class="step-btn" title="Следующий фрагмент">Вперёд ›</button>

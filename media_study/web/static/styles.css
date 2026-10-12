@@ -1757,7 +1757,7 @@ table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: 
 #audio-vis { position: absolute; inset: 0; width: 100%; height: 100%; display: none; pointer-events: none; z-index: 2; }
 #video-wrap.audio-mode #audio-vis { display: block; }
 #video-wrap.audio-mode #video { opacity: 0; }
-#app.audio-project #speaker-rover, #app.audio-project #unvoiced-btn, #app.audio-project .speaker-btns + .sep { display: none; }
+#app.audio-project #speaker-rover, #app.audio-project #unvoiced-btn, #app.audio-project #sound-btn, #app.audio-project .speaker-btns + .sep { display: none; }
 
 /* Переключатель режима Видео / Аудио в меню: выбранная кнопка и подсветка
    всего переключателя – синие у видео, розовые (с переливом) у аудио. */
@@ -1931,7 +1931,7 @@ table.stats td, table.stats th { padding-top: 4px; padding-bottom: 8px; }
 .server-row { border-top: none; }
 
 /* Говорящие на карточках: включено – голубая, как связанные границы. */
-#speakers-btn.on { color: #79b8ff; }
+/* Говорящие на карточках: состояние – самим значком, без подсветки. */
 
 /* Переключатель Видео/Аудио – той же формы, что вкладки статистики
    (.seg-switch: отступы, высота, шрифт, скругления), только на всю ширину
@@ -1990,7 +1990,7 @@ table.stats.fit-table th:first-child, table.stats.fit-table td:first-child { wid
    редакторе – серые и не нажимаются (подсказка – в "Сейчас идёт"). */
 body.anki-locked #stage3-btn, body.anki-locked .card-action, body.anki-locked #info-anki,
 body.anki-locked #info-translate, body.anki-locked #set-recolor, body.anki-locked #edit-row,
-body.anki-locked #cur-text, body.anki-locked #timeline, body.anki-locked #speakers-btn, body.anki-locked #unvoiced-btn,
+body.anki-locked #cur-text, body.anki-locked #timeline, body.anki-locked #speakers-btn, body.anki-locked #unvoiced-btn, body.anki-locked #sound-btn,
 body.anki-locked #reset-btn, body.anki-locked #undo-btn, body.anki-locked #redo-btn, body.anki-locked #merge-prev,
 body.anki-locked #merge-next, body.anki-locked #split-btn, body.anki-locked #delete-soft, body.anki-locked #delete-hard {
   pointer-events: none; opacity: 0.45; }
@@ -2209,3 +2209,38 @@ table.stats td, table.stats th { line-height: 20px; padding-top: 6px; padding-bo
 
 /* Окно видео: первый вид кнопок – без перехода (см. videoModal). */
 .modal-actions.fold-instant .fold { transition: none !important; }
+
+/* Редактор: три фразы в два столбца (говорящие на карточках включены, см.
+   App.fitColumns): имена прижаты вправо, реплики – по центру своего столбца,
+   а он – по центру экрана (поле сдвинуто влево на половину столбца имён с
+   отступом). Ширины столбцов общие для трёх фраз (--who-w, --say-w). */
+#context-preview.cols .ctx {
+  display: grid;
+  grid-template-columns: var(--who-w, max-content) var(--say-w, max-content);
+  column-gap: var(--col-gap, 0px);
+  width: fit-content; min-width: 0; max-width: none;
+  margin: 0 auto; padding: 0 50px; box-sizing: border-box;
+  position: relative; left: calc((var(--who-w, 0px) + var(--col-gap, 0px)) / -2);
+}
+#context-preview.cols .ctx .who { text-align: right; white-space: pre; }
+#context-preview.cols .ctx .say { text-align: center; min-width: 0; }
+#context-preview.cols .ctx .who .gap { font-size: 0; }
+
+/* Кнопки-отметки фрагмента: "не озвучено" (бирюзовая) и "только озвучка" (рыжая). */
+.mark-btn.on { color: #e6fffc; }
+#unvoiced-btn.on { background: #17504c; border-color: #2a8a83; }
+#unvoiced-btn.on:hover:not(:disabled) { background: #1c5f5a; }
+#sound-btn.on { background: #5a3413; border-color: #a8622a; color: #fff1e2; }
+#sound-btn.on:hover:not(:disabled) { background: #6a3e17; }
+/* "Только озвучка" – рыжеватый фон редактора. */
+body.frag-edit-sound { background: #26180d; }
+
+/* Ряд навигации: соседние кнопки – на обычном расстоянии (как в .group: 6 px). */
+.nav-mid { gap: 6px; }
+
+/* Полосы кнопок окна ("Редактировать", "Передать в Anki", "Перевести",
+   "Хранилище") – до самого края кнопки, поверх её рамки: раньше холст лежал
+   внутри рамки в 1 px, и при дробной ширине кнопки справа синего не хватало
+   на пиксель. Скругление – как у кнопки. */
+.zebra-host[data-zebra] { overflow: visible; }
+.zebra-host[data-zebra] > canvas.zebra { inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); border-radius: inherit; }

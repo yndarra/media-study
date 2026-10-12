@@ -232,6 +232,17 @@ const Api = {
   },
 
   // Отметка "не озвучено" (карточка без видео, с подписью Rover:).
+  // Отметка "только озвучка" (в Anki – звук без картинки).
+  async setSoundOnly(id, value) {
+    const res = await fetch(`${Api.base()}/fragments/${id}/sound-only`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
   async setUnvoiced(id, value) {
     const res = await fetch(`${Api.base()}/fragments/${id}/unvoiced`, {
       method: "POST",

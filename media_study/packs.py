@@ -59,6 +59,8 @@ def export_pack(project_dir: Path, log=print) -> tuple[dict, list[str]]:
         item = {"start": round(f.algo_start_frame / fps, 4), "end": round(f.algo_end_frame / fps, 4), "text": f.text}
         if f.unvoiced:
             item["unvoiced"] = True
+        if f.sound_only:
+            item["sound_only"] = True
         fragments.append(item)
     pack_translations = {str(k): translations[f.id] for k, (_, f) in enumerate(live) if f.id in translations}
 
@@ -228,6 +230,8 @@ def build_manifest_from_pack(project_dir: Path, pack: dict, video_info, padding_
             fragment.status = STATUS_DELETED  # промежуток – удалён у автора набора
         elif item.get("unvoiced"):
             fragment.unvoiced = True
+        elif item.get("sound_only"):
+            fragment.sound_only = True
     settings = {**DEFAULT_SETTINGS, "context_padding_seconds": padding_seconds}
     reviewed = pack.get("reviewed") or {}
     if reviewed.get("full"):

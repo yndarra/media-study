@@ -699,6 +699,10 @@ window.I18N_DICT.en =
 "Тип заметок": "Note type",
 "Первое поле типа – лицо (клип и текст), второе – оборот (перевод). Пусто – возьмётся из Anki (Basic или первый в списке) и запомнится. Применяется к новым карточкам": "The first field of the type is the front (clip and text), the second is the back (translation). Empty – taken from Anki (Basic or the first in the list) and remembered. Applies to new cards",
 "Из Anki (Basic или первый в списке)": "From Anki (Basic or the first in the list)",
+"Отмечено: только озвучка – в Anki звук без картинки (нажмите, чтобы снять)": "Marked: sound only – in Anki the sound without the picture (click to unmark)",
+"Отметить: только озвучка – в Anki звук без картинки": "Mark: sound only – in Anki the sound without the picture",
+"Только озвучка: в Anki – звук без картинки": "Sound only: in Anki – the sound without the picture",
+"– {0} нетронутых фрагментов снова в Anki": "– {0} untouched fragments are back in Anki",
 "Набор ": "Pack "
 }
 ;
