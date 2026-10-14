@@ -159,7 +159,9 @@ media-study/
 │   ├── packs.py               наборы .mspack.json: выгрузка и применение
 │   └── web/                   приложение
 │       ├── run.py               запуск сервера
-│       ├── server.py            API (FastAPI)
+│       ├── server.py            приложение FastAPI: папка data, видео, запуск
+│       ├── api/                 маршруты API по разделам: system, media, ingest,
+│       │                        settings, stage3, stats, anki, agent, editor
 │       ├── library.py           список видео, сводки, настройки
 │       ├── manifest_store.py    правки фрагментов с историей (Ctrl+Z)
 │       ├── storage.py           хранилища на других дисках
