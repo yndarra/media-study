@@ -65,7 +65,7 @@
   <section id="view-editor" class="view hidden">
   <div id="app">
     <div id="video-wrap">
-      <!-- Обёртка сдвигается вверх на высоту чёрной полосы записи (Letterbox в app.js). -->
+      <!-- Обёртка сдвигается вверх на высоту чёрной полосы записи (Letterbox в js/editor/view.js). -->
       <div id="video-inner">
         <video id="video" preload="auto" playsinline></video>
         <!-- Снимок кадра остановки поверх видео (см. Player._freeze). -->
@@ -268,7 +268,16 @@
   <script src="/js/pages/settings.js"></script>
   <!-- Появление текста по буквам (везде, кроме редактора). -->
   <script src="/textfx.js"></script>
-  <script src="/app.js"></script>
+  <!-- Редактор (раньше – один app.js): состояние и помощники, вид плеера, App
+       по частям (основа, текст, границы, режимы), кнопки и клавиши, запуск. -->
+  <script src="/js/editor/state.js"></script>
+  <script src="/js/editor/view.js"></script>
+  <script src="/js/editor/app.js"></script>
+  <script src="/js/editor/text.js"></script>
+  <script src="/js/editor/bounds.js"></script>
+  <script src="/js/editor/modes.js"></script>
+  <script src="/js/editor/input.js"></script>
+  <script src="/js/editor/main.js"></script>
   <script src="/timer.js"></script>
   <script src="/audiovis.js"></script>
 </body>

@@ -175,8 +175,10 @@ media-study/
 │           │   ├── motion.js          полосы-зебры, «Отмена?», полосы прогресса
 │           │   ├── shell.js           меню, режим видео/аудио, роутер, журналы
 │           │   └── pages/             разделы: library, process, add, stats, settings
-│           ├── app.js, textedit.js,   редактор фрагментов (видео, дорожка, текст)
-│           │   player.js, timeline.js …
+│           │   └── editor/            редактор: state, view, app (основа), text,
+│           │                          bounds, modes, input (кнопки, клавиши), main
+│           ├── textedit.js, player.js, плеер, дорожка, правка текста на месте
+│           │   timeline.js, audio.js …
 │           ├── textfx.js            появление текста по буквам
 │           └── i18n.js, i18n-en.js  английский интерфейс
 ├── tools/                     служебные скрипты и .bat

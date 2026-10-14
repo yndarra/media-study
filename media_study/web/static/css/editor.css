@@ -183,7 +183,7 @@ body.frag-bg-returned { background: #1c1528; }
   cursor: text;
   max-width: 100%;
   box-sizing: border-box;
-  /* Поле правимой фразы: поля 50 px слева и справа (как TEXT_BOX_PAD в app.js). */
+  /* Поле правимой фразы: поля 50 px слева и справа (как TEXT_BOX_PAD в js/editor/state.js). */
   padding: 0 50px;
 }
 
