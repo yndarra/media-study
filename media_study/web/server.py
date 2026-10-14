@@ -233,7 +233,9 @@ def heartbeat(body: HeartbeatRequest):
 
 
 def _ui_version() -> str:
-    return str(max((p.stat().st_mtime_ns for p in STATIC_DIR.iterdir() if p.is_file()), default=0))
+    # Версия интерфейса – по самому свежему файлу static/ вместе с папками
+    # css/ и js/ (вкладка перезагружается, когда он меняется).
+    return str(max((p.stat().st_mtime_ns for p in STATIC_DIR.rglob("*") if p.is_file()), default=0))
 
 
 # -- журналы и остановка (низ меню: "Журнал" и "Остановить") ------------------------

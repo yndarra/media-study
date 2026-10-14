@@ -1,0 +1,138 @@
+/* Статистика: таблицы со столбцами – заголовки приглушённые, числа справа. */
+table.grid-table th:first-child { text-align: left; }
+table.grid-table td:first-child { text-align: left; white-space: normal; color: var(--text); }
+table.grid-table td a { color: #79c0ff; text-decoration: none; }
+table.grid-table td a:hover { text-decoration: underline; }
+table.grid-table tr.total-row td { font-weight: 600; }
+.stats-grid table.stats td:last-child { text-align: right; }
+.stats-grid table.grid-table td:first-child { text-align: left; }
+
+/* Статистика: итоги 2×2 (расходы и видео – первый ряд, правка и Anki – второй);
+   таблицы во всю ширину, заголовки столбцов ровно над числами. */
+.stats-grid table.grid-table { width: 100%; max-width: none; table-layout: auto; }
+.stats-grid table.grid-table th:first-child, .stats-grid table.grid-table td:first-child { padding-left: 0; width: 100%; }
+
+/* Страницы с блоками (Настройки, Статистика, Добавить): блоки по 1, 2 или 4
+   в ряд (трёх не бывает) – по ширине самой страницы; шире 4 блоков страница
+   не растягивается и стоит посередине, как плеер в редакторе. */
+#view-settings, #view-stats, #view-add { max-width: 1400px; margin-left: auto; margin-right: auto; container-type: inline-size; }
+
+/* Переключатель подразделов (Обработка: Видео / Аудио). */
+.seg-switch { display: inline-flex; padding: 3px; gap: 2px; background: #141418; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 9px; }
+.seg-switch button { height: 28px; padding: 0 14px 1px; border: none; border-radius: 6px; background: transparent; color: var(--dim);
+  font-size: 13px; transition: background 0.2s ease, color 0.2s ease; }
+.seg-switch button:hover { color: var(--text); }
+.seg-switch button.active { background: #26262e; color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+
+/* Статистика: вкладки и графики. */
+.stats-tabs .tab-bar { margin-bottom: 16px; }
+.tab-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.tab-head .picker-host { flex: 0 1 280px; margin-right: auto; }
+.tab-sub { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; margin: 18px 0 8px; }
+.chart-box { margin: 10px 0 6px; }
+.hbars { flex-direction: column; gap: 7px; margin: 6px 0 16px; }
+.hbar-legend { display: flex; gap: 16px; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+.hbar-key { display: inline-flex; align-items: center; gap: 6px; }
+.hbar-key i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.hbar-row {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  /* Полосы статистики: колонка значения – по самому длинному значению
+     (--hbar-val из hbars), полосы ближе к числам; заполняются при показе. */
+  grid-template-columns: minmax(140px, 30%) 1fr var(--hbar-val, 96px);
+}
+.hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-label a { color: var(--text); text-decoration: none; }
+.hbar-label a:hover { color: #79c0ff; }
+.hbar-track { display: flex; height: 14px; border-radius: 4px; background: #1b1b21; overflow: hidden; }
+.hbar-seg { height: 100%; transition: width 0.5s ease; }
+.hbar-value { white-space: nowrap; text-align: right; min-width: 0; }
+table.grid-table th { text-align: right; font-weight: 500; color: var(--dim); white-space: nowrap; }
+table.grid-table td { text-align: right; white-space: nowrap; }
+table.grid-table th, table.grid-table td { padding-left: 20px; }
+table.grid-table th:first-child, table.grid-table td:first-child { padding-left: 0; }
+
+/* Говорящие на карточках: включено – голубая, как связанные границы. */
+/* Говорящие на карточках: состояние – самим значком, без подсветки. */
+
+/* Переключатель Видео/Аудио – той же формы, что вкладки статистики
+   (.seg-switch: отступы, высота, шрифт, скругления), только на всю ширину
+   меню и со своими цветами: переливающаяся заливка и цветная обводка. */
+.mode-switch.seg-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 9px;
+  background: #141418;
+  /* Переключатель Видео/Аудио: выбранный режим – "пилюля" под кнопками.
+     При переключении она плавно переезжает к другой кнопке, а градиент
+     видео (голубой -> фиолетовый) плавно сменяется градиентом аудио
+     (розовый -> фиолетовый) – оба слоя переливаются всё время, анимация не
+     прерывается. Градиент повторяется по горизонтали (первый цвет = последний),
+     поэтому перелив бесшовный; полоса широкая – 1600 px на цикл. */
+  position: relative;
+}
+.mode-switch.seg-switch button { display: block; height: 28px; padding: 0 14px 1px; border-radius: 6px; font-size: 13px; line-height: normal; }
+
+/* Таблицы статистики по ширине блока: колонки по долям (fitCols), длинное
+   название – многоточием, заголовки колонок могут переноситься. */
+table.stats.fit-table { width: 100%; }
+table.stats.fit-table td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.stats.fit-table th { white-space: normal; vertical-align: bottom; }
+table.stats.fit-table td { overflow: hidden; text-overflow: ellipsis; }
+.mode-switch.seg-switch button,
+.mode-switch.seg-switch button.active,
+.mode-switch.video.seg-switch button.active,
+.mode-switch.audio.seg-switch button.active { position: relative; z-index: 1; background: none; animation: none; box-shadow: none; }
+.mode-switch.seg-switch button.active { color: #fff; }
+/* У таблиц статистики первая колонка была width: 100% – в fit-table ширина
+   только по долям колонок (иначе названию доставалось почти всё). */
+.stats-grid table.grid-table.fit-table, table.stats.fit-table { table-layout: fixed; }
+.stats-grid table.grid-table.fit-table th:first-child, .stats-grid table.grid-table.fit-table td:first-child,
+table.stats.fit-table th:first-child, table.stats.fit-table td:first-child { width: auto; }
+
+/* Обводка переключателя Видео/Аудио переливается вместе с пилюлей: её цвет –
+   тот, что сейчас посередине пилюли. Градиент пилюли – a -> b -> a на
+   1600 px, сдвигается на 1600 px за 21 с; середина пилюли (~57 px от её
+   края) проходит те же цвета с тем же периодом – отсюда та же длительность
+   и сдвиг фазы (задержка −57/1600 · 21 с ≈ −0,75 с). Две обводки (видео и
+   аудио) лежат друг на друге и плавно сменяются, перелив не прерывается. */
+.mode-switch.seg-switch, .mode-switch.seg-switch.video, .mode-switch.seg-switch.audio { border-color: transparent; }
+.mode-switch.seg-switch::before, .mode-switch.seg-switch::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; border: 1px solid; pointer-events: none;
+  animation: 21s linear -0.75s infinite; transition: opacity 0.45s ease; }
+.mode-switch.seg-switch::before { animation-name: mode-border-video; }
+.mode-switch.seg-switch::after { animation-name: mode-border-audio; opacity: 0; }
+.mode-switch.seg-switch.audio::before { opacity: 0; }
+.mode-switch.seg-switch.audio::after { opacity: 1; }
+@keyframes mode-border-video { 0%, 100% { border-color: rgba(58, 157, 232, 0.75); } 50% { border-color: rgba(154, 134, 245, 0.75); } }
+@keyframes mode-border-audio { 0%, 100% { border-color: rgba(194, 80, 143, 0.75); } 50% { border-color: rgba(137, 87, 229, 0.75); } }
+
+.hbar-fill { display: flex; width: 100%; height: 100%; transform-origin: 0 50%; animation: hbar-grow 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes hbar-grow { from { transform: scaleX(0); } to { transform: none; } }
+
+/* Центр текста – по высоте цифр (замер: отступ от верха цифры до верхней
+   границы = отступу от низа цифры до нижней): строки таблиц были выше на
+   0,3 px, "Итого" – на 0,8 (лишняя линия над строкой), кнопки – выше на 0,5,
+   кнопки-переключатели – ниже на 0,5. */
+table.grid-table tr.total-row td { border-top: none; }
+.seg-switch button, .mode-switch.seg-switch button { padding-bottom: 2px; }
+
+/* Полосы статистики: одна сетка на блок – колонка значения по самому
+   широкому значению (всё влезает), полосы у всех строк одной длины. */
+.hbars { display: grid; grid-template-columns: minmax(140px, 30%) 1fr max-content; column-gap: 12px; row-gap: 7px; }
+.hbars > .hbar-row { display: contents; }
+.hbars > .hbar-legend, .hbars > p { grid-column: 1 / -1; }
+/* Заполнение – со скруглённым правым краем. */
+.hbar-fill > .hbar-seg:last-child { border-radius: 0 4px 4px 0; }
+
+/* Полосы всегда рисуются отдельным слоем – так же, как во время анимации
+   заполнения: последний кадр анимации и итог совпадают пиксель в пиксель
+   (иначе в конце был лёгкий "дёрг" краёв). */
+.seg-left, .hbar-fill { will-change: transform; }
+
+/* Статистика: вкладка меняет высоту плавно (обрезая содержимое на время). */
+#stats-tab { overflow: hidden; }

@@ -1,0 +1,373 @@
+.group-title { color: var(--text) !important; }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.card, .anki-row {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.anki-row { margin-bottom: 10px; max-width: 900px; }
+a.card:hover { border-color: #5a5a66; }
+.card-title { font-weight: 600; font-size: 14px; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card-time { color: var(--dim); font-weight: 600; }
+.card-status { font-family: Consolas, monospace; font-size: 12px; color: var(--dim); margin-top: 6px; word-break: break-all; }
+
+.progress {
+  position: relative;
+  height: 20px;
+  background: #18181d;
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 8px 0 6px;
+  /* ---- Наклон стыков полос – параллельно "/" (0.406 по горизонтали на 1 по вертикали) ---- */
+  --slant: 8px;
+}
+
+.progress-fill { height: 100%; background: #1f5a33; }
+.progress-label { position: absolute; left: 8px; font-size: 12px; pointer-events: none; }
+
+.author-row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+.author-row input, #download-url {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-family: var(--font);
+}
+
+#download-url { width: 520px; max-width: 100%; }
+.flagged-text { color: #ffa657; }
+.progress.thin {
+  height: 5px;
+  margin: 4px 0 0;
+  /* полоса 20 px */
+  --slant: 2px;
+}
+
+/* Полоса из цветных отрезков (библиотека): слева — по порядку, справа —
+   прижатые к правому краю (вернувшиеся из Anki / флаги). */
+.progress.segmented { display: flex; justify-content: space-between; }
+.progress.segmented .seg-left,
+.progress.segmented .seg-right { display: flex; height: 100%; }
+.seg { height: 100%; flex: none; }
+.seg.ok { background: #1f5a33; }
+.seg.changed { background: #8a6d0b; }
+.seg.deleted { background: #7a2a2a; }
+.seg.returned { background: #6b3fa0; }
+.translation-text { color: #7ee787; }
+
+/* Флаги Anki — цветные точки (как в Anki). */
+.flag-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: middle; background: #666; }
+.flag-dot.f1 { background: #e5534b; }
+.flag-dot.f2 { background: #f0883e; }
+.flag-dot.f3 { background: #57ab5a; }
+.flag-dot.f4 { background: #539bf5; }
+.flag-dot.f5 { background: #e275ad; }
+.flag-dot.f6 { background: #39c5cf; }
+.flag-dot.f7 { background: #986ee2; }
+
+/* Полоса "Отредактировано": просмотрено и принято без правок — синее. */
+.seg.accepted { background: #2f5f9e; }
+
+/* Описание раздела (Видео, Обработка) — чуть мельче. */
+.page-note { font-size: 12px; }
+
+/* Видео готово целиком (отредактировано, передано, ничего не вернулось, всё переведено). */
+.translated-all { color: #7ee787; }
+.translated-all .tick { font-weight: 700; }
+/* Полосы: подпись слева, "N / K" справа; ширины меняются плавно. */
+.progress-label { right: 8px; display: flex; justify-content: space-between; gap: 8px;}
+.progress-count { font-variant-numeric: tabular-nums; }
+.seg { transition: width 0.9s cubic-bezier(0.22, 0.61, 0.36, 1); }
+/* Стык двух цветов – под наклоном: отрезок со скосом слева заходит на 6 px
+   под предыдущий; скос справа – переход в серое. */
+.progress.thin .seg { height: 100%; }
+
+/* "Переведено" – розовый акцент. */
+.seg.translated { background: #9d3f72; }
+a.card.complete:hover { border-color: rgba(244, 114, 182, 0.24); }
+/* Текст в строках таблиц окна — оптически посередине между разделителями
+   (как в кнопках: строка Segoe UI сидит ниже центра, приподнимаем на 1.5 px). */
+/* Обе группы отрезков — на всю ширину полосы, чтобы проценты считались от
+   всей полосы (раньше у правой группы не было своей ширины и фиолетовый
+   отрезок схлопывался, а левая группа укорачивалась на его ширину). Правая
+   группа лежит поверх и прижата к правому краю. */
+.progress.segmented .seg-left { flex: 0 0 100%; }
+.progress.segmented .seg-right {
+  position: absolute; inset: 0; justify-content: flex-end; pointer-events: none;
+}
+.progress.segmented .seg-right .seg { pointer-events: auto; }
+a.card.to-translate:hover { border-color: rgba(63, 185, 80, 0.22); }
+a.card.to-send:hover { border-color: rgba(96, 165, 250, 0.24); }
+
+/* Карточки видео – серее фона страницы (как серая часть градиентов). */
+.card { background: #141418; }
+
+/* Кнопка следующего шага на карточке – высотой с полосу. При нажатии плавно
+   сворачивается (высота, отступ, прозрачность), карточка уменьшается вместе с ней. */
+.card-action {
+  display: block; width: 100%; height: 20px; margin-top: 8px; padding: 0 0 1px;
+  font-size: 12px; line-height: 18px; color: #fff; border-radius: 5px;
+  transition: height 0.3s ease, margin-top 0.3s ease, opacity 0.2s ease, border-width 0.3s ease;
+  background-size: 28px 100%;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --stripe: 14px;      /* ширина цветной полосы (по нормали) */
+  /* ---- Кнопка-зебра: узор-картинка с целым шагом (SVG), слой сдвигается ровно
+     на один шаг узора – цикл бесшовный (раньше шаг градиента округлялся, и на
+     стыке цикла был рывок). Полосы и промежутки – 26 px, во время процесса – 52 px. ---- */
+  --period: 52px;
+}
+.card-action.translate { background: #9d3f72; border: 1px solid #b6528a; }
+.card-action.translate:hover:not(:disabled) { background: #b0487f; }
+.card-action.send { background: #1f5a33; border: 1px solid #2c7a47; --zebra: #1f6b3b; }
+.card-action.send:hover:not(:disabled) { background: #256b3d; }
+.card-action.gone { height: 0 !important; margin-top: 0; opacity: 0; border-width: 0; }
+.card-action:disabled { cursor: default; }
+
+/* Обработка (этап 1) – синяя полоса. */
+.progress.processing .progress-fill { background: #2f5f9e; }
+
+/* Название видео на карточках – не больше двух строк, дальше "…". */
+.card-title { display: -webkit-box; overflow: hidden;}
+
+/* Раздел "Видео": название – одна строка, мельче; дальше "…".
+   ("Обработка" – две строки, как было.) */
+#videos-list .card-title { -webkit-line-clamp: 1; font-size: 13px; }
+.page-head + .page-note { margin-top: 0; }
+
+/* Скачивание – рыжая полоса (в "Обработке" и в сайдбаре). */
+.seg.downloading { background: #b5651d; }
+.card-status.failed { color: #ff7b72; }
+
+/* полоса 5 px (сайдбар) */
+.seg.sl { margin-left: calc(-1 * var(--slant)); clip-path: polygon(var(--slant) 0, 100% 0, 100% 100%, 0 100%); }
+.seg.sr { clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); }
+.seg.sl.sr { clip-path: polygon(var(--slant) 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); }
+
+/* ---- Обводки блоков (карточки видео, настройки) – мягче ---- */
+.card { border-color: rgba(255, 255, 255, 0.06); }
+a.card:not(.complete):not(.to-send):not(.to-translate):hover { border-color: rgba(255, 255, 255, 0.14); }
+
+/* ---- "Не озвучено" (бирюзовый) ---- */
+.seg.unvoiced { background: #1f7f7a; }
+
+/* В очереди в Anki (ещё не карточка) – жёлтый отрезок полосы "Передано в Anki". */
+.seg.queued { background: #7a6420; }
+a.card.has-returned:hover { border-color: rgba(163, 113, 247, 0.26); }
+.card-action {
+  border-color: transparent !important;}
+.card-action.send { background-image: repeating-linear-gradient(112deg, #1f6b3b 0 7px, #2b3a30 7px 14px); }
+.card-action.translate { background-image: repeating-linear-gradient(112deg, #a3407a 0 7px, #3a2a33 7px 14px); }
+.card-action.send:hover:not(:disabled), .card-action.translate:hover:not(:disabled) { filter: brightness(1.12); }
+
+/* ---- Кнопка шага на карточке: зебра на сером фоне (как пустая часть
+   полосы), плавно бежит (сдвиг псевдоэлемента, без перерисовки фона). ---- */
+.card-action {
+  position: relative; overflow: hidden; border: none !important; background: #1b1b21 !important;
+  animation: none;}
+.card-action.busy { --stripe: 30px; cursor: default; opacity: 1; --period: 104px; }
+.card-action::before {
+  content: ""; position: absolute; top: 0; bottom: 0; will-change: transform;
+  left: calc(-1 * var(--period));
+  right: 0;
+  width: auto;
+  background: none;
+  background-repeat: repeat-x;
+  background-size: var(--period) 100%;
+  animation: zebra-slide 1.6s linear infinite;
+  /* Фаза полос задаётся от часов (pages.js, zebraPhase) – перерисовка не сбрасывает её. */
+  animation-delay: var(--zdelay, 0ms);
+  /* Зебра кнопок шага – на canvas (pages.js, Zebra), прежняя CSS-анимация не нужна. */
+  display: none;
+}
+.card-action > span { position: relative; }
+.card-action.translate { --zebra: #a3407a; }
+@keyframes zebra-slide { from { transform: translateX(0); } to { transform: translateX(var(--period)); } }
+
+.card-action.busy::before { animation-duration: 2.6s; }
+.card-action.send:not(.busy)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='20' viewBox='0 0 52 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 34,0 26,20 0,20' fill='%231f6b3b'/%3E%3Cpolygon points='-44,0 -18,0 -26,20 -52,20' fill='%231f6b3b'/%3E%3C/svg%3E"); }
+.card-action.send.busy::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='104' height='20' viewBox='0 0 104 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 60,0 52,20 0,20' fill='%231f6b3b'/%3E%3Cpolygon points='-96,0 -44,0 -52,20 -104,20' fill='%231f6b3b'/%3E%3C/svg%3E"); }
+/* ---- Карточки видео и обработки: от верха до названия = от названия до
+   следующего блока (полосы / статуса). ---- */
+.card-title { margin-bottom: 0; }
+/* ---- Карточки видео: равные отступы по вертикали ----
+   сверху до названия = снизу до "Место на диске" (12 px, поля карточки);
+   название → первая полоса = последняя полоса → "Место на диске" (12 px);
+   строка "Место на диске" и кнопка шага – одной высоты (20 px), поэтому
+   карточка с кнопкой той же высоты, что и без неё. */
+.card > .muted.small, .card > .card-action, .card > .card-status { margin-top: 12px; }
+.card > .muted.small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  height: 16px;
+  line-height: 16px;
+  /* Снизу под "Местом на диске" – на 1 px меньше (13 px); у карточки с кнопкой
+     нижнее поле тоже на 1 px меньше – высоты карточек по-прежнему равны. */
+  margin-bottom: 1px;
+  /* Подстройка карточек: над "Местом на диске" +1 px (снизу без изменений);
+     у карточки с кнопкой – +1 px снизу (высоты равны); под названием +1 px. */
+  margin-top: 11px;
+}
+.card > .card-action {
+  height: 20px;
+  /* Пересчёт: кнопка шага – на том же расстоянии от полос, что и полосы друг от
+     друга (8 px). Без кнопки: последняя полоса → 12 px → строка "Место на диске"
+     (16 px) → 12 px до края; с кнопкой: 8 px → кнопка (20 px) → 12 px до края –
+     высота карточки одна и та же (40 px под полосами). */
+  margin-top: 8px;
+}
+/* Подстройка на глаз: "Место на диске" – на 2 px выше (снизу +2 px), название –
+   на 1 px ниже (до полосы −1 px); полосы и высота карточки не меняются. */
+.card { padding-top: 12px; }
+
+.card:has(> .card-action) { padding-bottom: 12px; }
+/* ---- "Перевести": полосы в 7 раз шире (182 px); "Выполняется перевод…" –
+   вдвое уже (91 px) и в 1.5 раза быстрее. Длительности – и в pages.js
+   (ZEBRA_MS, фаза от часов). ---- */
+.card-action.translate.busy { cursor: pointer; }
+/* Полосы – снова 20 px. */
+.progress:not(.thin) { height: 20px; }
+
+/* "Перевести" – полосы ещё в 1.27 раза шире (231 px); "Выполняется
+   перевод…" – в 6 раз уже (15 px) и ещё в 1.5 раза быстрее. */
+.card-action.translate:not(.busy) { --period: 462px; }
+.card-action.translate.busy { --period: 30px; }
+.card-action.translate:not(.busy)::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='462' height='20' viewBox='0 0 462 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 239,0 231,20 0,20' fill='%23a3407a'/%3E%3Cpolygon points='-454,0 -223,0 -231,20 -462,20' fill='%23a3407a'/%3E%3C/svg%3E"); animation-duration: 14215ms; }
+.card-action.translate.busy::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='20' viewBox='0 0 30 20' preserveAspectRatio='none'%3E%3Cpolygon points='8,0 23,0 15,20 0,20' fill='%23a3407a'/%3E%3Cpolygon points='-22,0 -7,0 -15,20 -30,20' fill='%23a3407a'/%3E%3C/svg%3E"); animation-duration: 410ms; }
+
+/* Название группы → карточки: чуть больше (14 px), но меньше, чем от
+   последней карточки до следующей группы (22 px). */
+.view h2.group-title { margin-bottom: 14px; }
+
+.card-action > canvas.zebra { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* "Править" с зеброй (есть что править). */
+.zebra-host { position: relative; overflow: hidden; }
+.zebra-host > canvas.zebra { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+.zebra-host[data-zebra] > canvas.zebra { display: block; }
+.zebra-host[data-zebra] { background: #1b1b21 !important; border-color: transparent !important; }
+.zebra-host > span { position: relative; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+/* Подсветка по шагу обработки (градиент из угла, как у карточек "Видео"). */
+a.card.proc-red { background: radial-gradient(120% 160% at 0% 0%, rgba(181, 101, 29, 0.14), transparent 55%), linear-gradient(160deg, #1b1310, #111115 70%); border-color: rgba(181, 101, 29, 0.14); }
+a.card.proc-blue { background: radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.12), transparent 55%), linear-gradient(160deg, #11141b, #111115 70%); border-color: rgba(96, 165, 250, 0.12); }
+a.card.proc-green { background: radial-gradient(120% 160% at 0% 0%, rgba(63, 185, 80, 0.1), transparent 55%), linear-gradient(160deg, #111a14, #111115 70%); border-color: rgba(63, 185, 80, 0.11); }
+a.card.proc-yellow { background: radial-gradient(120% 160% at 0% 0%, rgba(227, 179, 65, 0.11), transparent 55%), linear-gradient(160deg, #1a1810, #111115 70%); border-color: rgba(227, 179, 65, 0.11); }
+
+/* Кнопка шага исчезла – её копия сжимается (обратное grow-in). */
+@keyframes shrink-out { from { height: 20px; opacity: 1; } to { height: 0; margin-top: 0; opacity: 0; } }
+.card-action.shrink-out { animation: shrink-out 0.3s ease-in forwards; pointer-events: none; overflow: hidden; }
+a.card.started:hover { border-color: rgba(225, 225, 235, 0.16); }
+/* Видео на отключённом диске. */
+.card.offline-card { opacity: 0.5; cursor: default; }
+
+/* Полоса переноса на другой диск в «Сейчас идёт». */
+.seg.moving { background: #6b6b78; }
+.half-card .author-row { margin-top: 12px; }
+/* "Добавить": поле ссылки занимает остаток строки, кнопка не вылезает за блок. */
+.half-card .author-row input.wide, .half-card #download-url { flex: 1 1 auto; min-width: 0; width: auto; }
+.half-card .author-row .step-btn { flex: none; }
+.seg-count { color: var(--dim); font-size: 12px; margin-left: 2px; }
+.seg-count:empty { display: none; }
+
+/* Переключатель режима Видео / Аудио в меню: выбранная кнопка и подсветка
+   всего переключателя – синие у видео, розовые (с переливом) у аудио. */
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 2px 0 10px;
+  border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); background: #121217;
+  transition: box-shadow 0.4s ease, border-color 0.4s ease, background 0.4s ease; }
+.mode-switch button { height: 30px; border: none; border-radius: 7px; background: transparent; color: var(--dim);
+  font-size: 13px; transition: background 0.35s ease, color 0.35s ease, box-shadow 0.35s ease;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  /* Кнопки Видео/Аудио: текст по центру по вертикали по буквам (замер пикселей
+     при масштабе 100%/125%/150%) – чуть выше центра строки шрифта. */
+  padding: 0 0 3.5px;
+}
+.mode-switch button:hover { color: var(--text); }
+.mode-switch.video button.active { background: linear-gradient(135deg, #2f5f9e, #214a73); color: #fff; }
+.mode-switch.audio button.active {
+  background: linear-gradient(135deg, #c2508f, #8957e5, #c2508f);
+  color: #fff;
+  background-image: linear-gradient(90deg, #c2508f, #8957e5, #c2508f);
+}
+/* Переключатель режима: без теней; выбранная кнопка – непрерывный плавный
+   перелив градиента в одну сторону (как зебра, только без полос): видео –
+   сине-фиолетовый, аудио – розово-фиолетовый. Рамка – в тон режима. */
+.mode-switch.video, .mode-switch.audio { box-shadow: none; }
+.mode-switch.video { border-color: rgba(96, 165, 250, 0.3); }
+.mode-switch.audio { border-color: rgba(240, 139, 196, 0.32); }
+.mode-switch.video button.active, .mode-switch.audio button.active {
+  box-shadow: none;
+  background-size: 300% 100%;
+  animation: mode-flow-back 7s linear infinite;
+}
+/* Переключатель режима: текст ровно по центру кнопки (по вертикали). Перелив –
+   в другую сторону и шире: узор в 3 ширины кнопки (цвет1 → цвет2 → цвет1),
+   за цикл сдвигается ровно на свой период – стык не виден. */
+.mode-switch button { display: flex;}
+@keyframes mode-flow-back { from { background-position: 150% 0; } to { background-position: 0% 0; } }
+/* Режим "Видео": перелив с голубого на фиолетовый. */
+.mode-switch.video button.active { background-image: linear-gradient(90deg, #3a9de8, #6a4fd6, #3a9de8); }
+.mode-switch.audio .mode-pill { transform: translateX(calc(100% + 2px)); }
+.mode-pill .pill-video { background-image: linear-gradient(90deg, #3a9de8, #9a86f5, #3a9de8); }
+.mode-pill .pill-audio { background-image: linear-gradient(90deg, #c2508f, #8957e5, #c2508f); opacity: 0; }
+.mode-switch.audio .mode-pill .pill-video { opacity: 0; }
+.mode-switch.audio .mode-pill .pill-audio { opacity: 1; }
+/* Первая отрисовка – без переезда (пилюля сразу на своём месте). */
+.mode-switch.no-anim .mode-pill, .mode-switch.no-anim .mode-pill i { transition: none; }
+
+/* Занятые кнопки на карточках: основной текст и "Отмена?" в одной ячейке
+   (CancelFlip в pages.js). Каждая буква при печати вырастает снизу, при
+   стирании уходит вниз; невидимые буквы место держат – текст не скачет. */
+.card-action .flip { display: inline-grid; position: relative; overflow: hidden; vertical-align: top; }
+.card-action .flip > span { grid-area: 1 / 1; text-align: center; white-space: pre; }
+.card-action .flip .ch {
+  display: inline-block;
+  transform-origin: 50% 100%;
+  opacity: 0;
+  position: relative;
+  transform: none;
+  top: 0.85em;
+  color: transparent;
+  transition: top 0.24s cubic-bezier(0.2, 0.9, 0.3, 1), color 0.16s ease;
+}
+.card-action .flip .ch.on { opacity: 1; top: 0; color: inherit; transform: none; }
+
+/* Время в карточке медиа – как название (размер, жирность, обычные цифры),
+   отличается только цветом. */
+.card-time { font-variant-numeric: normal; margin-right: 0; }
+/* Целые пиксели вместо дробных (дробные высоты ставили блоки на доли
+   пикселя, и монитор округлял их по-разному – "середина" плыла): строка
+   названия 18 px (было 1,35 × 13 = 17,55), отступ под ним 12 px (был 11,86),
+   подсказки полей – 17 px (было 1,4 × 12 = 16,8). */
+.card-title { line-height: 18px; }
+.card-title + .progress, .card-title + .card-status, .card-title + .muted { margin-top: 12px; }
+
+/* Кнопка шага на карточке появляется только прозрачностью – размер и место
+   не меняются (текст на ней вырастает по буквам, textfx.js). */
+@keyframes grow-in { from { opacity: 0; } to { opacity: 1; } }
+.card-action.grow-in { animation: grow-in 0.45s ease-out; }
+
+/* Подпись в полосах – в целых пикселях (сдвиг на полпикселя монитор
+   округлял неровно): сверху 1 px, строка 18 px – цифры ровно посередине. */
+.progress-label { top: 1px; line-height: 18px; transform: none; }
+/* Полосы с подписью – 21 px (нечётная высота: цифры ровно посередине при целых пикселях). */
+.progress.segmented { height: 21px; }
+
+/* Полосы кнопок окна ("Редактировать", "Передать в Anki", "Перевести",
+   "Хранилище") – до самого края кнопки, поверх её рамки: раньше холст лежал
+   внутри рамки в 1 px, и при дробной ширине кнопки справа синего не хватало
+   на пиксель. Скругление – как у кнопки. */
+.zebra-host[data-zebra] { overflow: visible; }
+.zebra-host[data-zebra] > canvas.zebra { inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); border-radius: inherit; }

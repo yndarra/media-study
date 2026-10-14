@@ -156,7 +156,7 @@ const FragList = {
     });
     const keys = shownRows.map((r) => r.id).join(",");
     if (keys === this.keys && this.el.children.length === shownRows.length) {
-      // Те же строки — обновить на месте (фон меняется плавно, см. styles.css).
+      // Те же строки — обновить на месте (фон меняется плавно, см. css/editor.css).
       shownRows.forEach((r, k) => {
         const row = this.el.children[k];
         if (row.className !== r.classes) row.className = r.classes;

@@ -1,0 +1,411 @@
+/* Всплывающее окно (подробности видео): затемнение и карточка с круглыми углами. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: modal-in 0.16s ease-out;
+}
+.modal {
+  position: relative;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #121216;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  padding: 20px 24px;
+  /* Окно: полосы прокрутки не видно (во время раскрытия она мелькала);
+     прокрутка колесом, если окно выше экрана, остаётся. */
+  scrollbar-width: none;
+}
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--muted, #9a9aa5);
+  font-size: 24px;
+  cursor: pointer;
+}
+.modal-head { display: grid; margin: 0 28px 12px 0; }
+.modal-head label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted, #9a9aa5); }
+.modal-head input { font-size: 14px; }
+.modal-actions {
+  display: flex;
+  align-items: center;
+  margin-top: 16px;
+}
+.modal-actions .note, .modal-actions #info-note { flex: 1; }
+.modal textarea.sources { box-sizing: border-box; }
+.modal label.small { display: block; margin: 6px 0 2px; }
+.modal textarea.sources { display: block; width: 100% !important; margin: 4px 0 8px; }
+.modal input:not([type=checkbox]) {
+  background: #18181d;
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* Предложения агента перевода. */
+.agent-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.agent-head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.agent-en { margin: 6px 0; }
+.agent-comments { color: #ffc857; font-size: 13px; margin-bottom: 6px; }
+.agent-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.agent-back { background: #16161b; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.agent-back.old { opacity: 0.75; }
+.agent-back ul { margin: 4px 0 0 18px; padding: 0; }
+
+/* Поля ввода: одинаковая высота; текст по центру по вертикали (у шрифта Segoe UI
+   нижний вынос больше верхнего — при равных отступах текст кажется выше центра). */
+.modal input:not([type=checkbox]),
+#view-settings input:not([type=checkbox]),
+#view-settings select {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 3px 10px 1px;
+  font-size: 14px;
+  line-height: normal;
+}
+.modal-head textarea.grow { width: 100%; }
+.sources-box textarea.grow { width: 100%; }
+
+/* Таблицы в окнах (статистика, место на диске): значения прижаты к правому краю. */
+.modal table.stats td:last-child { text-align: right; padding-right: 0; }
+.modal table.stats td:first-child { padding-right: 24px; }
+
+/* Окно "Перевод": предложения по пачкам. */
+.agent-batch { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin: 12px 0; }
+.agent-batch-head { display: flex; align-items: center; gap: 8px; }
+.agent-batch-head .spacer { flex: 1; }
+.agent-back.new[contenteditable]:focus { outline: 1px solid #2f5f9e; }
+
+/* Многострочные значения в таблицах окон: первая строка + стрелка, остальное раскрывается. */
+.multi-first {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  /* Таблицы в окнах: у всех строк одна высота строки, кнопка-стрелка её не
+     раздвигает – раскрытые строки и одиночная выглядят одинаково. */
+  height: 20px;
+}
+.multi-toggle {
+  width: 22px; padding: 0; border: none; background: transparent; color: var(--dim);
+  font-size: 13px; transition: transform 0.2s ease;
+  height: 20px;
+  line-height: 20px;
+}
+.multi-toggle.open { transform: rotate(180deg); }
+.multi-toggle:hover:not(:disabled) { background: #1f1f25; color: var(--text); }
+.multi-rest { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; padding-right: 28px; }
+.modal table.stats a { color: #79c0ff; text-decoration: none; }
+.modal table.stats a:hover { text-decoration: underline; }
+
+/* Окно подробностей видео — компактнее: заголовки и таблицы мельче, окно уже. */
+.modal { width: min(720px, 100%); }
+.modal h2 { font-size: 14px; margin: 16px 0 6px; }
+/* Флажок "Пакетом" в строке кнопок: без внешних отступов, по центру строки. */
+.modal-actions label.check {
+  margin: 0;
+  white-space: nowrap;
+  /* Флажок "Пакетом" в окне видео: отступ между флажком и словом (у label
+     с классом small иначе пропадал flex и вместе с ним промежуток). */
+  display: flex;
+  gap: 8px;
+}
+.batch-check .muted { font-size: 12px; }
+/* Статус перевода в строке кнопок: коротко, в одну строку, ход перевода — зелёным. */
+#info-note { overflow: hidden; text-overflow: ellipsis; min-width: 0; transition: opacity 0.3s ease; }
+#info-note.running { color: #3fb950; }
+
+/* Видео готово (всё переведено, править нечего): лёгкий розовый градиент
+   из левого верхнего угла и мягкое свечение – только слева и сверху. */
+a.card.complete, .modal.complete {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(244, 114, 182, 0.13), transparent 55%),
+    linear-gradient(160deg, #19121a, #111115 70%);
+  border-color: rgba(244, 114, 182, 0.11);
+}
+
+/* Окно появляется и гаснет мягко (страница под ним не перерисовывается). */
+@keyframes modal-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-pop { from { transform: translateY(6px) scale(0.985); } to { transform: none; } }
+.modal-overlay .modal { animation: modal-pop 0.16s ease-out; }
+.modal-overlay.closing { opacity: 0; transition: opacity 0.15s ease-in; pointer-events: none; }
+
+/* Осталось только перевести: тот же розовый градиент, но слабее, и кнопка. */
+/* Всё в Anki, идёт или осталось перевод – зелёное (цвет Anki). */
+a.card.to-translate, .modal.to-translate {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(63, 185, 80, 0.09), transparent 55%),
+    linear-gradient(160deg, #111a14, #111115 70%);
+  border-color: rgba(63, 185, 80, 0.1);
+}
+/* Всё отредактировано, но не всё передано в Anki: то же оформление, синее. */
+a.card.to-send, .modal.to-send {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.11), transparent 55%),
+    linear-gradient(160deg, #11141b, #111115 70%);
+  border-color: rgba(96, 165, 250, 0.11);
+}
+
+/* "Статистика" – чуть дальше от полос. */
+.modal .modal-bars + h2, .modal .modal-bars + div + h2 { margin-top: 22px; }
+
+/* Новое содержимое окна (после "Загрузка…") проявляется из ничего. */
+@keyframes appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.modal-body > .appear { animation: appear 0.35s ease-out both; }
+
+/* Ссылки и глубокий поиск плавно раскрываются/сворачиваются (флажок "Поиск
+   достоверных источников…"). */
+.sources-box { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.3s ease, opacity 0.25s ease; }
+.sources-box > .sources-inner { min-height: 0; overflow: hidden; }
+.sources-box.collapsed { grid-template-rows: 0fr; opacity: 0; }
+
+.modal::-webkit-scrollbar { display: none; }
+
+/* Флажок "Пакетом" – по середине слова (замерено). */
+.modal-actions label.check input[type=checkbox] { transform: translateY(1px); }
+
+/* Поля названия и автора в окнах – текст белее. */
+.modal-head input, .modal-head textarea { color: var(--text); }
+
+/* "Загрузка…" в окне – на месте: отступы абзаца входят в высоту содержимого. */
+.modal-body { display: flow-root; }
+
+/* Окно "Обработки": первый флажок – дальше от полей названия и автора. */
+.process-form > label.check:first-of-type, .process-form > .progress + label.check,
+.process-form > .card-status + label.check { margin-top: 16px; }
+/* Пока над видео идёт работа – поля и флажки только для просмотра. */
+.modal input:disabled, .modal textarea:disabled { opacity: 0.6; cursor: default; }
+.modal label.check:has(input:disabled) { cursor: default; opacity: 0.7; }
+
+/* Поле "Автор" – такой же белый текст, как "Название" (и в "Видео", и в "Обработке"). */
+.modal .modal-head input:not([type=checkbox]), .modal .modal-head textarea { color: var(--text); }
+
+/* ---- Вопрос "Несохранённые изменения" ---- */
+.ask-overlay {
+  position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(2px); animation: modal-in 0.15s ease-out;
+}
+.ask-overlay.closing { opacity: 0; transition: opacity 0.15s ease-in; }
+.ask { padding: 22px 22px 18px; text-align: center;
+  background: #16161b; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55); animation: modal-pop 0.18s ease-out;
+}
+.ask-icon {
+  width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: rgba(255, 200, 87, 0.12);
+}
+.ask-icon svg { width: 20px; height: 20px; fill: #ffc857; }
+.ask-title { font-size: 15px; font-weight: 600; }
+.ask-text { font-size: 13px; color: var(--dim); margin-top: 4px; line-height: 1.45; }
+.ask-actions { display: flex; gap: 8px; margin-top: 18px; }
+.ask-actions .step-btn { flex: 1; }
+#info-note.sending { color: #3fb950; }
+
+/* Есть вернувшиеся из Anki фрагменты – фиолетовое. */
+a.card.has-returned, .modal.has-returned {
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(163, 113, 247, 0.12), transparent 55%),
+    linear-gradient(160deg, #16121d, #111115 70%);
+  border-color: rgba(163, 113, 247, 0.12);
+}
+
+/* Кнопки в строке окна видео – ближе друг к другу. */
+.modal-actions { gap: 8px; }
+.modal-actions label.check { margin-left: 4px; }
+.modal-head input:disabled, .modal-head textarea:disabled { opacity: 0.6; }
+
+/* ---- Окно видео: пока идёт процесс – статус справа вместо "Сохранить" ---- */
+#info-note.busy { margin-left: auto; flex: none; text-align: right; }
+.batch-check .muted.hidden { display: none; }
+
+/* ---- Окно "Обработки": флажки и подписи мельче ---- */
+.process-form label.check {
+  font-size: 13px;
+  /* ---- Окно "Обработки": флажки ближе друг к другу ---- */
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+.process-form label.check input[type=checkbox]::after { width: 7px; height: 4px; }
+.process-form > label.check:first-of-type { margin-top: 14px; }
+.sources-box label.check { margin-top: 8px; margin-bottom: 0; }
+.ask-text b { color: var(--text); font-weight: 600; }
+.ask.danger .ask-icon { background: rgba(255, 123, 114, 0.12); }
+.ask.danger .ask-icon svg { fill: #ff7b72; }
+.ask { width: 360px; }
+
+/* ---- Окно видео: строка кнопок ---- */
+.modal-actions { border-top: none; padding-top: 0; }
+/* Сворачиваемое (при процессе): плавно сужается и гаснет. */
+.modal-actions .fold {
+  transition: max-width 0.35s ease, opacity 0.25s ease, margin 0.35s ease, padding 0.35s ease, border-width 0.35s ease;
+  max-width: 260px;
+  min-width: 0;
+}
+.modal-actions .fold.gone {
+  max-width: 0;
+  opacity: 0;
+  margin: 0 -4px 0 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  min-width: 0;
+}
+.modal-actions .batch-check .muted.fold { display: inline-block; white-space: nowrap; overflow: hidden; vertical-align: bottom; }
+.step-btn.translate-ready { background: #9d3f72; border-color: #b6528a; color: #fff; }
+.step-btn.translate-ready:hover:not(:disabled) { background: #b0487f; }
+.modal-actions .step-btn.fold:not(.gone) { min-width: 46px; }
+
+/* ---- Карточки "Обработки" – те же отступы, что в "Видео" ----
+   под названием: строка состояния (11 + 16 + 1, как "Место на диске") или
+   полоса хода (8 + 20, как кнопка шага) – высота карточки одинаковая. */
+#process-list .card-title + .muted.small { margin-top: 11px; margin-bottom: 1px; height: 16px; line-height: 16px; }
+#process-list .muted.small.failed { color: #ff7b72; }
+/* Название в "Обработке" – тем же шрифтом, что в "Видео" (там – до 2 строк). */
+#process-list .card-title { font-size: 13px; }
+
+/* Шапка окон (Видео и Обработка): название шире, промежуток меньше; автор –
+   до правого края окна (крестик выше, на уровне подписей); поле автора –
+   той же высоты, что и название (когда название в несколько строк). */
+.modal-head { grid-template-columns: 1fr 230px; gap: 8px; align-items: stretch; }
+.modal-head label > input, .modal-head label > textarea { flex: 1 1 auto; box-sizing: border-box; }
+/* Полосы под названием – на 1 px ниже. */
+.modal .modal-bars, .modal .process-form > .progress { margin-top: 1px; }
+
+/* Окно обработки – с подсветкой этапа, как карточка. */
+.modal.proc-blue { background: radial-gradient(120% 160% at 0% 0%, rgba(96, 165, 250, 0.12), transparent 55%), linear-gradient(160deg, #11141b, #121216 70%); border-color: rgba(96, 165, 250, 0.16); }
+.modal.proc-green { background: radial-gradient(120% 160% at 0% 0%, rgba(63, 185, 80, 0.1), transparent 55%), linear-gradient(160deg, #111a14, #121216 70%); border-color: rgba(63, 185, 80, 0.15); }
+.modal.proc-yellow { background: radial-gradient(120% 160% at 0% 0%, rgba(227, 179, 65, 0.11), transparent 55%), linear-gradient(160deg, #1a1810, #121216 70%); border-color: rgba(227, 179, 65, 0.15); }
+.modal.proc-red { background: radial-gradient(120% 160% at 0% 0%, rgba(181, 101, 29, 0.14), transparent 55%), linear-gradient(160deg, #1b1310, #121216 70%); border-color: rgba(181, 101, 29, 0.18); }
+
+/* Значение таблицы, свёрнутое в одну строку (▾ – целиком). */
+.multi-first.one-line { height: auto; align-items: flex-start; }
+.one-line-text { display: block; min-width: 0; flex: 0 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.one-line.open .one-line-text { white-space: normal; }
+
+/* "Править" и "Обработать" – одна и та же кнопка: высота, отступы, текст. */
+#info-edit, #process-go { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  height: 34px; padding: 0 10px 2px; line-height: 1; font: 14px var(--font); vertical-align: middle; min-width: 0; }
+/* Свёрнутое значение не растягивает таблицу: ячейка берёт оставшуюся ширину. */
+table.stats td:has(> .one-line) { max-width: 0; width: 100%; }
+
+/* Поле автора: та же высота, что у названия, текст – сверху. */
+.modal-head textarea.fixed { width: 100%; height: auto; }
+
+/* "Пакетом" – переключатель-плашка (не флажок и не кнопка): скруглённая,
+   с точкой; включён – подсвечен розовым (как "Перевести"), выключен – тихий. */
+.batch-chip { display: inline-flex; align-items: center; gap: 7px; box-sizing: border-box;
+  cursor: pointer; user-select: none; white-space: nowrap; transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  padding: 0 10px 2px;
+  border: 1px solid #45454e;
+  border-style: solid;
+  color: var(--text);
+  font-size: 14px;
+}
+.batch-chip input { display: none; }
+.batch-chip:hover { color: var(--text); }
+.batch-dot { width: 7px; height: 7px; border-radius: 50%; background: #4a4a55; transition: background 0.2s ease, box-shadow 0.2s ease; }
+.batch-chip:has(input:checked) { border-style: solid; border-color: rgba(214, 102, 163, 0.65); background: rgba(157, 63, 114, 0.22);
+  color: #f6d6e8; box-shadow: 0 0 10px rgba(214, 102, 163, 0.18); }
+.batch-chip:has(input:checked) .batch-dot { background: #f08bc4; box-shadow: 0 0 6px #f08bc4; }
+
+/* Окна видео (оба раздела): побольше места между последней таблицей и кнопками. */
+.modal .modal-actions { margin-top: 26px; }
+/* Крестика нет – шапка окна до правого края. */
+.modal-head { margin-right: 0; }
+
+/* Начатое видео (что-то отредактировано, но не всё) – светло-серый градиент. */
+a.card.started, .modal.started {
+  background: radial-gradient(120% 160% at 0% 0%, rgba(225, 225, 235, 0.08), transparent 55%), linear-gradient(160deg, #18181c, #111115 70%);
+  border-color: rgba(225, 225, 235, 0.09);
+}
+
+/* "Пакетом" – размером и видом как кнопка (высота, рамка, скругление), с точкой;
+   включён – розовая подсветка. */
+.batch-chip { height: 34px; border-radius: 5px;
+  background: #1f1f25;}
+.batch-chip:hover { background: #26262d; border-color: #55555f; }
+/* "Пакетом" серая, пока окно занято (перенос / несохранённые изменения). */
+.batch-chip.disabled { opacity: 0.4; pointer-events: none; }
+
+/* Окошко "Хранилище": диски-варианты; выбранный подсвечен. */
+.storage-ask { width: min(460px, 100%); }
+.storage-options { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; }
+.storage-option { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; text-align: left; padding: 9px 12px;
+  border-radius: 7px; border: 1px solid #45454e; background: #1f1f25; color: var(--text); cursor: pointer; }
+.storage-option:hover { background: #26262d; }
+.so-name { font-size: 14px; }
+.so-free { font-size: 12px; color: var(--dim); grid-row: span 2; align-self: center; }
+.so-path { font-size: 12px; color: var(--dim); }
+
+/* Окно журналов. */
+.log-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.log-window { width: min(1200px, 100%); height: min(720px, 100%); display: flex; flex-direction: column; background: #0d0d10;
+  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); overflow: hidden; }
+.log-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.log-tab { height: 28px; padding: 0 12px 1px; font-size: 13px; background: transparent; border: 1px solid transparent; color: var(--dim); border-radius: 6px; }
+.log-tab:hover { color: var(--text); }
+.log-tab.active { background: #1f1f25; border-color: #45454e; color: var(--text); }
+.log-follow { margin-left: auto; }
+.log-close { background: transparent; border: none; color: var(--dim); font-size: 22px; line-height: 1; padding: 0 6px; }
+.log-close:hover { color: var(--text); }
+.log-body { flex: 1; margin: 0; padding: 10px 14px; overflow: auto; font: 12.5px/1.5 Consolas, "Cascadia Mono", monospace; color: #c9c9d1; white-space: pre-wrap; word-break: break-word; }
+.modal .modal-title { margin: 0 0 10px; font-size: 16px; }
+.modal .results-list td:first-child { white-space: nowrap; }
+/* Список результатов таймера: название видео переносится, таблица не шире окна. */
+.modal table.results-list { width: 100%; }
+.modal .results-list td:nth-child(2), .modal .results-list th:nth-child(2) { white-space: normal; text-align: left; width: 100%; }
+.modal .results-list td:first-child, .modal .results-list th:first-child { padding-right: 14px; }
+/* "Обработка": после названия – как в "Видео" (11.86 px до полосы). Строка
+   состояния без полосы – той же высоты, что полоса (20 px), текст по её
+   середине: карточки с полосой и без – одной высоты, текст посередине между
+   названием и низом карточки. */
+#process-list .card-title + .progress { margin-bottom: 0; margin-top: 12px; }
+#process-list a.card > .card-title + .muted.small, #process-list a.card > .card-title + .card-status {
+  height: 20px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  /* "Обработка": строка состояния ("Добавлено, ждёт обработки") – чуть ближе к
+     названию, и карточка от этого ниже (карточка с полосой хода – как была). */
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+/* Статус переноса – в две строки: "Перенос на D: …:" и под ним "82% – 15.8/19.3 ГБ". */
+#info-note, .modal-actions .note { white-space: pre-line; }
+#info-note.busy { line-height: 1.35; }
+
+/* Окно хранилища: отступ списка от заголовка; выбор – синий фон (без
+   градиента); текущее – всегда синяя обводка; наведение: невыбранное –
+   серее, выбранное – светлее синим. */
+.storage-ask .storage-options { margin-top: 16px; }
+.storage-option.current, .storage-option.current:hover { background: #1f1f25; }
+.storage-option.current { border-color: #3f7fd0; cursor: pointer; }
+.storage-option.chosen, .storage-option.current.chosen { background: rgba(47, 95, 158, 0.28); border-color: #3f7fd0; }
+.storage-option:not(.chosen):hover { background: #2a2a31; }
+.storage-option.chosen:hover, .storage-option.current.chosen:hover { background: rgba(70, 130, 210, 0.36); }
+/* "Редактировать" в окне – ссылка-кнопка: отступ, как у обычных кнопок (текст по центру цифр). */
+.modal-actions a.step-btn, #info-edit { padding-top: 0; padding-bottom: 1px; }
+
+/* Окно обработки: языки видео – с отступом от галочек. */
+.process-form .proc-langs { margin-top: 12px; }
+/* Окно видео: первый вид кнопок – без перехода (см. videoModal). */
+.modal-actions.fold-instant .fold { transition: none !important; }
+
+/* Окно обработки: галочка ровно посередине высоты заглавных букв подписи, на
+   целых пикселях: буква 9 px (нечётная) – галочка 15 px, строка 21 px. */
+.process-form label.check { line-height: 21px; }
+.process-form label.check input[type=checkbox] { width: 15px; height: 15px; transform: translateY(2px); }

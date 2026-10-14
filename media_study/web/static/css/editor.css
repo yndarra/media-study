@@ -1,0 +1,394 @@
+#fraglist {
+  grid-column: 3;
+  grid-row: 1;
+  /* Правый список фрагментов. */
+  display: flex;
+  flex-direction: column;
+}
+
+#fraglist-filter {
+  background: #1f1f25;
+  color: var(--text);
+  border: 1px solid #45454e;
+  border-radius: 5px;
+  padding: 4px;
+  font-family: var(--font);
+}
+
+#fraglist-items { overflow-y: auto; flex: 1; }
+
+.frag-row {
+  display: flex;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--dim);
+  white-space: nowrap;
+  /* Фон всей строки — этап Anki (как строка в git diff); появляется плавно. */
+  transition: background-color 0.6s ease;
+}
+
+.frag-row:hover { background: #17171c; }
+.frag-row.current { color: var(--text); }
+.frag-num { opacity: 0.7; }
+.frag-text { overflow: hidden; text-overflow: ellipsis; }
+/* Номер и текст строки — цвет правки (как полоса "Отредактировано"). */
+.frag-row.accepted .frag-num, .frag-row.accepted .frag-text { color: #79b8ff; opacity: 1; }
+.frag-row.changed .frag-num, .frag-row.changed .frag-text { color: #ffd75e; opacity: 1; }
+.frag-row.deleted .frag-num, .frag-row.deleted .frag-text { color: #ff7b72; opacity: 1; }
+.frag-row.current.bg-anki { background: rgba(46, 160, 67, 0.3); }
+.frag-row.current.bg-translated { background: rgba(236, 72, 153, 0.3); }
+.frag-row.current.bg-pending { background: rgba(210, 160, 30, 0.3); }
+.frag-row.current.bg-returned { background: rgba(137, 87, 229, 0.34); }
+.frag-empty { padding: 12px; color: var(--dim); font-size: 13px; }
+
+/* Удалённый фрагмент — красноватый фон всего интерфейса. */
+body.frag-deleted {
+  background: var(--bg-deleted);
+}
+
+#nav-row {
+  margin-top: auto;
+}
+
+#video-wrap {
+  background: #000;
+  position: relative;
+}
+
+/* Чёрные полосы, записанные в самом видео (катсцены 21:9 внутри 16:9), не
+   показываются: плеер по высоте – только картинка (aspect-ratio задаёт
+   Letterbox), видео сдвинуто вверх на высоту полосы (--bar-w – доля ширины). */
+#video-wrap.letterboxed { aspect-ratio: var(--visible-ratio); }
+#video-inner { position: relative; margin-top: calc(-100% * var(--bar-w, 0)); }
+
+#timeline {
+  width: 100%;
+  height: 72px;
+  display: block;
+  background: #0a0a0d;
+  border-radius: 5px;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.badge {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  border: none;
+}
+
+.badge.edited { background: #5c4a08; color: #ffe27a; }
+.badge.review { background: #4b2a6b; color: #e2c6ff; cursor: pointer; }
+.badge.deleted { background: #7a1f27; color: #ffd0d4; }
+.badge.origin { background: #1d3f63; color: #bfe0ff; }
+.badge.info { background: #34343c; color: #c4c4cc; }
+
+/* Нижний ряд: слева назад, между ним и счётчиком — «добавить в Anki»,
+   счётчик строго по центру, справа вперёд. */
+.nav-grid {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Фон редактора по этапу фрагмента (как фон строки в списке справа):
+   зеленоватый — в Anki, розоватый — переведён, желтоватый — передаётся,
+   фиолетоватый — вернулся из Anki. */
+body.frag-bg-anki { background: #122117; }
+body.frag-bg-translated { background: #24131c; }
+body.frag-bg-pending { background: #2a2614; }
+body.frag-bg-returned { background: #1c1528; }
+
+.badge.stage3 { background: #5c4a08; color: #ffe27a; }
+.badge.stage3.done { background: #1f4a2a; color: #b6f0c2; }
+
+.readout,
+#fragment-status {
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.toast {
+  font-size: 13px;
+  color: #ffb3b3;
+}
+
+#text-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Три фразы (серая, белая, серая) — по центру, как настоящие субтитры,
+   с заметным отступом от кнопок сверху. */
+#context-preview {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  padding: 0 12px;
+  margin-top: 22px;
+  text-align: center;
+}
+
+/* Белая фраза правится на месте: при фокусе не меняется ничего, кроме
+   появившейся каретки. min-height — чтобы в пустую строку можно было кликнуть. */
+/* Белая фраза: новый (набранный/вставленный) текст — зелёный, удалённый
+   исходный — красный (остаётся на месте, в текст фрагмента не входит). */
+#cur-text .ins {
+  color: #7ee787;
+}
+
+/* Исходный текст, записанный на слух (не из источника вроде Notion), —
+   голубой: на него стоит обратить внимание. */
+#cur-text .heard {
+  color: #79c0ff;
+}
+
+#cur-text .del {
+  color: #ff7b72;
+}
+
+/* Пробелы среди нового и удалённого текста видны как полупрозрачная точка
+   (как в редакторах кода): зелёная — новый пробел, красная — удалённый.
+   Сам пробел остаётся настоящим, точка — только рисунок поверх. */
+#cur-text .sp {
+  position: relative;
+}
+
+#cur-text .sp::after {
+  content: "·";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+#cur-text .ins .sp::after { color: rgba(126, 231, 135, 0.35); }
+#cur-text .del .sp::after { color: rgba(255, 123, 114, 0.4); }
+
+/* Новый перенос строки: зелёный знак "↵" в конце строки. */
+#cur-text .ins .nl::before {
+  content: "↵";
+  color: rgba(126, 231, 135, 0.8);
+}
+
+#cur-text {
+  min-height: 1.5em;
+  outline: none;
+  cursor: text;
+  max-width: 100%;
+  box-sizing: border-box;
+  /* Поле правимой фразы: поля 50 px слева и справа (как TEXT_BOX_PAD в app.js). */
+  padding: 0 50px;
+}
+
+.ctx {
+  white-space: pre-wrap;
+}
+
+.ctx.dim { color: var(--dim); }
+.ctx.cur { color: var(--text); }
+
+#position-indicator {
+  font-family: Consolas, monospace;
+  font-size: 14px;
+  color: var(--dim);
+}
+
+/* Скорость воспроизведения рядом с Reset. */
+.speed-btn { font-size: 16px; line-height: 1; }
+.speed-value {
+  min-width: 44px;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  color: var(--muted, #9a9aa5);
+  font: 12px ui-monospace, Consolas, monospace;
+  cursor: pointer;
+}
+.speed-value.changed { color: #ffc857; }
+
+/* Ряд под видео: левая зона занимает всю свою колонку, а время с номером
+   кадра стоит посередине между кнопками слева и статусами по центру. */
+#status-row .group.left { justify-self: stretch; }
+#status-row #time-readout { flex: 1; text-align: center; white-space: nowrap; }
+
+/* Редактор: "Финиш" на последнем фрагменте – голубая. */
+.step-btn.finish { background: #1d5f86; border-color: #3b8fc4; color: #fff; padding: 0 16px; }
+.step-btn.finish:hover:not(:disabled) { background: #2470a0; }
+
+/* ---- Список фрагментов: значок этапа Anki слева от номера (своя колонка) ---- */
+.frag-row { align-items: center; }
+.frag-row.bg-anki, .frag-row.bg-translated, .frag-row.bg-pending, .frag-row.bg-returned { background: none; }
+.frag-row.current { background: rgba(255, 255, 255, 0.08); }
+.frag-row:hover:not(.current) { background: #17171c; }
+.frag-icon { flex: none; width: 14px; height: 14px; background: no-repeat center / 13px 13px;
+  opacity: 0; transition: opacity 0.5s ease;
+  margin-right: 0;
+}
+.frag-row.bg-anki .frag-icon, .frag-row.bg-translated .frag-icon, .frag-row.bg-pending .frag-icon, .frag-row.bg-returned .frag-icon { opacity: 1; }
+/* Галочка (в Anki) – зелёная. */
+.frag-row.bg-anki .frag-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8' fill='none' stroke='%233fb950' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+/* Перевод (две "речи", А и я) – розовый. */
+.frag-row.bg-translated .frag-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 3.5h7M5.5 2v1.5M3.5 3.5c.6 2.4 2.2 4 4.5 5M7.5 3.5c-.6 2.4-2.2 4-4.5 5M8.5 14l2.5-6 2.5 6M9.4 12h3.2' fill='none' stroke='%23f472b6' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+/* Часы (ждёт очереди) – жёлтые. */
+.frag-row.bg-pending .frag-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5.8' fill='none' stroke='%23e3b341' stroke-width='1.5'/%3E%3Cpath d='M8 4.8V8l2.2 1.4' fill='none' stroke='%23e3b341' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); }
+/* Стрелка возврата (вернулся из Anki) – фиолетовая. */
+.frag-row.bg-returned .frag-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6 3.5L2.8 6.7 6 9.9M3 6.7h6.5a3.8 3.8 0 0 1 0 7.6H7' fill='none' stroke='%23a371f7' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+#fraglist-count { white-space: nowrap; margin-left: auto; }
+
+/* Шапка списка фрагментов: фильтр – до правого края. */
+#fraglist-filter-host { flex: 1; min-width: 0; }
+
+/* ---- Значок в списке фрагментов: от края до значка = от значка до номера ---- */
+.frag-row { padding-left: 6px; gap: 6px; }
+.frag-num { text-align: left; min-width: 28px; }
+
+/* Ряд навигации: 1fr | "1 / N" | 1fr; в половинах – кнопки у краёв и средняя
+   кнопка (Anki слева, отметка справа) ровно посередине между ними. */
+.nav-grid { grid-template-columns: 1fr auto 1fr; }
+.nav-half { display: flex; align-items: center; min-width: 0; }
+.nav-mid { flex: 1; display: flex; justify-content: center; align-items: center; }
+.nav-grid .group.stage3 { justify-self: auto; }
+
+/* Правимая фраза: поле шириной с самую длинную строку (+10 px по бокам), не
+   уже 50 px и не шире места; длиннее – перенос по словам. */
+#cur-text { width: fit-content; min-width: 50px; margin: 0 auto;}
+.nav-grid { column-gap: 0; }
+.frag-row.unvoiced .frag-num, .frag-row.unvoiced .frag-text { color: #5fd3c8; opacity: 1; }
+body.frag-unvoiced { background: #0f1f1f; }
+.unvoiced-btn { display: inline-flex; align-items: center; gap: 6px; }
+.unvoiced-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: none;
+}
+.unvoiced-btn.on { background: #17504c; border-color: #2a8a83; color: #e6fffc; }
+.unvoiced-btn.on:hover:not(:disabled) { background: #1c5f5a; }
+
+/* ---- Фон редактора: цвет правки (важнее фона этапа Anki) ---- */
+body.frag-edit-accepted { background: #101a28; }
+body.frag-edit-unvoiced { background: #0f1f1f; }
+/* Скрытые удалённые символы (кнопки говорящего) – не видны. */
+#cur-text .gone { font-size: 0; }
+
+/* Кнопки говорящего ‹ R › – маленькие, вплотную. */
+.speaker-btns { display: inline-flex; gap: 2px; }
+.speaker-btn { min-width: 26px; padding: 0 6px 1px; font-weight: 600; } /* снизу 1 px – как у всех .step-btn (текст по центру цифр) */
+/* Приближение видео правой кнопкой. */
+#video-wrap { overflow: hidden; }
+
+/* Изменённый фрагмент – обычный фон редактора (о правке говорят бейджи). */
+body.frag-edit-changed { background: var(--bg); }
+
+/* Статистика: скорость правки – график и список результатов. */
+.speed-chart { width: 100%; height: 150px; display: block; margin: 6px 0 4px; }
+.speed-chart .bar { fill: #2f5f9e; }
+.speed-chart .bar.best { fill: #56d364; }
+.speed-chart .avg { stroke: #e3b341; stroke-width: 1.5; stroke-dasharray: 5 4; }
+.speed-chart text { fill: var(--dim); font: 11px var(--font); }
+.speed-head { display: flex; align-items: center; justify-content: space-between; }
+.speed-head h2 { margin: 0; }
+
+/* Стык после объединения: подчёркивание вспыхивает и гаснет (--junction 0..1). */
+#cur-text::highlight(junction) { text-decoration: underline 2px rgba(121, 184, 255, var(--junction, 0)); text-underline-offset: 4px; }
+#junction-row { display: flex; justify-content: center; margin-top: 10px; }
+/* Соседняя фраза удалённого фрагмента (режим "показывать удалённые"). */
+.ctx.deleted-neighbor { text-decoration: line-through; text-decoration-color: rgba(248, 81, 73, 0.55); }
+.speaker-btns + .sep, #nav-mid-right .sep, .stage3 .sep { align-self: center; }
+
+/* Включённый режим "связанные границы" – иконка подсвечена. */
+#link-bounds-btn.on { color: #79b8ff; }
+
+/* Аудио в редакторе: холст с фоном и кругом поверх (пустого) видео. */
+#audio-vis { position: absolute; inset: 0; width: 100%; height: 100%; display: none; pointer-events: none; z-index: 2; }
+#video-wrap.audio-mode #audio-vis { display: block; }
+#video-wrap.audio-mode #video { opacity: 0; }
+#app.audio-project #speaker-rover, #app.audio-project #unvoiced-btn, #app.audio-project #sound-btn, #app.audio-project .speaker-btns + .sep { display: none; }
+.speed-line { display: block; }
+.speed-line .grid { stroke: rgba(255, 255, 255, 0.06); }
+.speed-line .axis { fill: var(--dim); font: 11px var(--font); }
+.speed-line .area { fill: url(#speed-fill); }
+.speed-line .line { fill: none; stroke: #79b8ff; stroke-width: 2.5; stroke-dashoffset: 0; }
+.speed-line .avg { stroke: #e3b341; stroke-width: 1.5; stroke-dasharray: 6 5; }
+.speed-line .avg-label { fill: #e3b341; font: 11px var(--font); }
+.speed-line .dot { fill: #0d0d10; stroke: #79b8ff; stroke-width: 2.5; }
+.speed-line .dot.best { stroke: #56d364; fill: #56d364; }
+.speed-line .dot:hover { stroke-width: 4; }
+
+/* Сообщения редактора – под блоком фраз, по центру, в несколько строк. */
+#text-panel .toast { align-self: center; max-width: min(900px, 100%); margin-top: 6px; padding: 6px 12px; border-radius: 8px;
+  background: rgba(248, 81, 73, 0.08); border: 1px solid rgba(248, 81, 73, 0.25); color: #ffb3b3; font-size: 13px;
+  line-height: 1.45; text-align: center; white-space: pre-wrap; word-break: break-word; animation: fade-in 0.25s ease-out; }
+/* Буквы без хвостиков (цифры, «Ролик») сидели на 2 px ниже середины – текст
+   строки чуть выше (по замеру чернил: сверху и снизу поровну). */
+.speed-line .hover-band { fill: transparent; }
+.speed-line .hover-band:hover { fill: rgba(121, 184, 255, 0.06); }
+
+/* Аудио: кнопка стиля визуализации (Кольца / Хребты / Сфера / Ленты) –
+   в правом верхнем углу плеера, только в режиме аудио. */
+#audio-vis-style { position: absolute; top: 10px; right: 10px; z-index: 3; display: none;
+  padding: 3px 10px; font-size: 12px; color: rgba(255, 255, 255, 0.75); background: rgba(20, 20, 26, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; cursor: pointer; backdrop-filter: blur(4px); }
+#audio-vis-style:hover { color: #fff; background: rgba(40, 40, 50, 0.7); }
+#video-wrap.audio-mode #audio-vis-style { display: block; }
+
+/* Идёт перекраска карточек Anki: кнопки передачи и перевода, правка в
+   редакторе – серые и не нажимаются (подсказка – в "Сейчас идёт"). */
+body.anki-locked #stage3-btn, body.anki-locked .card-action, body.anki-locked #info-anki,
+body.anki-locked #info-translate, body.anki-locked #set-recolor, body.anki-locked #edit-row,
+body.anki-locked #cur-text, body.anki-locked #timeline, body.anki-locked #speakers-btn, body.anki-locked #unvoiced-btn, body.anki-locked #sound-btn,
+body.anki-locked #reset-btn, body.anki-locked #undo-btn, body.anki-locked #redo-btn, body.anki-locked #merge-prev,
+body.anki-locked #merge-next, body.anki-locked #split-btn, body.anki-locked #delete-soft, body.anki-locked #delete-hard {
+  pointer-events: none; opacity: 0.45; }
+#speakers-btn svg { transform: translate(-0.4px, 0.5px); }
+.speed-line .area, .speed-line .avg, .speed-line .avg-label { animation: fade-in 0.8s ease-out 0.5s both; }
+
+/* График скорости правки: линия и заливка поднимаются от нижней оси
+   (как будто "вырастают" вверх), средняя и подписи – проявляются. */
+.speed-line .line { stroke-dasharray: none; animation: plot-rise 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both;}
+.speed-line .area { animation: plot-rise 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both, fade-in 0.9s ease-out both; }
+.speed-line .line, .speed-line .area { transform-box: view-box; transform-origin: 50% calc(100% - 30px); }
+@keyframes plot-rise { from { transform: scaleY(0); } to { transform: none; } }
+
+/* Редактор: три фразы в два столбца (говорящие на карточках включены, см.
+   App.fitColumns): имена прижаты вправо, реплики – по центру своего столбца,
+   а он – по центру экрана (поле сдвинуто влево на половину столбца имён с
+   отступом). Ширины столбцов общие для трёх фраз (--who-w, --say-w). */
+#context-preview.cols .ctx {
+  display: grid;
+  grid-template-columns: var(--who-w, max-content) var(--say-w, max-content);
+  column-gap: var(--col-gap, 0px);
+  width: fit-content; min-width: 0; max-width: none;
+  margin: 0 auto; padding: 0 50px; box-sizing: border-box;
+  position: relative; left: calc((var(--who-w, 0px) + var(--col-gap, 0px)) / -2);
+}
+#context-preview.cols .ctx .who { text-align: right; white-space: pre; }
+#context-preview.cols .ctx .say { text-align: center; min-width: 0; }
+#context-preview.cols .ctx .who .gap { font-size: 0; }
+
+/* Кнопки-отметки фрагмента: "не озвучено" (бирюзовая) и "только озвучка" (рыжая). */
+.mark-btn.on { color: #e6fffc; }
+#unvoiced-btn.on { background: #17504c; border-color: #2a8a83; }
+#unvoiced-btn.on:hover:not(:disabled) { background: #1c5f5a; }
+#sound-btn.on { background: #5a3413; border-color: #a8622a; color: #fff1e2; }
+#sound-btn.on:hover:not(:disabled) { background: #6a3e17; }
+/* "Только озвучка" – рыжеватый фон редактора. */
+body.frag-edit-sound { background: #26180d; }
+
+/* Ряд навигации: соседние кнопки – на обычном расстоянии (как в .group: 6 px). */
+.nav-mid { gap: 6px; }
+
+/* Редактор: говорящие на карточках выключены – имён в трёх фразах нет (ячейка
+   имени скрыта, символы остаются в тексте фрагмента). */
+#context-preview.nowho .ctx .who { display: none; }

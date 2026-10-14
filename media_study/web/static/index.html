@@ -3,7 +3,14 @@
 <head>
   <meta charset="utf-8">
   <title>media-study</title>
-  <link rel="stylesheet" href="/styles.css">
+  <!-- Стили по областям; порядок важен (дальше – поверх): общее, списки и
+       карточки, окна, статистика, настройки, редактор. -->
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/library.css">
+  <link rel="stylesheet" href="/css/modals.css">
+  <link rel="stylesheet" href="/css/stats.css">
+  <link rel="stylesheet" href="/css/settings.css">
+  <link rel="stylesheet" href="/css/editor.css">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 </head>
 <body>
@@ -247,7 +254,18 @@
   <script src="/textedit.js"></script>
   <script src="/fraglist.js"></script>
   <script src="/picker.js"></script>
-  <script src="/pages.js"></script>
+  <!-- Страницы вокруг редактора (раньше – один pages.js): помощники, окна,
+       анимации, оболочка (меню, роутер), затем разделы – дописываются в Pages. -->
+  <script src="/js/format.js"></script>
+  <script src="/js/dialogs.js"></script>
+  <script src="/js/motion.js"></script>
+  <script src="/js/shell.js"></script>
+  <script src="/js/pages/core.js"></script>
+  <script src="/js/pages/library.js"></script>
+  <script src="/js/pages/process.js"></script>
+  <script src="/js/pages/add.js"></script>
+  <script src="/js/pages/stats.js"></script>
+  <script src="/js/pages/settings.js"></script>
   <!-- Появление текста по буквам (везде, кроме редактора). -->
   <script src="/textfx.js"></script>
   <script src="/app.js"></script>

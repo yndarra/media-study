@@ -1,0 +1,135 @@
+#set-deck { width: 360px; }
+#set-padding { width: 70px; }
+
+/* Поле с секретом (ключ OpenRouter) и кнопка "показать/скрыть". */
+.secret-row { display: flex; align-items: center; }
+.secret-row input { flex: 1; }
+#view-settings select, #view-settings input:not([type=checkbox]) {
+  background: #18181d; color: inherit; border: 1px solid var(--border); border-radius: 6px;
+}
+#view-settings table.stats { max-width: 1000px; }
+/* Кнопка-глазок — ровно по высоте поля. */
+.secret-row .icon-btn { width: 32px; height: 32px; font-size: 14px; flex: none; }
+
+/* Выбор модели перевода: список под полем. */
+.secret-row.picker { position: relative; }
+.set-card {
+  background: #141418; border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px;
+  padding: 16px 18px 6px;
+}
+.set-card.wide-card { grid-column: 1 / -1; }
+.view .set-card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); }
+.field { margin-bottom: 14px; }
+.field-label { display: block; font-size: 13px; margin-bottom: 6px; color: var(--text); }
+.field-hint { font-size: 12px; color: var(--dim); margin-top: 6px; }
+.field .check { margin: 0; }
+.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 16px; }
+#view-settings input.wide, #view-settings select { width: 100%; }
+
+/* Поля настроек — шрифтом приложения; подпись флажка — как подписи полей. */
+#view-settings input, #view-settings select { font-family: var(--font); }
+.set-card .field .check { font-size: 13px; }
+/* ---- Фон блоков (карточки видео, настройки) и сайдбаров – одинаковый,
+   чуть темнее прежнего, но светлее фона страницы. ---- */
+.card, .set-card { background-color: #111115; }
+.set-card { border-color: rgba(255, 255, 255, 0.05); }
+
+/* ---- Выпадающий список (picker.js) ---- */
+.picker { position: relative; display: flex; gap: 4px; align-items: stretch; width: 100%; }
+.picker-field {
+  flex: 1; min-width: 0; box-sizing: border-box; height: 32px; padding: 0 10px;
+  display: flex; align-items: center; background: #18181d; color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; font: 14px var(--font);
+}
+input.picker-field { display: block; }
+.picker-display { cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; }
+.picker-display:focus-visible, input.picker-field:focus { outline: 1px solid #2f5f9e; outline-offset: -1px; }
+.picker-btn {
+  flex: none; width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: #18181d; border: 1px solid var(--border); border-radius: 6px; color: var(--dim);
+}
+.picker-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; transition: transform 0.2s ease; }
+.picker.open .picker-btn svg { transform: rotate(180deg); }
+.picker-btn:hover { color: var(--text); }
+.picker-list {
+  position: absolute; top: 36px; left: 0; right: 0; z-index: 30; max-height: 320px; overflow: auto;
+  background: #121216; border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); scrollbar-width: thin;
+}
+.picker-item { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.picker-item:hover { background: #1f1f25; }
+.picker-item.active { background: rgba(47, 95, 158, 0.35); }
+.picker-hint { color: var(--dim); font-size: 12px; white-space: nowrap; }
+.picker-group { padding: 8px 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); }
+.picker-empty { padding: 8px; color: var(--dim); font-size: 13px; }
+.picker-count { display: inline-block; min-width: 2.6em; color: var(--dim); font-variant-numeric: tabular-nums; }
+#settings-note.error { color: #ff7b72; }
+.settings-actions #settings-note { margin-right: auto; }
+.fraglist-head .picker-field { height: 30px; font-size: 13px; }
+.fraglist-head .picker-btn { width: 30px; height: 30px; }
+.fraglist-head .picker-list { top: 34px; }
+
+/* ---- Поля настроек: текст ровно по середине по вертикали ---- */
+#view-settings input:not([type=checkbox]):not([type=hidden]) { padding: 0 10px; height: 32px; }
+/* Текст в полях – на полпикселя выше (как в кнопках; замерено). */
+#view-settings input:not([type=checkbox]):not([type=hidden]), input.picker-field { line-height: 29px; padding-bottom: 1px; }
+.picker-display { padding-bottom: 1px; }
+/* Поле ключа: кнопка-глазок вплотную, как кнопка списка (4 px); значок – по центру. */
+.secret-row { gap: 4px; }
+#set-key-eye svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; display: block; }
+/* Кнопка шага обработки – синяя зебра (Zebra, data-zebra="process"). */
+
+/* Кнопка-глазок у ключа – как кнопка списка (тёмная, приглушённый значок). */
+#set-key-eye { background: #18181d; border: 1px solid var(--border); color: var(--dim); }
+#set-key-eye:hover { color: var(--text); background: #18181d; }
+table.storages-table td { vertical-align: middle; }
+table.storages-table td:nth-child(2) { text-align: right; }
+table.storages-table td:last-child { width: 1%; padding-left: 16px; text-align: right; }
+.storages-add { margin-top: 12px; }
+.page-grid .set-card h2 { margin-top: 0; }
+#view-settings .hotkeys-card {
+  margin-top: 14px;
+  /* Горячие клавиши – во всю ширину страницы, как остальные широкие блоки. */
+  max-width: none;
+}
+/* Горячие клавиши – во всю ширину блока. */
+#view-settings table.hotkeys-table { max-width: none; width: 100%; }
+
+/* Настройки: цвета на карточках Anki. */
+.color-row { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 6px; }
+.color-pick { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); cursor: pointer; }
+.color-pick input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid #45454e; border-radius: 6px; background: none; cursor: pointer; }
+.color-pick input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+.color-pick input[type=color]::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+/* Настройки: модель Whisper и кнопка установки в одну строку. */
+.wh-row { display: flex; gap: 8px; align-items: center; }
+.wh-row .picker-host { flex: 1; min-width: 0; }
+.wh-row .step-btn { flex: none; }
+
+/* Настройки: блок цветов карточек – квадратные образцы цвета (общие правила
+   для input иначе сжимали их в тонкие полоски). Пустой блок рядом – просто
+   место под будущие настройки. */
+.set-card .color-row { gap: 10px 22px; margin: 0 0 8px; }
+.set-card .color-pick input[type=color] { width: 28px; min-width: 28px; height: 28px; flex: none; padding: 0; }
+.set-card .color-pick input[type=color]::-webkit-color-swatch-wrapper { padding: 3px; }
+.set-card.empty-card { min-height: 120px; }
+/* Чекбоксы в настройках – одинаково: отступ поля, пояснение строкой ниже. */
+.set-card .field label.check { margin: 0; }
+.set-card .field label.check + label.check { margin-top: 8px; }
+.set-card .field .field-label + label.check { margin-top: 2px; }
+.set-card .field label.check + .field-hint { margin-top: 4px; padding-left: 24px; }
+
+/* Образец цвета – свой квадрат с заливкой; системный выбор цвета – прозрачный
+   input поверх него (родной квадрат браузера в тёмной теме не закрашивался). */
+.color-pick .swatch { position: relative; width: 26px; height: 26px; flex: none; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
+.color-pick .swatch input[type=color] { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0;
+  opacity: 0; cursor: pointer; border: none; padding: 0; }
+.settings-actions #settings-note:empty { display: none; }
+/* Чтобы плашка не закрывала низ последнего блока. */
+#view-settings { padding-bottom: 64px; }
+
+/* Распознавание речи: показываются поля только выбранного движка. */
+#asr-box[data-engine="whisper"] .asr-el, #asr-box[data-engine="elevenlabs"] .asr-wh { display: none; }
+.field-hint { line-height: 17px; }

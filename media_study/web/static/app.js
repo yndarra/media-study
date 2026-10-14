@@ -1852,7 +1852,7 @@ document.addEventListener("keyup", (e) => {
 }, true);
 window.addEventListener("blur", () => State.boost && Player.setBoost(false));
 
-// Идёт перекраска карточек Anki (State.ankiLocked, см. Activity в pages.js):
+// Идёт перекраска карточек Anki (State.ankiLocked, см. Activity в js/shell.js):
 // в редакторе работают только просмотр и переходы – воспроизведение,
 // повтор, соседние фрагменты; клавиши правки не срабатывают (иначе правка
 // применилась бы на экране, а сервер её отклонил).

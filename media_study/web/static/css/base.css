@@ -1,0 +1,761 @@
+:root {
+  --bg: #0b0b0e; /* фон страницы – как прежний фон карточек */
+  --bg-deleted: #2e1518;
+  --panel: #0b0b0e;
+  --border: #2a2a31;
+  --text: #ececf0;
+  --dim: #8a8a94;
+  --accent-edit: #e0b416;
+  --font: "Segoe UI", system-ui, sans-serif;
+  /* Оболочка: меню слева, страница по центру, список фрагментов справа
+     (он виден только в редакторе). Боковые панели — отдельные полупрозрачные
+     "окна" одинаковой ширины со скруглёнными углами; каждую можно скрыть. */
+  --side-width: 260px;
+  --side-gap: 12px;
+  /* Полосы прокрутки под тёмную тему (иначе браузер рисует белый ползунок —
+     особенно заметно в списке фрагментов справа). */
+  color-scheme: dark;
+  /* Появление блоков: медленнее и строго по одному – слева направо, потом
+     следующий ряд (порядок в разметке); только прозрачность. */
+  --enter-step: 70ms;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  transition: background 0.15s;
+}
+
+#shell {
+  display: grid;
+  grid-template-columns: calc(var(--side-width) + 2 * var(--side-gap)) minmax(0, 1fr) calc(var(--side-width) + 2 * var(--side-gap));
+  min-height: 100vh;
+}
+
+body.left-closed #shell { grid-template-columns: 0 minmax(0, 1fr) calc(var(--side-width) + 2 * var(--side-gap)); }
+body.right-closed #shell,
+body.no-fraglist #shell { grid-template-columns: calc(var(--side-width) + 2 * var(--side-gap)) minmax(0, 1fr) 0; }
+body.left-closed.right-closed #shell,
+body.left-closed.no-fraglist #shell { grid-template-columns: 0 minmax(0, 1fr) 0; }
+body.left-closed #menu,
+body.right-closed #fraglist { display: none; }
+/* Столбцы закреплены явно: иначе при скрытом меню страница сама съезжает
+   в первый (нулевой ширины) столбец и вёрстка разваливается. */
+#menu {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+#main { grid-column: 2; grid-row: 1; padding: 16px; min-width: 0; }
+
+.sidebar {
+  position: sticky;
+  top: var(--side-gap);
+  margin: var(--side-gap);
+  height: calc(100vh - 2 * var(--side-gap));
+  box-sizing: border-box;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  min-height: 32px;
+}
+
+.panel-close,
+.panel-open {
+  padding: 0;
+  line-height: 1;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-open {
+  position: fixed;
+  top: 14px;
+  z-index: 20;
+  backdrop-filter: blur(10px);
+  background: rgba(14, 14, 18, 0.9);
+}
+
+#open-left { left: 14px; } /* центр кнопки — на уровне середины заголовка раздела */
+#open-right { right: 14px; }
+#menu .brand {
+  font-weight: 600;
+  color: var(--dim);
+  margin: 0 8px;
+  line-height: 32px;
+}
+
+#menu a[data-menu] {
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 6px;
+  align-items: center;
+  gap: 10px;
+}
+
+#menu a[data-menu]:hover { background: #1a1a20; }
+#menu a[data-menu].active { background: #1f1f25; }
+
+.menu-editing {
+  margin-top: 16px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.menu-editing a { color: #9ec9ff; text-decoration: none; font-size: 13px; }
+
+/* Меню скрыто — слева висит кнопка ☰, контент не должен под неё залезать. */
+body.left-closed #main { padding-left: 60px; }
+
+.view h1 { font-size: 22px; margin: 4px 0 16px; }
+.view h2 { font-size: 16px; margin: 22px 0 10px; color: var(--dim); }
+.muted { color: var(--dim); }
+.small { font-size: 13px; }
+.actions { display: flex; align-items: center; gap: 14px; margin: 14px 0; }
+
+.big-btn {
+  display: inline-block;
+  background: #214a73;
+  color: #e6f2ff;
+  text-decoration: none;
+  padding: 8px 18px;
+  border-radius: 6px;
+}
+
+.back-link { color: var(--dim); text-decoration: none; font-size: 13px; }
+table.stats { max-width: 900px; }
+table.stats td:first-child { color: var(--dim); white-space: nowrap; }
+
+.fraglist-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Страница во всю высоту окна: ряд переключения фрагментов прижат к низу. */
+#app {
+  max-width: 1100px;
+  min-height: calc(100vh - 32px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Снимок кадра остановки — ровно поверх видео. */
+#freeze {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+#video {
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto 16 / 9;
+  display: block;
+  cursor: pointer;
+}
+
+/* Ряд из трёх зон: прижато влево / по центру / прижато вправо. */
+.row3 {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Ряд из пяти групп: крайние прижаты к краям, остальные — равными
+   промежутками между ними (крайние пары симметричны, поэтому средняя
+   группа остаётся точно по центру). */
+.row5 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.group.left { justify-self: start; }
+.group.center { justify-self: center; }
+.group.right { justify-self: end; }
+
+button {
+  font-family: var(--font);
+  background: #1f1f25;
+  color: var(--text);
+  border: 1px solid #45454e;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #28282f;
+}
+
+button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn.danger:not(:disabled) {
+  color: #ff8a8a;
+}
+
+.step-btn {
+  min-width: 46px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.hidden { display: none !important; }
+
+/* Вкладка устарела: сервер перезапущен, свежая вкладка — другая. */
+.stale-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #7a1f27;
+  color: #ffd0d4;
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* Блок "Сейчас идёт" внизу меню. */
+.activity {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.activity-title { font-size: 12px; color: var(--dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.activity-item { margin-bottom: 10px; font-size: 12px; }
+.activity-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+textarea.sources {
+  width: 100%;
+  max-width: 700px;
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-family: var(--font);
+  margin: 4px 0;
+}
+
+* { scrollbar-width: thin; scrollbar-color: #2a2a32 transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3c3c46; }
+
+/* Заголовок раздела с кнопками справа (Видео: Проверка флагов, Перевод). */
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.page-head .head-actions {
+  display: flex;
+  gap: 8px;
+  /* Итог "Проверки флагов" – по середине кнопки по вертикали. */
+  align-items: center;
+}
+
+/* Таблицы (настройки, подробности): разделители во всю ширину, под последней строкой — нет. */
+table.stats { width: 100%; }
+.disk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
+.model-list {
+  position: absolute; top: 36px; left: 0; right: 0; z-index: 20;
+  max-height: 320px; overflow: auto;
+  background: #121216; border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+}
+.model-item { display: flex; justify-content: space-between; gap: 12px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.model-item:hover { background: #1f1f25; }
+
+/* Флажки: квадрат с закруглёнными углами; подпись — по центру флажка. */
+input[type=checkbox] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+  border: 1px solid #4a4a55;
+  border-radius: 4px;
+  background: #16161b;
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  cursor: pointer;
+}
+input[type=checkbox]::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border: solid #fff;
+  border-width: 0 0 2px 2px;
+  transform: translateY(-1px) rotate(-45deg);
+  opacity: 0;
+}
+input[type=checkbox]:checked { background: #2f5f9e; border-color: #2f5f9e; }
+input[type=checkbox]:checked::after { opacity: 1; }
+input[type=checkbox]:disabled { opacity: 0.4; cursor: default; }
+label.check { display: flex; gap: 8px; margin: 8px 0; cursor: pointer; }
+
+/* Поля, растущие по тексту (название, ссылки). */
+textarea.grow {
+  box-sizing: border-box;
+  resize: none;
+  overflow: hidden;
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 10px 4px;
+  background: #18181d;
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  /* Поле, растущее по тексту: одна строка – ровно 32 px, у многострочного
+     те же отступы сверху и снизу (раньше снизу было меньше). */
+  line-height: 20px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  min-height: 32px;
+}
+
+/* Вопрос "Сохранить изменения?" поверх окна. */
+.confirm-box {
+  position: absolute; inset: 0; border-radius: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm { background: #16161b; border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.confirm-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+/* "Выбрать файл" — обычная тёмная кнопка вместо светлой системной. */
+.file-pick {
+  display: inline-flex; align-items: center; box-sizing: border-box; cursor: pointer;
+  background: #1f1f25; color: var(--text); border: 1px solid #45454e; border-radius: 5px;
+}
+.file-pick:hover { background: #28282f; }
+
+/* Кнопка того же вида, что "Сохранить", но синяя (Править). */
+a.step-btn { display: inline-flex; align-items: center; box-sizing: border-box; text-decoration: none; color: var(--text);
+  background: #1f1f25; border: 1px solid #45454e; border-radius: 5px; }
+.step-btn.primary { background: #214a73; border-color: #2f5f9e; color: #fff; }
+.step-btn.primary:hover { background: #285a8a; }
+/* Выбранный файл на странице "Добавить": плашка с крестиком. */
+.file-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; box-sizing: border-box;
+  padding: 0 4px 0 12px; border: 1px dashed #45454e; border-radius: 5px; background: #141418; font-size: 13px;
+  max-width: 420px;
+}
+.file-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-chip-x { width: 24px; height: 24px; padding: 0; border: none; background: transparent; color: var(--dim); font-size: 16px; }
+.file-chip-x:hover:not(:disabled) { background: #28282f; color: var(--text); }
+/* Флажок — по центру строчных букв подписи (у Segoe UI он визуально ниже центра строки);
+   текст подписи не выделяется двойным кликом. */
+label.check, label:has(> input[type=checkbox]) { user-select: none; -webkit-user-select: none; }
+label.check input[type=checkbox], label:has(> input[type=checkbox]) input[type=checkbox] { transform: translateY(1px); }
+
+/* Текст в кнопках — оптически по центру: у Segoe UI строка "сидит" ниже
+   середины рамки (замерено: ~1.5 px), поэтому чуть приподнимаем. */
+.big-btn { padding-top: 6px; padding-bottom: 9px; }
+
+/* Итог проверки флагов – слева от кнопки. */
+#flags-status { margin-right: 6px; white-space: nowrap; }
+
+/* "Сохранить изменения?": текст по центру, "Нет" – красная, "Сохранить" – синяя. */
+.confirm-text { text-align: center; }
+.confirm-actions { justify-content: center; }
+.step-btn.danger { background: #7a2a2a; border-color: #9c3a3a; color: #fff; }
+.step-btn.danger:hover:not(:disabled) { background: #8e3232; }
+.confirm-actions .step-btn { padding-left: 14px; padding-right: 14px; }
+
+/* "Обработать" – отступы по бокам как у "Сохранить", та же высота. */
+.process-go.big-btn { height: 34px; padding: 0 12px 3px; line-height: 1; }
+
+/* Подсказки в скобках у флажков – на одной линии с подписью (по базовой
+   линии текста), флажок – по центру строки. */
+label.check { align-items: baseline; }
+label.check > input[type=checkbox] { align-self: center; }
+
+/* Появление карточек при открытии раздела. */
+.enter {
+  animation: card-in 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  /* Появление карточек и разделов: подъём через top (не transform) – иначе в
+     конце анимации текст перерисовывался и сдвигался на пиксель-другой. */
+  animation-name: card-in-top;
+}
+
+/* Пояснения к флажкам: тот же размер шрифта и та же линия, что у подписи,
+   отступ – как пробел. */
+label.check .muted { font-size: inherit; margin-left: calc(0.28em - 8px); }
+
+/* ---- Настройки: карточки по темам ---- */
+.settings-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px;
+  max-width: 1080px; margin-top: 14px;
+}
+.with-unit { display: flex; align-items: center; gap: 8px; }
+.with-unit input { width: 110px; }
+.with-unit span { color: var(--dim); font-size: 13px; }
+.settings-actions { display: flex; justify-content: flex-end; gap: 8px; transform: translateY(12px); }
+#deck-sync:empty { display: none; }
+#deck-sync { margin: -6px 0 14px; }
+
+/* ---- Скрытие и показ боковых панелей – с анимацией ----
+   Колонка плавно сужается до нуля (страница расширяется), а сама панель
+   уезжает за край и гаснет. Панель не исчезает (display: none), иначе нечего
+   анимировать; ширина у неё своя, чтобы текст не переносился при сжатии. */
+#shell { overflow-x: clip; }
+.sidebar { width: var(--side-width); transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s ease; }
+body.left-closed #menu, body.left-closing #menu {
+  display: block; transform: translateX(calc(-100% - 2 * var(--side-gap))); opacity: 0; pointer-events: none;
+}
+body.right-closed #fraglist:not(.hidden), body.right-closing #fraglist:not(.hidden) {
+  display: flex; transform: translateX(calc(100% + 2 * var(--side-gap))); opacity: 0; pointer-events: none;
+  /* Правая панель при скрытии остаётся на своём месте (колонка уже нулевая,
+     отрицательный отступ возвращает её туда же) и уезжает вправо – без рывка. */
+  margin-left: calc(-1 * (var(--side-width) + var(--side-gap)));
+}
+.panel-open { transition: opacity 0.25s ease; }
+
+/* Заголовок с кнопками ("Видео") – те же отступы, что у простого заголовка
+   ("Обработка"): у простого отступ под заголовком и над описанием
+   перекрываются (16 px), в ряду с кнопками они складывались (28 px). */
+.page-head { margin-bottom: 16px; }
+.page-head h1 { margin: 4px 0 0; }
+
+/* ---- Левое меню: пункты чуть мельче; кнопка сворачивания крупнее, по центру названия ---- */
+#menu a[data-menu] { font-size: 14px; padding: 6px 10px; }
+.panel-head { align-items: center;}
+#menu .brand { font-size: 15px;}
+.panel-close, .panel-open { width: 32px; height: 32px; font-size: 19px; display: inline-flex; align-items: center; justify-content: center; }
+.sidebar { background: rgba(17, 17, 21, 0.97); }
+
+/* Сайдбар: строка процесса – подпись слева, процент справа. */
+.activity-line { display: flex; justify-content: space-between; gap: 8px; }
+.activity-line span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Кнопки открытия панелей видны, только когда панель скрыта. */
+.panel-open { display: none; }
+body.left-closed #open-left { display: inline-flex; }
+body.right-closed:not(.no-fraglist) #open-right { display: inline-flex; }
+
+/* ---- Кнопка сворачивания панели: шеврон по центру ---- */
+.panel-close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+/* Кнопки открытия панелей: одинаковый значок, по центру кнопки, чуть крупнее. */
+.panel-open { width: 34px; height: 34px; padding: 0; align-items: center; justify-content: center; color: var(--text); }
+.panel-open svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; display: block; }
+#open-left { top: 18px; }
+#open-right { top: 14px; }
+
+/* Шапка списка фрагментов: кнопка сворачивания такая же, как у меню. */
+.fraglist-head .panel-close { flex: none; }
+.settings-actions { align-items: center; }
+
+/* ---- Кнопки сворачивания панелей – просто стрелка, без фона и обводки ---- */
+.panel-close { background: none !important; border: none !important; color: var(--dim); }
+.panel-close:hover { color: var(--text); }
+/* "Править" во время передачи в Anki – серая, не нажимается. */
+a.step-btn.disabled { opacity: 0.35; pointer-events: none; }
+
+/* Кнопки следующего шага на карточке – "зебра": полосы цвета и серого под
+   наклоном (как "/"), бегут вперёд с постоянной скоростью. */
+@keyframes zebra-run { from { background-position: 0 0; } to { background-position: 28px 0; } }
+/* Появление кнопки (раскрывается) и возврат строки "Место на диске" (проявляется). */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in 0.4s ease-out; }
+.step-btn, a.step-btn { white-space: nowrap; }
+
+/* Окно "Обработки" во время обработки: ход справа (вместо "Сохранить"). */
+.process-status { margin-left: auto; font-size: 12px; color: #79b8ff; white-space: nowrap; }
+.zoom-frame {
+  position: absolute; z-index: 5; pointer-events: none; box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.9); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  animation: modal-in 0.15s ease-out;
+}
+.zoom-frame.fade { opacity: 0; transition: opacity 0.35s ease-in 0.1s, transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1); }
+/* Доступные шаги – цветом шага. */
+.step-btn.send-ready { background: #1f5a33; border-color: #2c7a47; color: #fff; }
+.step-btn.send-ready:hover:not(:disabled) { background: #256b3d; }
+
+/* Буфер имён (Alt+F): окошко поверх видео, справа сверху – текст не закрывает. */
+#names-box {
+  position: absolute; top: 10px; right: 10px; z-index: 6; min-width: 170px; padding: 8px 10px;
+  background: rgba(18, 18, 22, 0.94); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); font-size: 13px;
+  opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity 0.15s ease, transform 0.15s ease;
+}
+#names-box.open { opacity: 1; transform: none; }
+.names-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 4px; }
+.names-item {
+  white-space: nowrap;
+  /* Подсвеченная строка (S/W – перемещение, F – выбрать). */
+  margin: 0 -6px;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.names-item b { display: inline-block; width: 16px; color: #79b8ff; }
+.names-item.active { background: rgba(121, 184, 255, 0.16); }
+.names-empty { color: var(--dim); }
+
+kbd { display: inline-block; min-width: 14px; padding: 1px 6px; border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 5px; background: #18181d; color: var(--text); font: 12px var(--font); text-align: center; }
+.hotkeys-card { max-width: 1080px; box-sizing: border-box; margin-top: 14px; }
+
+/* Горячие клавиши – таблица как остальные (table.stats): клавиши слева. */
+table.hotkeys-table td:first-child { color: var(--text); padding-right: 24px; }
+table.hotkeys-table td:last-child { color: var(--text); }
+/* Таймер правки – поверх плеера, слева сверху (timer.js). Квадратная кнопка;
+   раскрыт – справа от неё кнопки и значения в виде кнопок. */
+#edit-timer { position: absolute; top: 10px; left: 10px; z-index: 6; display: flex; align-items: center; gap: 6px; }
+#edit-timer button { height: 28px; box-sizing: border-box; border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(18, 18, 22, 0.88); color: var(--text); font: 13px var(--font); cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; }
+#edit-timer button:hover:not(:disabled) { background: rgba(38, 38, 46, 0.95); }
+#edit-timer svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+#edit-timer .et-toggle { width: 28px; opacity: 0.55; }
+#edit-timer:hover .et-toggle, #edit-timer.open .et-toggle { opacity: 1; }
+/* Идёт, но свёрнут – кнопка подсвечена зелёным, чтобы было видно, что считает. */
+#edit-timer.running .et-toggle { color: #56d364; border-color: rgba(86, 211, 100, 0.45); opacity: 0.85; }
+#edit-timer .et-btn { width: 28px; }
+#edit-timer .et-btn:disabled { opacity: 0.35; cursor: default; }
+#edit-timer .et-run { color: #56d364; }
+#edit-timer .et-info { padding: 0 10px 1px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#edit-timer .et-info.copied { animation: et-copied 0.6s ease; }
+@keyframes et-copied { 0% { background: rgba(86, 211, 100, 0.45); border-color: #56d364; } 100% { } }
+#edit-timer .et-panel { display: flex; gap: 6px; overflow: hidden; max-width: 0; opacity: 0; pointer-events: none;
+  transition: max-width 0.3s ease, opacity 0.2s ease; }
+#edit-timer.open .et-panel { max-width: 640px; opacity: 1; pointer-events: auto; }
+
+/* Хранилища: строка "Хранится" в окнах видео и карточка в настройках. */
+.step-btn.small-btn { height: 26px; padding: 0 9px 1px; font-size: 12.5px; min-width: 0; }
+
+/* Иконки разделов в меню слева. */
+#menu a[data-menu] { display: flex;}
+.menu-icon { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round; opacity: 0.75; }
+#menu a[data-menu].active .menu-icon, #menu a[data-menu]:hover .menu-icon { opacity: 1; }
+
+/* Ссылка "сейчас правится": видео сейчас править нельзя (переносится и т.п.). */
+#menu-editing-link.locked { opacity: 0.4; pointer-events: none; }
+.page-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); max-width: none; margin-top: 14px; }
+@container (min-width: 680px) { .page-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 1300px) { .page-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.page-grid > .wide-card { grid-column: 1 / -1; }
+/* "Добавить": два блока рядом – при 4 колонках каждый на две. */
+@container (min-width: 1300px) { .page-grid > .half-card { grid-column: span 2; } }
+
+/* Низ меню: "Остановить" и журнал. */
+.server-row { display: flex; gap: 6px; margin-top: auto; padding-top: 10px; }
+.activity:not(.hidden) ~ .server-row { margin-top: 10px; }
+.server-btn { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px 1px; font-size: 12.5px;
+  color: var(--dim); background: transparent; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; }
+.server-btn:hover { color: var(--text); background: #1f1f25; }
+.server-btn#server-stop:hover { color: #ff9a9a; border-color: rgba(248, 81, 73, 0.4); }
+.server-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.lg-err { color: #ff7b72; }
+.lg-trace { color: #d98580; }
+.lg-warn { color: #e3b341; }
+.lg-ok { color: #56d364; }
+.lg-info { color: #56d364; }
+.lg-method { color: #79c0ff; }
+.lg-dim { color: #6e6e78; }
+
+/* Низ меню: "Журнал" растягивается, остановка и перезапуск – квадратные иконки. */
+.server-btn.wide { flex: 1; justify-content: center; }
+.server-btn.icon { width: 28px; padding: 0; justify-content: center; flex: none; }
+.server-btn.spinning svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Таймер: "Сохранить" вспыхивает зелёным, как скопированное значение. */
+#edit-timer .et-btn.copied { animation: et-copied 0.6s ease; }
+.results-list td:last-child { width: 1%; }
+.results-list .result-del { height: 26px; padding: 0 9px 1px; font-size: 12.5px; }
+.ok-text { color: #56d364; }
+@keyframes mode-shimmer { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+/* Количество в разделе меню – справа. */
+.menu-count { margin-left: auto; font-size: 12px; color: var(--dim); }
+.menu-count:empty { display: none; }
+.menu-icon-host { display: inline-flex; }
+
+/* Настройки: проверка ElevenLabs. */
+.el-check-row { display: flex; align-items: center; gap: 12px; margin: 4px 0 12px; }
+
+/* Настройки: "Хранилище" – строки дисков с заполненностью. */
+.store-list { display: flex; flex-direction: column; gap: 8px; }
+.store-row { display: grid; gap: 16px; align-items: center;
+  padding: 10px 12px; border-radius: 8px; background: #18181d; border: 1px solid rgba(255, 255, 255, 0.06);
+  /* Хранилища: полоска свободного места у всех дисков одной ширины и на одном
+     уровне – колонка кнопки "Убрать" есть у каждой строки (у основного пустая). */
+  grid-template-columns: minmax(160px, 1fr) minmax(200px, 2fr) 84px;
+}
+.store-drive { font-weight: 600; }
+.store-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-bar { position: relative; height: 8px; border-radius: 4px; background: #26262e; overflow: hidden; margin-bottom: 5px; }
+.store-busy, .store-app { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.store-busy { background: #4a4a55; }
+.store-app { background: #2f6fbf; }
+.store-row .step-btn { height: 30px; }
+.store-add { display: flex; gap: 8px; }
+.store-add input { flex: 1; min-width: 0; }
+.c-blue { background: #2f6fbf; }
+.c-pink { background: #b6528a; }
+.c-violet { background: #8957e5; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover, th.sortable.sorted { color: var(--text); }
+@keyframes mode-flow { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+
+/* Ссылка на открытое в редакторе: автор над названием. */
+#menu-editing-link { display: flex; flex-direction: column; gap: 1px; }
+.editing-group { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Таблицы – единый стандарт везде (окна, настройки, статистика): текст 13 px,
+   строка 20 px, одинаковые отступы сверху и снизу (строка ровно посередине
+   между разделителями), под последней строкой разделителя нет (см. ниже). */
+table.stats td, table.stats th { font-size: 13px; padding: 6px 12px 6px 0; vertical-align: middle;
+  border-bottom: 1px solid #26262d;
+  line-height: 20px;
+}
+table.stats td:last-child, table.stats th:last-child { padding-right: 0; }
+
+/* Над кнопками Журнал / перезапуск / выключение – без разделителя. */
+.server-row { border-top: none; }
+/* Таблицы: под последней строкой разделителя нет. */
+table.stats tr:last-child > td, table.stats tr:last-child > th { border-bottom: none; }
+.info-table td, .info-table th { font-size: 13px; }
+.mode-pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 8px) / 2); border-radius: 6px;
+  overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1); }
+.mode-pill i { position: absolute; inset: 0; background-size: 1600px 100%; background-repeat: repeat-x;
+  animation: mode-pill-flow 21s linear infinite; transition: opacity 0.45s ease; }
+@keyframes mode-pill-flow { from { background-position: 1600px 0; } to { background-position: 0 0; } }
+
+/* Отступ контента справа = отступу от меню слева (28 px), и с полосой
+   прокрутки, и без неё: место под полосу (8 px) зарезервировано всегда,
+   плюс 20 px поля. */
+html { scrollbar-gutter: stable; }
+#main { padding-right: 20px; }
+
+/* Настройки: "Отменить" / "Сохранить" – плашка поверх страницы внизу справа
+   (над содержимым, не в конце страницы); появляется, когда что-то изменили. */
+.settings-actions { position: fixed; right: 28px; bottom: 20px; z-index: 50; margin: 0; max-width: none;
+  padding: 8px 8px 8px 14px; background: #17171d; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55); opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;}
+.settings-actions.show { opacity: 1; transform: none; pointer-events: auto; }
+
+.store-row > div:last-child { display: flex; justify-content: flex-end; }
+
+/* Появление текста (textfx.js): слово – блоком (не переносится посреди),
+   каждая буква вырастает снизу. */
+.fxw { display: inline-block; white-space: nowrap; clip-path: inset(-0.5em -0.2em 0 -0.2em); }
+.fxc { display: inline-block; white-space: pre; transform-origin: 50% 100%;
+  animation: fx-grow 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
+@keyframes fx-grow { from { transform: translateY(70%) scaleY(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Блоки (карточки, разделы, строки) появляются по очереди только
+   прозрачностью – на своём месте, без подъёма снизу. */
+@keyframes card-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes card-in-top { from { opacity: 0; } to { opacity: 1; } }
+.enter { position: static; }
+.step-btn, a.step-btn { padding-bottom: 1px; }
+a.step-btn { padding-bottom: 0; }
+
+/* Иконки – по центру (замер центра нарисованной части): в меню – на одной
+   высоте с серединой цифр текста (были выше на 0,5 px, кроме "Статистики");
+   кнопки сервера и "назад/вперёд" редактора – по центру кнопки. */
+#menu a[data-menu]:not([data-menu="stats"]) svg, #menu .menu-icon-host svg { transform: translateY(0.5px); }
+#server-restart svg { transform: translateY(0.6px); }
+#server-stop svg { transform: translateY(0.3px); }
+#undo-btn svg, #redo-btn svg { transform: translateY(-1.4px); }
+
+/* Производительность: списки ядер и нагрузки – узкие. */
+.narrow-picker { max-width: 220px; }
+
+/* Строки таблиц – целой высоты (33 px: 5 + 20 + 7 + линия 1): с дробными
+   отступами и общими на две строки линиями (border-collapse) высота была
+   32,98 px, строки вставали на дробные позиции, и монитор округлял их по-
+   разному – одни строки казались выше других. Текст (по высоте цифр) –
+   выше середины на 0,3 px, ровнее в целых пикселях не поставить. */
+table.stats { border-collapse: separate; border-spacing: 0; }
+table.stats td, table.stats th { padding-top: 6px; padding-bottom: 7px;} /* строка 34 px – цифры ровно посередине */
+
+.enter { animation-duration: 0.6s; animation-timing-function: ease-out; animation-delay: calc(var(--i) * var(--enter-step)); }
+
+/* График скорости правки: линия прорисовывается слева направо, заливка и
+   средняя проявляются. */
+@keyframes line-draw { to { stroke-dashoffset: 0; } }
+
+/* Название приложения в меню – ссылка на список медиа (вид прежний). */
+#menu a.brand { color: var(--dim); text-decoration: none; cursor: pointer; padding: 0; background: none; }
+#menu a.brand:hover { color: var(--text); }
+
+/* Выросшие буквы – без анимации (вид тот же): иначе браузер держал тысячи
+   законченных анимаций активными – лишняя нагрузка, подлагивания. */
+[data-fxdone] .fxc { animation: none; }
+
+/* Буквы вырастают снизу без отдельного слоя (раньше – сжатие transform: на время
+   анимации браузер рисовал каждую букву своим слоем на целом пикселе, а потом –
+   обычным текстом на дробной позиции, и в конце буквы сдвигались на пиксель).
+   Теперь буква поднимается из-под линии слова (сдвиг top, низ слова обрезан)
+   и проявляется цветом: всё время рисуется как обычный текст – конец анимации
+   совпадает с итогом пиксель в пиксель. */
+.fxc { position: relative; transform: none; animation-name: fx-rise; animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes fx-rise { from { top: 0.85em; color: transparent; } }
+
+/* Разделители строк таблицы в окне проявляются вместе со своей строкой (rowLinesEnter). */
+@keyframes row-line { from { border-bottom-color: transparent; } }
+table.stats tr.row-in > td, table.stats tr.row-in > th { animation: row-line 0.5s ease both; animation-delay: var(--row-delay, 0ms); }
+
+/* Подпись галочки одним элементом (появляется по буквам): серое пояснение –
+   обычным пробелом после текста, без поправки на отступ flex. */
+label.check .check-text .muted { margin-left: 0; }
