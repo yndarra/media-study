@@ -1,57 +1,60 @@
 # media-study
 
-Локальное приложение для изучения языка по видео и аудио: YouTube-ролик,
-свой файл или песня режутся на короткие фразы, каждая фраза правится в
-покадровом редакторе и становится карточкой Anki — клип со звуком, текст
-оригинала и перевод.
+[Русский](README.ru.md) · **English**
 
-Всё работает на своём компьютере: сервер на FastAPI и страница в браузере
-(`http://127.0.0.1:8000`). Интерфейс на русском или английском (Настройки →
-«Языки»).
+A local app for learning a language from video and audio: a YouTube video,
+your own file or a song is cut into short phrases, each phrase is polished in
+a frame-accurate editor and becomes an Anki card — a clip with sound, the
+original text and a translation.
 
-## Возможности
+Everything runs on your own machine: a FastAPI server and a page in the
+browser (`http://127.0.0.1:8000`). The interface is in Russian or English
+(Settings → Languages).
 
-- **Добавление** — ссылка YouTube (через `yt-dlp`) или свой видео/аудиофайл.
-- **Распознавание речи** — локальный Whisper (faster-whisper, на видеокарте
-  через CUDA, если есть) или ElevenLabs Scribe по API.
-- **Сверка с текстом** — если есть готовый текст (субтитры, вики-сценарий,
-  страница Notion, текст песни), распознанные слова заменяются им; агент
-  может найти источник сам.
-- **Нарезка на фразы** — модель SaT (wtpsplit) + пунктуация, паузы и
-  громкость; фрагменты покрывают весь таймлайн без дыр.
-- **Редактор** — покадровая правка границ, текста, удаление, объединение и
-  разделение фрагментов, история правок (Ctrl+Z), горячие клавиши.
-- **Anki** — клипы из исходника в полном качестве (H.265), карточки через
-  AnkiConnect в фоне, порядок новых карточек — по порядку фраз; карточки с
-  флагом в Anki возвращаются на правку. По желанию — обратные карточки
-  (перевод на лице).
-- **Перевод** — модели через OpenRouter с контекстом сюжета, словарём имён и
-  терминов; пакетный перевод и доводка по флагам.
-- **Языки** — язык речи и язык карточек настраиваются отдельно для видео и
-  аудио (в том числе японский/китайский без пробелов между словами).
-- **Наборы** — разметку, исправленные тексты и переводы видео можно выгрузить
-  файлом `.mspack.json` (без самого видео) и применить к тому же видео на
-  другом компьютере: сдвиг по времени находится автоматически.
-- **Хранилища** — видео можно перенести на другой диск, не выходя из
-  приложения.
+## Features
 
-## Требования
+- **Adding media** — a YouTube link (via `yt-dlp`) or your own video/audio file.
+- **Speech recognition** — local Whisper (faster-whisper, on the GPU via CUDA
+  if available) or ElevenLabs Scribe via API.
+- **Text alignment** — if a ready text exists (subtitles, a wiki script, a
+  Notion page, song lyrics), the recognized words are replaced with it; an
+  agent can find the source on its own.
+- **Phrase splitting** — the SaT model (wtpsplit) plus punctuation, pauses and
+  loudness; fragments cover the whole timeline with no gaps.
+- **Editor** — frame-accurate boundary editing, text editing, deleting,
+  merging and splitting fragments, edit history (Ctrl+Z), hotkeys.
+- **Anki** — clips cut from the source in full quality (H.265), cards created
+  via AnkiConnect in the background, new cards ordered by phrase order; cards
+  flagged in Anki come back for editing. Optional reverse cards (translation
+  on the front).
+- **Translation** — models via OpenRouter with plot context and a glossary of
+  names and terms; batch translation and refinement by flags.
+- **Languages** — speech language and card language are set separately for
+  video and audio (including Japanese/Chinese without spaces between words).
+- **Packs** — markup, corrected texts and translations of a video can be
+  exported as a `.mspack.json` file (without the video itself) and applied to
+  the same video on another computer: the time offset is detected
+  automatically.
+- **Storage** — videos can be moved to another drive without leaving the app.
 
-- Windows 10/11 (запуск через `.bat`; сам код на Python кроссплатформенный,
-  но не проверялся на других системах).
+## Requirements
+
+- Windows 10/11 (launched via `.bat`; the Python code itself is
+  cross-platform but untested on other systems).
 - Python 3.12 (`py -3.12`).
-- Для карточек — [Anki](https://apps.ankiweb.net/) с дополнением
-  [AnkiConnect](https://ankiweb.net/shared/info/2055492159). Тип заметок
-  выбирается в Настройках (по умолчанию – базовый из Anki): первое поле типа
-  становится лицом карточки, второе – оборотом.
-- Необязательно: ключ [OpenRouter](https://openrouter.ai/) (перевод, поиск
-  источников, ИИ-доводка текста) и ключ [ElevenLabs](https://elevenlabs.io/)
-  (распознавание Scribe). Вписываются в приложении (Настройки) и хранятся в
-  папке `secrets/`, которая в git не попадает.
+- For cards — [Anki](https://apps.ankiweb.net/) with the
+  [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on. The note
+  type is chosen in Settings (Anki's Basic by default): the first field of the
+  type becomes the front of the card, the second one — the back.
+- Optional: an [OpenRouter](https://openrouter.ai/) key (translation, source
+  search, AI text refinement) and an [ElevenLabs](https://elevenlabs.io/) key
+  (Scribe recognition). They are entered in the app (Settings) and stored in
+  the `secrets/` folder, which is not tracked by git.
 
-`ffmpeg` отдельно ставить не нужно — он приходит с пакетом `imageio-ffmpeg`.
+No separate `ffmpeg` install is needed — it comes with the `imageio-ffmpeg`
+package.
 
-## Установка
+## Installation
 
 ```
 git clone https://github.com/yndarra/media-study.git
@@ -59,148 +62,148 @@ cd media-study
 py -3.12 -m pip install -r requirements.txt
 ```
 
-## Запуск
+## Running
 
-- **`start.bat`** — двойной клик: сервер запускается без окна, в браузере
-  открывается приложение. Если вкладка уже открыта, она просто
-  перезагрузится. Журнал сервера — `data/server.log` (он же в приложении:
-  низ меню, «Журнал»).
-- Вручную: `py -3.12 -m media_study.web.run [--data-dir data] [--port 8000]`.
+- **`start.bat`** — double-click: the server starts without a window and the
+  app opens in the browser. If the tab is already open, it just reloads. The
+  server log is `data/server.log` (also in the app: bottom of the menu, Log).
+- Manually: `py -3.12 -m media_study.web.run [--data-dir data] [--port 8000]`.
 
-Все видео, аудио, клипы и настройки лежат в `data/` (создаётся сама, в git
-не попадает).
+All videos, audio, clips and settings live in `data/` (created automatically,
+not tracked by git).
 
-## Как этим пользоваться
+## How to use it
 
-1. **Добавить** — ссылка или файл; режим «Видео»/«Аудио» переключается
-   вверху меню.
-2. **Обработка** — при желании прикрепить ссылки на текст для сверки или
-   набор от сообщества и запустить: скачивание, копия для редактора,
-   распознавание, сверка, нарезка (ход — с процентами).
-3. **Видео / Аудио** — список по авторам с полосами «Отредактировано»,
-   «Передано в Anki», «Переведено»; окно видео — статистика, место на диске,
-   «Редактировать», «Передать в Anki», «Перевести», «Набор», «Хранилище».
-4. **Редактор** — пройти фрагменты по порядку, поправить границы и текст.
-   Кнопка «Добавить в Anki» передаёт всё с первого фрагмента по текущий;
-   клипы и карточки делает фоновый процесс (Anki можно открыть и позже).
-5. **Перевод** — кнопка «Перевести» в окне видео или «Доводка» в списке.
-6. **Статистика** — расходы на API, скорость правки, сводка по видео и
-   авторам.
+1. **Add** — a link or a file; the Video/Audio mode is switched at the top of
+   the menu.
+2. **Processing** — optionally attach links to a text for alignment or a
+   community pack, then start: download, editor copy, recognition, alignment,
+   splitting (progress shown in percent).
+3. **Video / Audio** — a list grouped by author with Edited, Sent to Anki and
+   Translated bars; the video window shows stats, disk usage, and Edit, Send
+   to Anki, Translate, Pack, Storage.
+4. **Editor** — go through the fragments in order, fix boundaries and text.
+   The Add to Anki button sends everything from the first fragment to the
+   current one; clips and cards are made by a background process (Anki can be
+   opened later).
+5. **Translation** — the Translate button in the video window or Refine in the
+   list.
+6. **Statistics** — API costs, editing speed, summaries by video and author.
 
-### Редактор: управление
+### Editor controls
 
-Клик по дорожке — текущий кадр; треугольники под дорожкой — границы отрезка
-(клик выделяет границу, после этого стрелки двигают её). Жёлтая метка —
-откуда начато воспроизведение. Текст фразы правится прямо на месте по клику:
-новый текст зелёный, удалённый остаётся на месте красным.
+Clicking the track sets the current frame; the triangles under the track are
+the segment boundaries (a click selects a boundary, then the arrow keys move
+it). The yellow marker shows where playback started. The phrase text is edited
+in place on click: new text is green, deleted text stays in place in red.
 
-Горячие клавиши (работают и в русской раскладке, вне текста):
+Hotkeys (also work in the Russian keyboard layout, outside text fields):
 
-| Клавиша | Действие |
+| Key | Action |
 |---|---|
-| A / D | предыдущий / следующий фрагмент |
-| ← / → или Shift+A / Shift+D | кадр назад / вперёд (или выделенная граница) |
-| Пробел | пауза / воспроизведение |
-| W | повтор с начала отрезка |
-| Shift+Пробел | повтор с жёлтой метки |
-| зажатый Shift | скорость 2×, пока держишь |
-| S | пометить на удаление |
-| R | говорящий Rover (ещё раз — как было) |
-| Q / E | начало отрезка к концу предыдущего / конец к началу следующего |
-| Shift+Q / Shift+E / Shift+W | выделить начало / конец отрезка / текущий кадр |
-| Ctrl+Z / Ctrl+Shift+Z | назад / вперёд по истории фрагмента |
-| Esc | выйти из текста |
+| A / D | previous / next fragment |
+| ← / → or Shift+A / Shift+D | frame back / forward (or the selected boundary) |
+| Space | pause / play |
+| W | replay from the segment start |
+| Shift+Space | replay from the yellow marker |
+| hold Shift | 2× speed while held |
+| S | mark for deletion |
+| R | speaker Rover (again — as before) |
+| Q / E | segment start to the previous end / end to the next start |
+| Shift+Q / Shift+E / Shift+W | select segment start / end / current frame |
+| Ctrl+Z / Ctrl+Shift+Z | undo / redo in the fragment history |
+| Esc | leave the text field |
 
-## Структура проекта
+## Project structure
 
 ```
 media-study/
-├── start.bat                  запуск приложения
-├── requirements.txt           зависимости Python
-├── media_study/               весь код приложения (пакет Python)
-│   ├── core/                  общее для всех частей
-│   │   ├── manifest.py          формат манифеста: видео, фрагменты, настройки
-│   │   ├── frames.py            кадры <-> секунды
-│   │   ├── audio.py             звуковая дорожка (audio.pcm) и вырезки из неё
-│   │   ├── waveform.py          волна громкости для дорожки редактора
-│   │   ├── lang.py              языки речи и карточек
-│   │   ├── context_bounds.py    запас до и после отрезка
-│   │   ├── text_clean.py        чистка текста фрагментов
-│   │   ├── text_polish.py       оформление текста (пунктуация, регистр)
-│   │   ├── progress.py          прогресс этапов (для «Обработки»)
-│   │   ├── resources.py         сколько ядер процессора можно занимать
-│   │   └── secrets.py           ключи сервисов из папки secrets/
-│   ├── ingest/                этап 1: от ссылки или файла до фрагментов
-│   │   ├── cli.py               запуск этапа 1 (его вызывает приложение)
-│   │   ├── acquire.py           скачивание по ссылке / импорт своего файла
-│   │   ├── download.py          yt-dlp, субтитры
-│   │   ├── reencode.py          копия для редактора (all-intra, ≤720p)
-│   │   ├── speech/              распознавание речи (Whisper, ElevenLabs)
-│   │   ├── sources/             источники текста (Notion, агент поиска)
-│   │   ├── source_text.py       сверка источника с распознанным
-│   │   ├── boundaries.py        где резать речь на фразы
-│   │   ├── segment.py           фрагменты с полным покрытием видео
-│   │   ├── end_refine.py        уточнение концов по громкости
-│   │   ├── reshape.py           перекройка фрагментов
-│   │   ├── ai_fix.py            доводка не сверившегося текста моделью
-│   │   ├── subtitles.py         разбор субтитров
-│   │   ├── build_manifest.py    сборка манифеста из всего выше
-│   │   ├── rebuild.py           пересборка без скачивания и распознавания
-│   │   └── batch_prepare.py     пакетная подготовка плейлиста
-│   ├── editing/               пакетные правки готового манифеста
-│   ├── export/                этап 3: Anki
-│   │   ├── worker.py            фоновая очередь: клипы -> карточки
-│   │   ├── clips.py             нарезка клипов
-│   │   ├── anki.py              AnkiConnect: карточки, цвета, порядок
-│   │   ├── reverse.py           обратные карточки
-│   │   ├── decks.py             колоды
-│   │   ├── translator.py        перевод карточек (OpenRouter)
-│   │   └── agent.py             агент перевода и доводки по флагам
-│   ├── packs.py               наборы .mspack.json: выгрузка и применение
-│   └── web/                   приложение
-│       ├── run.py               запуск сервера
-│       ├── server.py            приложение FastAPI: папка data, видео, запуск
-│       ├── api/                 маршруты API по разделам: system, media, ingest,
+├── start.bat                  app launcher
+├── requirements.txt           Python dependencies
+├── media_study/               all app code (Python package)
+│   ├── core/                  shared by all parts
+│   │   ├── manifest.py          manifest format: video, fragments, settings
+│   │   ├── frames.py            frames <-> seconds
+│   │   ├── audio.py             audio track (audio.pcm) and cuts from it
+│   │   ├── waveform.py          loudness waveform for the editor track
+│   │   ├── lang.py              speech and card languages
+│   │   ├── context_bounds.py    padding before and after a segment
+│   │   ├── text_clean.py        fragment text cleanup
+│   │   ├── text_polish.py       text formatting (punctuation, case)
+│   │   ├── progress.py          stage progress (for Processing)
+│   │   ├── resources.py         how many CPU cores may be used
+│   │   └── secrets.py           service keys from the secrets/ folder
+│   ├── ingest/                stage 1: from a link or file to fragments
+│   │   ├── cli.py               stage 1 entry point (called by the app)
+│   │   ├── acquire.py           download by link / import your own file
+│   │   ├── download.py          yt-dlp, subtitles
+│   │   ├── reencode.py          editor copy (all-intra, ≤720p)
+│   │   ├── speech/              speech recognition (Whisper, ElevenLabs)
+│   │   ├── sources/             text sources (Notion, search agent)
+│   │   ├── source_text.py       aligning the source with the recognized text
+│   │   ├── boundaries.py        where to cut speech into phrases
+│   │   ├── segment.py           fragments with full video coverage
+│   │   ├── end_refine.py        refining ends by loudness
+│   │   ├── reshape.py           reshaping fragments
+│   │   ├── ai_fix.py            model refinement of unaligned text
+│   │   ├── subtitles.py         subtitle parsing
+│   │   ├── build_manifest.py    builds the manifest from all of the above
+│   │   ├── rebuild.py           rebuild without downloading and recognition
+│   │   └── batch_prepare.py     batch preparation of a playlist
+│   ├── editing/               batch edits of a finished manifest
+│   ├── export/                stage 3: Anki
+│   │   ├── worker.py            background queue: clips -> cards
+│   │   ├── clips.py             clip cutting
+│   │   ├── anki.py              AnkiConnect: cards, colors, order
+│   │   ├── reverse.py           reverse cards
+│   │   ├── decks.py             decks
+│   │   ├── translator.py        card translation (OpenRouter)
+│   │   └── agent.py             translation and flag refinement agent
+│   ├── packs.py               .mspack.json packs: export and apply
+│   └── web/                   the app
+│       ├── run.py               server launcher
+│       ├── server.py            FastAPI app: data folder, video, startup
+│       ├── api/                 API routes by section: system, media, ingest,
 │       │                        settings, stage3, stats, anki, agent, editor
-│       ├── library.py           список видео, сводки, настройки
-│       ├── manifest_store.py    правки фрагментов с историей (Ctrl+Z)
-│       ├── storage.py           хранилища на других дисках
-│       └── static/              интерфейс
-│           ├── index.html           разметка и порядок подключения
-│           ├── css/                 стили по областям: base, library, modals,
-│           │                        stats, settings, editor (порядок важен)
-│           ├── js/                  страницы вокруг редактора
-│           │   ├── format.js          форматирование, сортировки, языки
-│           │   ├── dialogs.js         вопросы, окно поверх страницы, формы
-│           │   ├── motion.js          полосы-зебры, «Отмена?», полосы прогресса
-│           │   ├── shell.js           меню, режим видео/аудио, роутер, журналы
-│           │   └── pages/             разделы: library, process, add, stats, settings
-│           │   └── editor/            редактор: state, view, app (основа), text,
-│           │                          bounds, modes, input (кнопки, клавиши), main
-│           ├── textedit.js, player.js, плеер, дорожка, правка текста на месте
+│       ├── library.py           video list, summaries, settings
+│       ├── manifest_store.py    fragment edits with history (Ctrl+Z)
+│       ├── storage.py           storage on other drives
+│       └── static/              frontend
+│           ├── index.html           markup and load order
+│           ├── css/                 styles by area: base, library, modals,
+│           │                        stats, settings, editor (order matters)
+│           ├── js/                  pages around the editor
+│           │   ├── format.js          formatting, sorting, languages
+│           │   ├── dialogs.js         prompts, overlay window, forms
+│           │   ├── motion.js          zebra bars, "Cancel?", progress bars
+│           │   ├── shell.js           menu, video/audio mode, router, logs
+│           │   └── pages/             sections: library, process, add, stats, settings
+│           │   └── editor/            editor: state, view, app (core), text,
+│           │                          bounds, modes, input (buttons, keys), main
+│           ├── textedit.js, player.js, player, track, in-place text editing
 │           │   timeline.js, audio.js …
-│           ├── textfx.js            появление текста по буквам
-│           └── i18n.js, i18n-en.js  английский интерфейс
-├── tools/                     служебные скрипты и .bat
-├── tests/                     тесты
-├── data/                      видео, аудио и настройки (в git не попадает)
-└── secrets/                   ключи OpenRouter и ElevenLabs (в git не попадает)
+│           ├── textfx.js            letter-by-letter text appearance
+│           └── i18n.js, i18n-en.js  English interface
+├── tools/                     utility scripts and .bat files
+├── tests/                     tests
+├── data/                      videos, audio and settings (not tracked by git)
+└── secrets/                   OpenRouter and ElevenLabs keys (not tracked by git)
 ```
 
-## Служебное
+## Utilities
 
-- Этап 1 без приложения:
+- Stage 1 without the app:
   `py -3.12 -m media_study.ingest.cli <url> --project-dir data/<id> [--transcript file.txt]`
-  (или `tools\process_video.bat`).
-- Пересборка нарезки без повторного скачивания и распознавания (ручные правки
-  заменятся, старый манифест сохранится как `manifest.bak-<дата-время>.json`):
+  (or `tools\process_video.bat`).
+- Rebuild the splitting without re-downloading and re-recognizing (manual edits
+  are replaced, the old manifest is kept as `manifest.bak-<date-time>.json`):
   `py -3.12 -m media_study.ingest.rebuild --project-dir data/<id>`.
-- Убрать из манифеста удалённые фрагменты:
+- Remove deleted fragments from the manifest:
   `py -3.12 -m tools.compact_manifest --project-dir data/<id>`.
-- Строки интерфейса без перевода на английский:
+- Interface strings missing an English translation:
   `py -3.12 -m tools.i18n_extract`.
 
-## Тесты
+## Tests
 
 ```
 py -3.12 -m unittest discover -s tests -t .
