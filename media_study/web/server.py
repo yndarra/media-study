@@ -181,3 +181,8 @@ try:
     _ensure_batch_poller()
 except Exception:  # data/ ещё нет и т.п.
     pass
+
+# Карточки видео без колоды (после синхронизации с другим устройством) — в фоне.
+from media_study.web.api.settings import _start_deck_repair  # noqa: E402
+
+_start_deck_repair()

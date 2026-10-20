@@ -71,6 +71,33 @@ def _deck_sync_state() -> dict:
     return {"pending": _deck_sync["pending"], "message": _deck_sync["message"], "moved": _deck_sync["moved"]}
 
 
+# Карточки видео без колоды (вернулись в удалённую колоду после синхронизации
+# с другим устройством, см. decks.py) – проверка вскоре после запуска сервера
+# и дальше раз в DECK_REPAIR_EVERY секунд. Anki закрыт – до следующей проверки.
+DECK_REPAIR_FIRST = 60
+DECK_REPAIR_EVERY = 600
+
+
+def _start_deck_repair() -> None:
+    from media_study.export import anki, decks
+
+    def loop():
+        time.sleep(DECK_REPAIR_FIRST)  # сервер только поднялся – не мешать запуску
+        while True:
+            try:
+                with _deck_sync["lock"]:  # не одновременно с переносом колод
+                    repaired = decks.repair(DATA_DIR)
+                for item in repaired:
+                    print(f"Колоды Anki: {item['cards']} карт. без колоды возвращено в «{item['to']}»", flush=True)
+            except anki.AnkiUnavailable:
+                pass
+            except Exception as error:  # не валить сервер из фонового потока
+                print(f"Колоды Anki: проверка карточек без колоды не удалась: {error}", flush=True)
+            time.sleep(DECK_REPAIR_EVERY)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
 _models_cache: dict = {"at": 0.0, "models": []}
 # Кого показывать в списке моделей перевода (остальные можно вписать вручную).
 MODEL_PROVIDERS = ("anthropic/", "openai/", "google/", "deepseek/", "x-ai/", "qwen/", "mistralai/")
