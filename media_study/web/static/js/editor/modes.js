@@ -16,6 +16,9 @@ Object.assign(App, {
     $("stage3-btn").textContent = stop ? "Остановить" : "Anki";
     $("stage3-btn").dataset.action = stop ? "stop" : "queue";
     $("stage3-btn").disabled = !stop && !hasNew;
+    // Вернуть из Anki – только уже ставший карточкой (не в очереди) фрагмент.
+    const f = currentFragment();
+    $("return-btn").disabled = !(f && f.exported && f.status === "active" && !State.stage3.pending_ids.includes(f.id));
     const s = State.stage3;
     const eta = $("stage3-eta");
     let label = "";
@@ -51,6 +54,22 @@ Object.assign(App, {
   },
 
   // Остановить передачу в Anki: ещё не закодированное снова правится.
+  // Вернуть текущий фрагмент из Anki: он снова правится здесь (текст,
+  // поправленный в самом Anki, подтягивается); следующая передача обновит
+  // ту же карточку (клип переделывается, только если поменялись границы).
+  async returnFromAnki() {
+    const f = currentFragment();
+    if (!f || !f.exported) return;
+    await this.flushSaves();
+    const result = await this._call(Api.ankiReturn([{ project: State.project, fragment_id: f.id }]));
+    if (!result) return;
+    const manifest = await this._call(Api.getManifest());
+    if (!manifest) return;
+    await this.showFragment(manifest, f.id);
+    FragList.schedule();
+    this.flash("Фрагмент вернулся из Anki – после правки нажмите «Anki», карточка перепишется", "ok");
+  },
+
   async stopStage3() {
     await this.flushSaves();
     const result = await this._call(Api.stopStage3(State.project));
@@ -125,7 +144,7 @@ Object.assign(App, {
     // Вернули режим, как был: нетронутые фрагменты снова числятся в Anki.
     this.flash(`Говорящие на карточках: ${on ? "вкл" : "выкл"}` +
       (result.restored ? ` – ${result.restored} нетронутых фрагментов снова в Anki` : "") +
-      (result.returned ? ` – ${result.returned} карточек вернулись, передайте их в Anki снова` : ""));
+      (result.returned ? ` – ${result.returned} карточек вернулись, передайте их в Anki снова` : ""), on ? "ok" : "");
   },
 
   toggleSkipDeleted() {

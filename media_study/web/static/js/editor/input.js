@@ -6,6 +6,7 @@ $("replay-marker-btn").addEventListener("click", () => Player.replayFromMarker()
 // Клик по самому видео — то же, что кнопка Play/пауза.
 $("video").addEventListener("click", () => Player.togglePlay());
 $("undo-btn").addEventListener("click", () => App.undo());
+$("return-btn").addEventListener("click", () => App.returnFromAnki());
 $("stage3-btn").addEventListener("click", () =>
   ($("stage3-btn").dataset.action === "stop" ? App.stopStage3() : App.queueStage3()));
 $("redo-btn").addEventListener("click", () => App.redo());
@@ -126,27 +127,7 @@ $("cur-text").addEventListener("cut", (e) => {
 $("cur-text").addEventListener("compositionend", () => App.resyncFromDom());
 $("cur-text").addEventListener("blur", () => App.onTextBlur());
 
-// Горячие клавиши. Клавиши определяются по физическому положению (e.code),
-// поэтому работают и в русской раскладке (A = Ф, D = В, Q = Й, W = Ц, E = У).
-const HOTKEYS = {
-  KeyA: () => App.goStep(-1), // предыдущий фрагмент (в рамках фильтра списка)
-  KeyD: () => App.goStep(1), // следующий фрагмент (в рамках фильтра списка)
-  "Shift+KeyA": () => App.step(-1), // на кадр назад (или выделенную границу)
-  "Shift+KeyD": () => App.step(1), // на кадр вперёд
-  ArrowLeft: () => App.step(-1),
-  ArrowRight: () => App.step(1),
-  Space: () => Player.togglePlay(), // пауза / воспроизведение
-  KeyW: () => Player.replay(), // повтор с начала отрезка
-  "Shift+Space": () => Player.replayFromMarker(), // повтор с жёлтой метки (нет метки — ничего)
-  KeyQ: () => App.snapBound("start"), // начало отрезка — к концу предыдущего (кнопка слева)
-  "Shift+KeyQ": () => App.select("start"), // выделить начало отрезка
-  "Shift+KeyW": () => App.select("playhead"), // выделить текущий кадр
-  KeyE: () => App.snapBound("end"), // конец отрезка — к началу следующего (кнопка справа)
-  "Shift+KeyE": () => App.select("end"), // выделить конец отрезка
-  KeyR: () => App.changeSpeaker("rover"), // кнопка R: говорящий – Rover (ещё раз – как было)
-  // Пометить на удаление / снять пометку (как кнопка корзины); переданные в Anki — нельзя.
-  KeyS: () => currentFragment() && !isLocked(currentFragment()) && App.deleteSoft(),
-};
+// Горячие клавиши – действия и их клавиши (свои – из настроек) в js/editor/keymap.js.
 
 // Буфер имён: 7 недавних говорящих (свежие сверху). Обновляется только при
 // переходе к другому фрагменту: сначала говорящие покинутого (уже с правками –
@@ -328,7 +309,8 @@ const VIEW_ONLY_KEYS = new Set(["Space", "KeyW", "KeyA", "KeyD", "ShiftLeft", "S
 document.addEventListener("keydown", (e) => {
   if (!State.ankiLocked || State.view !== "editor" || !State.manifest) return;
   const typing = e.target.isContentEditable || ["TEXTAREA", "INPUT", "SELECT"].includes(e.target.tagName);
-  if (!typing && VIEW_ONLY_KEYS.has(e.code) && !e.ctrlKey) return;
+  const viewAction = Keymap.match(e);
+  if (!typing && ((VIEW_ONLY_KEYS.has(e.code) && !e.ctrlKey) || (viewAction && viewAction.view))) return;
   if (e.code === "Escape") return;
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -377,12 +359,11 @@ document.addEventListener("keydown", (e) => {
   const tag = e.target.tagName;
   // Внутри текста — обычный набор; своя отмена и Esc — выйти из текста.
   if (e.target.isContentEditable) {
-    if (e.ctrlKey && (e.code === "KeyY" || (e.code === "KeyZ" && e.shiftKey))) {
+    // В тексте – только действия, которые работают и там (отмена, склейка).
+    const inText = Keymap.match(e);
+    if (inText && inText.inText) {
       e.preventDefault();
-      App.textHistory(1);
-    } else if (e.ctrlKey && e.code === "KeyZ") {
-      e.preventDefault();
-      App.textHistory(-1);
+      (inText.text || inText.run)();
     } else if (e.key === "Escape") {
       e.preventDefault();
       e.target.blur();
@@ -390,28 +371,12 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (tag === "TEXTAREA" || tag === "INPUT") return;
-  if (e.ctrlKey || e.metaKey) {
-    if (e.code === "Space") {
-      // Ctrl+Пробел — повтор с жёлтой метки.
-      e.preventDefault();
-      if (document.activeElement && document.activeElement.tagName === "BUTTON") document.activeElement.blur();
-      Player.replayFromMarker();
-    } else if (e.code === "KeyY" || (e.code === "KeyZ" && e.shiftKey)) {
-      e.preventDefault();
-      App.redo();
-    } else if (e.code === "KeyZ") {
-      e.preventDefault();
-      App.undo();
-    }
-    return;
-  }
-  if (e.altKey) return;
-  const action = HOTKEYS[(e.shiftKey ? "Shift+" : "") + e.code];
+  const action = Keymap.match(e);
   if (!action) return;
   e.preventDefault();
   // Пробел не должен ещё и "нажимать" кнопку, на которой остался фокус после клика.
   if (document.activeElement && document.activeElement.tagName === "BUTTON") document.activeElement.blur();
-  action();
+  action.run();
 });
 
 document.addEventListener("keyup", (e) => {
@@ -423,10 +388,13 @@ document.addEventListener("keyup", (e) => {
     e.target.blur();
   } else if (e.key === "Control" && ctrlAlone && real && State.view === "editor" && !e.target.isContentEditable
     && !["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName) && currentFragment() && !isLocked(currentFragment())) {
-    // Одиночный Ctrl вне поля текста – войти в поле, каретка в конец.
+    // Одиночный Ctrl вне поля текста – войти в поле реплик, каретка в конец;
+    // Shift+Ctrl – в поле говорящих (конец имени первой строки).
     const el = $("cur-text");
     el.focus();
-    TextEditor.setCaret(el, TextEditor.tokens.length);
+    const cells = TextEditor.columns && !TextEditor.hideWho ? TextEditor._cells() : [];
+    if (e.shiftKey && cells.length) TextEditor.setCaretInWho(el, 0);
+    else TextEditor.setCaret(el, TextEditor.tokens.length);
   }
   if (e.key === "Control") ctrlAlone = false;
 });

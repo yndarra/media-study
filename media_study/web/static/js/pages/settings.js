@@ -2,6 +2,80 @@
 
 Object.assign(Pages, {
   // -- настройки ------------------------------------------------------------------------
+  // Горячие клавиши редактора: таблица действий с их клавишами. Свои клавиши
+  // лежат в скрытом поле set-hotkeys (JSON {действие: [сочетания]}, только
+  // отличающиеся от умолчаний) – так работают «Отменить» и вопрос при уходе.
+  setupHotkeys(el) {
+    const field = el.querySelector("#set-hotkeys");
+    const table = el.querySelector("#hotkeys-edit");
+    let capturing = null; // действие, которому ждём сочетание
+    const overrides = () => JSON.parse(field.value || "{}");
+    const keysOf = (a, o = overrides()) => o[a.id] || a.keys;
+    const store = (o) => {
+      // Совпало с умолчанием – своё не хранится.
+      for (const a of Keymap.ACTIONS) if (o[a.id] && o[a.id].join() === a.keys.join()) delete o[a.id];
+      field.value = JSON.stringify(o);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      draw();
+    };
+    const draw = () => {
+      const o = overrides();
+      table.innerHTML = Keymap.ACTIONS.map((a) => {
+        const keys = keysOf(a, o);
+        const chips = keys.map((k) => `<kbd class="hk">${escapeHtml(Keymap.label(k))}<button class="hk-x" data-a="${a.id}" data-k="${escapeHtml(k)}" title="Убрать">×</button></kbd>`).join(" ");
+        const add = capturing === a.id
+          ? '<span class="hk-wait">Нажмите сочетание…</span>'
+          : `<button class="hk-add step-btn" data-a="${a.id}" title="Добавить клавишу">+</button>`;
+        const reset = o[a.id] ? `<button class="hk-reset link-btn" data-a="${a.id}">По умолчанию</button>` : "";
+        return `<tr><td>${chips} ${add}</td><td>${escapeHtml(a.label)} ${reset}</td></tr>`;
+      }).join("");
+    };
+    table.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-a]");
+      if (!b) return;
+      const o = overrides();
+      const action = Keymap.ACTIONS.find((a) => a.id === b.dataset.a);
+      if (b.classList.contains("hk-x")) {
+        o[action.id] = keysOf(action, o).filter((k) => k !== b.dataset.k);
+        store(o);
+      } else if (b.classList.contains("hk-reset")) {
+        delete o[action.id];
+        store(o);
+      } else {
+        capturing = action.id;
+        draw();
+      }
+    });
+    // Сочетание для "+": следующее нажатие (не сами Ctrl/Shift/Alt); Esc – отмена.
+    const onKey = (e) => {
+      if (!capturing || !el.isConnected) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.code === "Escape") {
+        capturing = null;
+        draw();
+        return;
+      }
+      const combo = Keymap.comboOf(e);
+      if (!combo) return;
+      const o = overrides();
+      for (const a of Keymap.ACTIONS) {
+        const keys = keysOf(a, o);
+        if (a.id !== capturing && keys.includes(combo)) o[a.id] = keys.filter((k) => k !== combo); // было у другого – снять
+      }
+      const target = Keymap.ACTIONS.find((a) => a.id === capturing);
+      const keys = keysOf(target, o);
+      if (!keys.includes(combo)) o[target.id] = [...keys, combo];
+      capturing = null;
+      store(o);
+    };
+    document.addEventListener("keydown", onKey, true);
+    // "Отменить" возвращает поле и шлёт input – таблица заново.
+    field.addEventListener("input", () => draw());
+    draw();
+  },
+
+
   // Разметка страницы настроек по сохранённым значениям s: карточки по темам,
   // внизу – горячие клавиши и кнопки. Выпадающие списки ставятся позже, в
   // места .picker-host (см. settings()).
@@ -14,6 +88,9 @@ Object.assign(Pages, {
     // Настройки – карточками по темам; кнопки – внизу справа.
     return `<h1>Настройки</h1>
       <div id="settings-form" class="page-grid">
+        <!-- Свои горячие клавиши (таблица – ниже, в карточке клавиш): поле внутри
+             формы, чтобы «Сохранить»/«Отменить» и вопрос при уходе их видели. -->
+        <input type="hidden" id="set-hotkeys" value="${escapeHtml(JSON.stringify(s.hotkeys || {}))}">
         <section class="set-card">
           <h2>Anki</h2>
           ${field("set-deck", "Колода", `<input id="set-deck" class="wide" value="${escapeHtml(s.anki_deck_root)}">`,
@@ -138,7 +215,9 @@ Object.assign(Pages, {
       </div>
       <section class="set-card wide-card hotkeys-card">
         <h2>Горячие клавиши редактора</h2>
-        <table class="stats hotkeys-table">${HOTKEY_HELP.map(([keys, what]) =>
+        <div class="field-hint">Нажмите «+» и затем нужное сочетание (Esc – отмена); «×» – убрать клавишу. Занятое сочетание снимается с прежнего действия.</div>
+        <table class="stats hotkeys-table" id="hotkeys-edit"></table>
+        <table class="stats hotkeys-table hotkeys-fixed">${Keymap.FIXED.map(([keys, what]) =>
           `<tr><td>${keys.split(" / ").map((k) => `<kbd>${escapeHtml(k)}</kbd>`).join(" / ")}</td><td>${escapeHtml(what)}</td></tr>`).join("")}</table>
       </section>
       <div class="settings-actions"><span id="settings-note" class="muted small"></span><button id="settings-cancel" class="step-btn">Отменить</button><button id="settings-save" class="step-btn primary">Сохранить</button></div>`;
@@ -166,6 +245,7 @@ Object.assign(Pages, {
       reserve_cpu_cores: Math.max(0, Number($v("set-reserve").value) || 0),
       low_priority: $v("set-priority").checked,
       storages: JSON.parse($v("set-storages").value || "[]"),
+      hotkeys: JSON.parse($v("set-hotkeys").value || "{}"),
       default_auto_play: $v("set-def-auto").checked,
       default_stop_at_end: $v("set-def-stop").checked,
       default_skip_deleted: $v("set-def-skip").checked,
@@ -199,6 +279,7 @@ Object.assign(Pages, {
     const [s, stores] = await Promise.all([Api.settings(), Api.storages().catch(() => [])]);
     el.innerHTML = this.settingsHtml(s);
     const host = (id) => el.querySelector(`.picker-host[data-for="${id}"]`);
+    this.setupHotkeys(el);
     // Хранилища: основное (data/) и добавленные; список правится до "Сохранить"
     // (скрытое поле set-storages – чтобы работали "Отменить" и вопрос при уходе).
     const storesField = el.querySelector("#set-storages");
@@ -460,7 +541,7 @@ Object.assign(Pages, {
       }
       note.classList.remove("error");
       watcher.snapshot();
-      applyEditorDefaults(saved); // режимы редактора – сразу
+      applyEditorDefaults(saved); // режимы и клавиши редактора – сразу
       watchDeckSync(saved.deck_sync);
     };
     // Ошибка (например, модели нет на OpenRouter) уже показана слева от кнопок.

@@ -189,7 +189,7 @@ Object.assign(App, {
     await this.flushSaves();
     const result = await this._call(Api.hardDelete(currentFragment().id));
     if (!result) return;
-    State.manifest = result.manifest;
+    State.manifest = withVideoExtras(result.manifest);
     await this.openById(result.nearest_left_fragment_id);
   },
 
@@ -197,8 +197,9 @@ Object.assign(App, {
     await this.flushSaves();
     const result = await this._call(Api.merge(currentFragment().id, direction));
     if (!result) return;
-    State.manifest = result.manifest;
+    State.manifest = withVideoExtras(result.manifest);
     await this.openById(result.merged_fragment_id); // стык подсветится сам (renderText -> updateJunction)
+    if (State.autoPlay) Player.replay(); // объединённый – сразу слушать, как при переходе
   },
 
   async split() {

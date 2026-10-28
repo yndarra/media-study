@@ -411,17 +411,44 @@ Object.assign(App, {
       return tokens.length;
     };
     TextEditor.remember(tokenOf(j.at));
+    // Участок вокруг стыка до склейки – для отмены повторным Ctrl+Space.
+    const from = Math.max(0, tokenOf(j.at - 1) - 3);
+    const beforeSlice = tokens.slice(from, tokenOf(j.at + 1) + 4).map((t) => ({ ...t }));
     if (!keep) {
       const k = tokenOf(j.at + 1);
       TextEditor.replaceRange(k, k + 1, text[j.at + 1].toLowerCase());
     }
     const dot = tokenOf(j.at - 1);
     TextEditor.deleteRange(dot, dot + 1);
+    const grown = keep ? 0 : 1; // строчная буква – новый токен рядом с удалённой заглавной
+    this._joinUndo = { id: f.id, from, before: beforeSlice,
+      after: TextEditor.tokens.slice(from, from + beforeSlice.length + grown).map((t) => ({ ...t })) };
     f.text = TextEditor.text();
     f.text_marks = TextEditor.marks();
     TextEditor.render($("cur-text"));
     this._scheduleTextSave(f);
     this.updateJunction(f); // склеено – кнопка серая, стык больше не мигает
+  },
+
+  // Ctrl+Space: склеить в одну фразу; если только что склеили и этот участок
+  // с тех пор не трогали – повторное нажатие возвращает как было.
+  toggleJunction() {
+    const f = currentFragment();
+    if (!f || isLocked(f)) return;
+    const u = this._joinUndo;
+    const same = (a, b) => a.length === b.length && a.every((t, k) => t.ch === b[k].ch && t.kind === b[k].kind);
+    if (u && u.id === f.id && same(TextEditor.tokens.slice(u.from, u.from + u.after.length), u.after)) {
+      TextEditor.remember(u.from);
+      TextEditor.tokens.splice(u.from, u.after.length, ...u.before.map((t) => ({ ...t })));
+      this._joinUndo = null;
+      f.text = TextEditor.text();
+      f.text_marks = TextEditor.marks();
+      TextEditor.render($("cur-text"));
+      this._scheduleTextSave(f);
+      this.updateJunction(f);
+      return;
+    }
+    this.joinAtJunction();
   },
 
   // Имена говорящих видео (с заглавной – их не делаем строчными).

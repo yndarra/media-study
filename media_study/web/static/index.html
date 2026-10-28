@@ -76,10 +76,10 @@
     <div id="status-row" class="row3">
       <div class="group left">
         <button id="play-pause" class="icon-btn" title="Воспроизвести / пауза"></button>
-        <button id="replay-btn" class="icon-btn" title="Повтор с начала отрезка (W)">
+        <button id="replay-btn" class="icon-btn" title="Повтор с начала отрезка">
           <svg viewBox="0 0 20 20"><path d="M16 10a6 6 0 1 1-1.8-4.3"/><path d="M16 3.5v3h-3"/><path d="M10 7l3 5h-6z" fill="#5fb4f0" stroke="none"/></svg>
         </button>
-        <button id="replay-marker-btn" class="icon-btn" title="Повтор с жёлтой метки (Shift+Пробел или Ctrl+Пробел)" disabled>
+        <button id="replay-marker-btn" class="icon-btn" title="Повтор с жёлтой метки" disabled>
           <svg viewBox="0 0 20 20"><path d="M16 10a6 6 0 1 1-1.8-4.3"/><path d="M16 3.5v3h-3"/><path d="M7 8h6l-3 5z" fill="#ffc857" stroke="none"/></svg>
         </button>
         <button id="mode-toggle" class="icon-btn"></button>
@@ -108,10 +108,10 @@
           <svg viewBox="0 0 20 20"><path d="M4 10a6 6 0 1 0 1.8-4.3"/><path d="M4 3.5v3h3"/></svg>
         </button>
         <span class="sep"></span>
-        <button id="undo-btn" class="icon-btn" title="Назад — отменить действие (Ctrl+Z)" disabled>
+        <button id="undo-btn" class="icon-btn" title="Назад — отменить действие" disabled>
           <svg viewBox="0 0 20 20"><path d="M7.5 5L3.5 9l4 4"/><path d="M3.5 9h8.5a4.5 4.5 0 0 1 0 9H9"/></svg>
         </button>
-        <button id="redo-btn" class="icon-btn" title="Вперёд — вернуть отменённое (Ctrl+Y)" disabled>
+        <button id="redo-btn" class="icon-btn" title="Вперёд — вернуть отменённое" disabled>
           <svg viewBox="0 0 20 20"><path d="M12.5 5l4 4-4 4"/><path d="M16.5 9H8a4.5 4.5 0 0 0 0 9h3"/></svg>
         </button>
       </div>
@@ -122,7 +122,7 @@
     <div id="edit-row" class="row5">
       <div class="group left">
         <button id="step-back-10" class="step-btn" title="На 10 кадров назад (текущий кадр или выбранная граница)">−10</button>
-        <button id="step-back-1" class="step-btn" title="На 1 кадр назад (←)">−1</button>
+        <button id="step-back-1" class="step-btn" title="На 1 кадр назад">−1</button>
       </div>
       <div class="group">
         <button id="pad-left-minus" class="step-btn" title="Запас слева от отрезка: −3 с">−3 с</button>
@@ -149,7 +149,7 @@
           <svg viewBox="0 0 20 20"><rect x="2" y="5" width="6" height="10" rx="1"/><rect x="12" y="5" width="6" height="10" rx="1"/><path d="M10 2v16" stroke-dasharray="2 2"/></svg>
         </button>
         <span class="sep"></span>
-        <button id="delete-soft" class="icon-btn" title="Пометить на удаление (S)">
+        <button id="delete-soft" class="icon-btn" title="Пометить на удаление">
           <svg viewBox="0 0 20 20"><path d="M3.5 5.5h13M8 5.5V3.5h4v2M5.5 5.5l1 11h7l1-11"/></svg>
         </button>
         <button id="delete-hard" class="icon-btn danger" title="Удалить окончательно (только объединённый фрагмент или часть разделённого)">
@@ -164,7 +164,7 @@
         <button id="pad-right-plus" class="step-btn" title="Запас справа от отрезка: +3 с (у края видео — сколько осталось)">+3 с</button>
       </div>
       <div class="group right">
-        <button id="step-fwd-1" class="step-btn" title="На 1 кадр вперёд (→)">+1</button>
+        <button id="step-fwd-1" class="step-btn" title="На 1 кадр вперёд">+1</button>
         <button id="step-fwd-10" class="step-btn" title="На 10 кадров вперёд (текущий кадр или выбранная граница)">+10</button>
       </div>
     </div>
@@ -192,6 +192,11 @@
       <div class="nav-mid group stage3">
         <span id="stage3-eta" class="readout hidden"></span>
         <button id="stage3-btn" class="step-btn" title="Передать в Anki все фрагменты с первого по текущий включительно">Anki</button>
+        <!-- Вернуть текущий фрагмент из Anki на правку (не открывая Anki): после
+             правки "Anki" перепишет ту же карточку. -->
+        <button id="return-btn" class="icon-btn" title="Вернуть из Anki на правку – потом «Anki» перепишет ту же карточку">
+          <svg viewBox="0 0 20 20"><path d="M8 5L4 9l4 4"/><path d="M4.5 9H12a4 4 0 0 1 0 8H9"/></svg>
+        </button>
         <span class="sep"></span>
         <!-- Соседние фразы (серые сверху и снизу): удалённые пропускаются (по умолчанию) или видны. -->
         <button id="skip-deleted-btn" class="icon-btn"></button>
@@ -212,7 +217,7 @@
         <div class="speaker-btns">
           <button id="speaker-prev" class="step-btn speaker-btn" title="Говорящий из предыдущих фрагментов (ещё раз – более ранний)">‹</button>
           <button id="speaker-clear" class="step-btn speaker-btn" title="Убрать говорящего – остаётся только реплика (ещё раз – как было)">×</button>
-          <button id="speaker-rover" class="step-btn speaker-btn" title="Говорящий – Rover (ещё раз – как было), клавиша R">R</button>
+          <button id="speaker-rover" class="step-btn speaker-btn" title="Говорящий – Rover (ещё раз – как было)">R</button>
           <button id="speaker-next" class="step-btn speaker-btn" title="Говорящий из следующих фрагментов (ещё раз – более поздний)">›</button>
         </div>
         <span class="sep"></span>
@@ -276,6 +281,7 @@
   <script src="/js/editor/text.js"></script>
   <script src="/js/editor/bounds.js"></script>
   <script src="/js/editor/modes.js"></script>
+  <script src="/js/editor/keymap.js"></script>
   <script src="/js/editor/input.js"></script>
   <script src="/js/editor/main.js"></script>
   <script src="/timer.js"></script>

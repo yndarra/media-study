@@ -612,7 +612,7 @@ Object.assign(Pages, {
         paint(s);
         // Копия готова, но файлы видео кто-то держит – перенос ждёт (кто – в тексте).
         if (moving && mv.waiting) setNote(mv.waiting);
-        else if (moving) setNote(`Перенос на ${mv.dest}:\n${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}% – ` +
+        else if (moving) setNote(`Перенос на ${mv.dest}\n${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}% – ` +
           `${(mv.done / 2 ** 30).toFixed(1)}/${(mv.total / 2 ** 30).toFixed(1)} ГБ`);
         else if (mv && mv.error) setNote(mv.error);
         else if (sending) setNote(`Передача в Anki: ${s.in_anki}/${s.active_total}`);

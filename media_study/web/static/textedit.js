@@ -289,7 +289,8 @@ const TextEditor = {
 
   // Строки фразы: [{from, split, to}] – токены [from, split) идут в ячейку
   // говорящего, [split, to) – в ячейку реплики (вместе с переносом строки).
-  // Говорящий определяется по видимому тексту строки (без красного).
+  // Строки делятся любым переносом, и удалённым (красный "↵" – в конце
+  // своей строки). Говорящий – по видимому тексту строки (без красного).
   _cells() {
     const tokens = this.tokens;
     const n = tokens.length;
@@ -297,12 +298,22 @@ const TextEditor = {
     let a = 0;
     for (;;) {
       let b = a;
-      while (b < n && !(tokens[b].ch === "\n" && tokens[b].kind !== DEL)) b++;
+      while (b < n && tokens[b].ch !== "\n") b++;
       const shown = [];
       for (let k = a; k < b; k++) if (tokens[k].kind !== DEL) shown.push(k);
-      const prefix = speakerPrefix(shown.map((k) => tokens[k].ch).join(""));
+      let prefix = speakerPrefix(shown.map((k) => tokens[k].ch).join(""));
+      let list = shown;
+      // Видимого имени нет (стёрто – красное, или строка удалена целиком) –
+      // имя ищется вместе с удалённым: красное имя остаётся в поле говорящих,
+      // а не переезжает в начало реплики.
+      if (!prefix) {
+        list = [];
+        for (let k = a; k < b; k++) if (!tokens[k].hidden) list.push(k);
+        prefix = speakerPrefix(list.map((k) => tokens[k].ch).join(""));
+        if (prefix && list.slice(0, prefix.length).some((k) => tokens[k].kind === INS)) prefix = null;
+      }
       const to = b < n ? b + 1 : n;
-      cells.push({ from: a, split: prefix ? shown[prefix.length - 1] + 1 : a, to });
+      cells.push({ from: a, split: prefix ? list[prefix.length - 1] + 1 : a, to });
       if (b >= n) break;
       a = to;
     }
@@ -419,6 +430,21 @@ const TextEditor = {
     return [this.offsetOf(el, range.startContainer, range.startOffset), this.offsetOf(el, range.endContainer, range.endOffset)];
   },
 
+  // Каретка в конец имени строки line (в поле говорящих, перед пробелами
+  // после двоеточия).
+  setCaretInWho(el, line) {
+    const who = el.querySelectorAll(".who")[line];
+    if (!who) return;
+    const range = document.createRange();
+    const gap = who.querySelector(".gap");
+    if (gap) range.setStartBefore(gap);
+    else range.selectNodeContents(who), range.collapse(false);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  },
+
   setCaret(el, offset) {
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     let remaining = offset;
@@ -467,10 +493,58 @@ const TextEditor = {
 
   // Применяет событие beforeinput к токенам. Возвращает позицию каретки
   // после правки или null, если событие не меняет текст.
+  // -- два поля (говорящие | реплики) --------------------------------------------
+
+  // Поле, где стоит каретка (начало выделения): {cell – номер строки, col –
+  // "who" | "say"} или null (не два поля).
+  _fieldAt(el) {
+    if (!this.columns || this.hideWho) return null;
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    let node = sel.getRangeAt(0).startContainer;
+    if (node.nodeType === 3) node = node.parentElement;
+    const cellEl = node && node.closest && node.closest(".who, .say");
+    if (!cellEl || !el.contains(cellEl)) return null;
+    return { cell: Math.floor([...el.children].indexOf(cellEl) / 2), col: cellEl.classList.contains("who") ? "who" : "say" };
+  },
+
+  // Границы поля col в строке cell: [начало, конец) без переноса строки.
+  _fieldRange(cell, col) {
+    const end = cell.to > cell.split && this.tokens[cell.to - 1] && this.tokens[cell.to - 1].ch === "\n" ? cell.to - 1 : cell.to;
+    return col === "who" ? [cell.from, cell.split] : [cell.split, end];
+  },
+
+  _lineEmpty(cell) {
+    for (let k = cell.from; k < cell.to; k++) if (this.tokens[k].kind !== DEL && this.tokens[k].ch !== "\n") return false;
+    return true;
+  },
+
+  // Удалить [from, to), но только внутри поля col (в каждой задетой строке –
+  // её часть этого поля); переносы строк и другое поле не трогаются.
+  // Возвращает новую позицию начала.
+  _deleteInField(from, to, col) {
+    const cells = this._cells();
+    const parts = [];
+    for (const cell of cells) {
+      const [a, b] = this._fieldRange(cell, col);
+      const s = Math.max(a, from);
+      const e = Math.min(b, to);
+      if (s < e) parts.push([s, e]);
+    }
+    // С конца – удаление набранного сдвигает позиции дальше по тексту.
+    for (const [s, e] of parts.reverse()) this.deleteRange(s, e);
+    return parts.length ? parts[parts.length - 1][0] : from;
+  },
+
   apply(el, event) {
     const type = event.inputType;
     const sel = this.selection(el) || [this.tokens.length, this.tokens.length];
     let [from, to] = sel;
+    const field = this._fieldAt(el);
+    if (field) {
+      const result = this._applyInField(el, event, field, from, to);
+      if (result !== undefined) return result;
+    }
 
     if (type.startsWith("delete")) {
       // Backspace в начале пустой первой строки (до каретки – только удалённое):
@@ -512,6 +586,87 @@ const TextEditor = {
     // Сначала выделенное "удаляется" (краснеет), потом вводится новое (зелёное).
     if (from !== to) this.deleteRange(from, to);
     return this.insert(from, str);
+  },
+
+  // Имя строки line стёрто (в поле говорящих остались только пробелы после
+  // двоеточия) – пробелы тоже стираются: иначе строка не считалась бы
+  // пустой и не убиралась бы Backspace.
+  _trimEmptyWho(line) {
+    const cell = this._cells()[line];
+    if (!cell) return;
+    const [a, b] = this._fieldRange(cell, "who");
+    const visible = [];
+    for (let k = a; k < b; k++) if (this.tokens[k].kind !== DEL) visible.push(k);
+    if (visible.length && visible.every((k) => /\s/.test(this.tokens[k].ch))) {
+      for (const k of visible.reverse()) this.deleteRange(k, k + 1);
+    }
+  },
+
+  // Правка в двух полях: удаление и замена выделенного – только в своём поле.
+  // undefined – действовать как обычно (вставка без выделения и т.п.).
+  _applyInField(el, event, field, from, to) {
+    const type = event.inputType;
+    const cells = this._cells();
+    const cell = cells[field.cell];
+    if (!cell) return undefined;
+    const [fa, fb] = this._fieldRange(cell, field.col);
+    if (type.startsWith("delete")) {
+      if (from === to) {
+        const back = type.includes("Backward");
+        // На краю поля: дальше – другое поле или другая строка. Строка
+        // убирается, только если она пустая; иначе ничего не происходит.
+        if (back && from <= fa) {
+          if (field.cell > 0 && this._lineEmpty(cell)) {
+            const nl = cells[field.cell - 1].to - 1;
+            this.deleteRange(nl, nl + 1);
+            return this._fieldRange(cells[field.cell - 1], "say")[1];
+          }
+          return null;
+        }
+        if (!back && from >= fb) {
+          const next = cells[field.cell + 1];
+          if (field.col === "say" && next && this._lineEmpty(next) && this.tokens[cell.to - 1].ch === "\n") {
+            this.deleteRange(cell.to - 1, cell.to);
+            return from;
+          }
+          return null;
+        }
+        // Внутри поля: диапазон подсказывает браузер (слово – Ctrl+Backspace),
+        // но не дальше края поля.
+        const ranges = event.getTargetRanges ? event.getTargetRanges() : [];
+        if (ranges.length) {
+          from = Math.max(fa, this.offsetOf(el, ranges[0].startContainer, ranges[0].startOffset));
+          to = Math.min(fb, this.offsetOf(el, ranges[0].endContainer, ranges[0].endOffset));
+        } else if (back) {
+          from = Math.max(fa, from - 1);
+        } else {
+          to = Math.min(fb, to + 1);
+        }
+        if (from >= to) return null;
+        const kept = this.deleteRange(from, to);
+        if (field.col === "who") this._trimEmptyWho(field.cell);
+        return !back ? from + kept : from;
+      }
+      const at = this._deleteInField(from, to, field.col);
+      if (field.col === "who") for (let i = 0; i < cells.length; i++) this._trimEmptyWho(i);
+      return at;
+    }
+    let str = null;
+    if (type === "insertText" || type === "insertReplacementText") {
+      str = event.data ?? (event.dataTransfer ? event.dataTransfer.getData("text/plain") : "");
+    } else if (type === "insertFromPaste" || type === "insertFromDrop" || type === "insertFromYank") {
+      str = event.dataTransfer ? event.dataTransfer.getData("text/plain") : "";
+    } else if (type === "insertParagraph" || type === "insertLineBreak") {
+      str = "\n";
+    }
+    if (str === null) return null;
+    str = str.replace(/\r\n?/g, "\n");
+    // В поле имён переносов строк нет.
+    if (field.col === "who") str = str.replace(/\n/g, " ");
+    if (!str) return null;
+    let at = from;
+    if (from !== to) at = this._deleteInField(from, to, field.col);
+    return this.insert(Math.max(at, fa), str);
   },
 
   // -- своя история правок -----------------------------------------------------

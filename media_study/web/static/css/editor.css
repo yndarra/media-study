@@ -392,3 +392,6 @@ body.frag-edit-sound { background: #26180d; }
 /* Редактор: говорящие на карточках выключены – имён в трёх фразах нет (ячейка
    имени скрыта, символы остаются в тексте фрагмента). */
 #context-preview.nowho .ctx .who { display: none; }
+
+/* Всплывашка «включено» (говорящие на карточках вкл) – зелёная. */
+#text-panel .toast.ok { background: rgba(46, 160, 67, 0.1); border-color: rgba(46, 160, 67, 0.35); color: #9be9a8; }

@@ -256,7 +256,7 @@ Object.assign(Pages, {
       }
       const mv = storageInfo && storageInfo.move;
       moving = !!(mv && !mv.finished);
-      procNote.textContent = moving ? (mv.waiting || `Перенос на ${mv.dest}:\n${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}%`) : mv && mv.error ? mv.error : "";
+      procNote.textContent = moving ? (mv.waiting || `Перенос на ${mv.dest}\n${mv.total ? Math.floor((100 * mv.done) / mv.total) : 0}%`) : mv && mv.error ? mv.error : "";
       renderProc();
       if (moving) setTimeout(pollMove, 1200);
     };

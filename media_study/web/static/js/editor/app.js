@@ -114,16 +114,21 @@ const App = {
       manifest = await this._call(Api.getManifest());
       if (!manifest) return;
     }
-    State.manifest = manifest;
+    State.manifest = withVideoExtras(manifest);
     const index = manifest.fragments.findIndex((f) => f.id === focusId);
     if (index < 0) {
       await this.open(State.fragmentIndex);
       return;
     }
     if (focusId === previousId) {
+      // Ответ пришёл, когда уже играл этот фрагмент (S и сразу D): если
+      // перерисовка остановила звук (границы сдвинулись – связанные границы),
+      // при автозапуске отрезок играет снова.
+      const playing = Player.playing;
       State.fragmentIndex = index;
       this.keepInsideFragment();
       this.renderAll(true);
+      if (playing && !Player.playing && State.autoPlay) Player.replay();
     } else {
       await this.open(index);
     }
@@ -368,9 +373,11 @@ const App = {
     }
   },
 
-  flash(message) {
+  // kind: "ok" – зелёная (что-то включилось), иначе красноватая.
+  flash(message, kind = "") {
     const toast = $("toast");
     toast.textContent = message;
+    toast.classList.toggle("ok", kind === "ok");
     toast.classList.remove("hidden");
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => toast.classList.add("hidden"), 5000);

@@ -32,6 +32,7 @@ const State = {
 // Режимы редактора по умолчанию (настройки) – при загрузке страницы и после
 // сохранения настроек.
 function applyEditorDefaults(settings) {
+  if (typeof Keymap !== "undefined") Keymap.setOverrides(settings.hotkeys);
   if (!settings) return;
   State.autoPlay = settings.default_auto_play !== false;
   State.stopAtSegmentEnd = settings.default_stop_at_end !== false;
@@ -58,6 +59,23 @@ function loadSpeed() {
 
 // Скорость, пока зажат Shift.
 const BOOST_SPEED = 2;
+
+// Манифест из ответа на правку (удалить, объединить, сбросить…) – без
+// дополнительных полей видео, которые сервер добавляет только при открытии
+// (режим говорящих, название, автор, аудио): они берутся из текущего.
+// Раньше после S и т.п. режим говорящих становился "выключен", и имена
+// пропадали, хотя кнопка показывала "включено".
+function withVideoExtras(manifest) {
+  const old = State.manifest && State.manifest.video;
+  if (manifest && manifest.video && old) {
+    for (const key of ["show_speakers", "audio_only"]) {
+      if (!(key in manifest.video) && key in old) manifest.video[key] = old[key];
+    }
+    // Название и автор – заданные в окне видео (в манифесте – исходные с YouTube).
+    for (const key of ["title", "group"]) if (key in old) manifest.video[key] = old[key];
+  }
+  return manifest;
+}
 
 function currentFragment() {
   return State.manifest ? State.manifest.fragments[State.fragmentIndex] : null;
