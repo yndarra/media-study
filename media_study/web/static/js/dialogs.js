@@ -47,7 +47,8 @@ function askConfirm({ title, text, yes, no, yesValue = "yes", noValue = "no", da
 // Окошко "Хранилище" (кнопка в окне видео): где лежит видео и куда его можно
 // перенести (подключённые хранилища из настроек). Возвращает путь выбранного
 // хранилища или null (закрыли / переносить некуда).
-function askStorage(info) {
+// pack: true – ещё и кнопка «Набор» (выгрузить набор для других; ответ "pack").
+function askStorage(info, { pack = false } = {}) {
   return new Promise((resolve) => {
     const here = info.here;
     const targets = info.targets || [];
@@ -67,7 +68,8 @@ function askStorage(info) {
           ${targets.map(option).join("")}
         </div>
         ${targets.length ? "" : '<div class="ask-text muted small">Других хранилищ нет – добавьте папку на другом диске в «Настройках».</div>'}
-        <div class="ask-actions"><button class="step-btn" data-a="close">Закрыть</button>` +
+        <div class="ask-actions">${pack ? '<button class="step-btn" data-a="pack" title="Набор для других: разметка, тексты и переводы файлом (без самого видео)">Набор</button>' : ""}` +
+        `<button class="step-btn" data-a="close">Закрыть</button>` +
         `${targets.length ? '<button class="step-btn primary" data-a="move" disabled>Перенести</button>' : ""}</div>
       </div>`;
     let chosen = null;
@@ -97,6 +99,7 @@ function askStorage(info) {
       }
       const action = e.target.closest("[data-a]");
       if (!action) return;
+      if (action.dataset.a === "pack") return finish("pack");
       finish(action.dataset.a === "move" && chosen ? chosen.path : null);
     });
     document.body.appendChild(overlay);

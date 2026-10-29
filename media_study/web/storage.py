@@ -257,7 +257,10 @@ def move(data_dir: Path, project_id: str, dest_root: str) -> None:
     """Перенести видео в хранилище dest_root (путь из storages). Ход – в MOVES[project_id]."""
     data_dir = Path(data_dir).resolve()
     link = data_dir / project_id
-    state = {"done": 0, "total": 0, "dest": os.path.splitdrive(os.path.abspath(str(dest_root)))[0] or _drive_label(Path(dest_root)),  # только "D:" – метка тома не влезала "error": "", "finished": False,
+    # Куда – только буква диска ("D:"): с меткой тома ("D: TOSHIBA EXT")
+    # подпись не влезала в блок «Сейчас идёт».
+    dest_label = os.path.splitdrive(os.path.abspath(str(dest_root)))[0] or _drive_label(Path(dest_root))
+    state = {"done": 0, "total": 0, "dest": dest_label, "error": "", "finished": False,
              "started": time.time()}
     with _lock:
         MOVES[project_id] = state

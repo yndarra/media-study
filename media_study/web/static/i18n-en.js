@@ -724,6 +724,7 @@ window.I18N_DICT.en =
 "Войти в поле реплик (каретка в конец) / выйти из текста": "Enter the lines field (caret at the end) / leave the text",
 "Войти в поле говорящих": "Enter the speakers field",
 "В пустой строке – убрать эту строку (в двух полях – только в своём поле)": "In an empty line – remove this line (with two fields – only within its field)",
+"Набор для других: разметка, тексты и переводы файлом (без самого видео)": "A pack for others: markup, texts and translations as a file (without the video itself)",
 "Набор ": "Pack "
 }
 ;

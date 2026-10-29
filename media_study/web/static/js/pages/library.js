@@ -364,7 +364,6 @@ Object.assign(Pages, {
         <button id="info-anki" class="step-btn fold zebra-host gone"><canvas class="zebra"></canvas><span>Передать в Anki</span></button>
         <button id="info-translate" class="step-btn fold zebra-host gone"><canvas class="zebra"></canvas><span>Перевести</span></button>
         <span id="info-note" class="muted small"></span>
-        <button id="info-pack" class="step-btn fold" title="Набор для других: разметка, тексты и переводы этого видео файлом (без самого видео)">Набор</button>
         <button id="info-storage" class="step-btn fold zebra-host" title="Где хранится видео; перенос на другой диск"><canvas class="zebra"></canvas><span>Хранилище</span></button>
         <button id="info-save" class="step-btn fold gone">Сохранить</button>
       </div>`;
@@ -546,9 +545,9 @@ Object.assign(Pages, {
       if (!busy && !moving) setNote("");
     };
     const editLink = body.querySelector("#info-edit");
-    body.querySelector("#info-pack").addEventListener("click", async (e) => {
-      const button = e.currentTarget;
-      // Сначала окошко: что войдёт в набор и для чего он; скачивается – по кнопке.
+    // Набор (кнопка в окошке «Хранилище»): сначала окошко – что войдёт в
+    // набор и для чего он; скачивается – по кнопке.
+    const exportPack = async () => {
       const fragments = last.active_total || 0;
       const box = '<svg viewBox="0 0 20 20"><path d="M3.5 6.5L10 3.5l6.5 3v7L10 16.5l-6.5-3z"/><path d="M3.5 6.5L10 9.5l6.5-3M10 9.5v7"/></svg>';
       const answer = await askConfirm({
@@ -562,15 +561,12 @@ Object.assign(Pages, {
         no: "Закрыть",
       });
       if (answer !== "yes") return;
-      button.disabled = true;
       try {
         await downloadPack(id, (text) => setNote(text));
       } catch (err) {
         setNote(`Набор не выгрузился: ${err.message}`);
-      } finally {
-        button.disabled = false;
       }
-    });
+    };
     // Первый вид кнопок – сразу на своих местах, без раскрытия по ширине
     // (иначе "Передать в Anki" / "Перевести" вырастали после появления окна и
     // ещё раз – при перерисовке свежими данными). Новые кнопки проявляются из
@@ -644,7 +640,8 @@ Object.assign(Pages, {
         setTimeout(refresh, 300);
         return;
       }
-      const dest = await askStorage(storageInfo || { here: { label: "?", path: "" }, targets: [] });
+      const dest = await askStorage(storageInfo || { here: { label: "?", path: "" }, targets: [] }, { pack: true });
+      if (dest === "pack") return exportPack();
       if (!dest) return;
       try {
         await Api.moveProject(id, dest);
