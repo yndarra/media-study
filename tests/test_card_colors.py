@@ -12,7 +12,8 @@ class TestDecorate(unittest.TestCase):
         front, back = anki.decorate("[sound:a.mp4]<br>Hi.", "Привет.<br><br><i>hi</i> – привет", ["Rover"], C)
         self.assertIn('<span class="ms-en" style="color:#e">Hi.</span>', front)
         self.assertIn('<span class="ms-dash" style="color:#d">–</span>', back)
-        self.assertTrue(back.endswith('<div class="ms-who" style="color:#w">Rover</div>'))
+        # строка имён – с отступом сверху от последней строки
+        self.assertTrue(back.endswith(f'<div class="ms-who" style="color:#w;margin-top:{anki.WHO_GAP}">Rover</div>'))
         self.assertNotIn("ms-who", front)
 
     def test_untranslated_card_keeps_back_empty(self):

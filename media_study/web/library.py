@@ -498,8 +498,10 @@ def stats(project_dir: Path) -> dict:
         n = len(f.text.split("\n"))
         lines[n] = lines.get(n, 0) + 1
     index = export_index(project_dir)
+    # Размер клипа – записанный при нарезке (сам файл после передачи в Anki
+    # удаляется: копия лежит в медиа Anki).
     sizes = [e["size_bytes"] if "size_bytes" in e else (project_dir / "export" / e["clip"]).stat().st_size
-             for e in index if (project_dir / "export" / e["clip"]).exists()]
+             for e in index if "size_bytes" in e or (project_dir / "export" / e["clip"]).exists()]
     exported_seconds = sum(e["frames"] / fps for e in index)
 
     def spread(values, digits=2):

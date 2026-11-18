@@ -571,6 +571,10 @@ def speakers_from_tags(tags: list[str]) -> list[str]:
             if t not in SERVICE_TAGS and not t.lower().startswith(TAG) and "::" not in t]
 
 
+# Отступ строки говорящих от предыдущей строки карточки.
+WHO_GAP = "0.6em"
+
+
 def decorate(front: str, back: str, speakers: list[str] | None = None, colors: dict | None = None) -> tuple[str, str]:
     """Поля карточки в цветах + строка говорящих в конце (см. выше)."""
     c = colors or card_colors()
@@ -582,7 +586,9 @@ def decorate(front: str, back: str, speakers: list[str] | None = None, colors: d
     if has_back:
         back = _paint_back(back, c)
     if names:
-        div = f'<div class="ms-who" style="color:{c["who"]}">{html.escape(names, quote=False)}</div>'
+        # Отступ сверху – строка имён отделена от реплик (иначе сливалась с
+        # последней строкой текста). Стиль – прямо в поле: тип заметок общий.
+        div = f'<div class="ms-who" style="color:{c["who"]};margin-top:{WHO_GAP}">{html.escape(names, quote=False)}</div>'
         if has_back:
             back += div
         else:
@@ -621,6 +627,7 @@ def recolor_notes(note_ids: list[int], speakers: dict | None = None, colors: dic
     changed = 0
     ids = list(note_ids)
     for start in range(0, len(ids), 100):
+        updates = []  # изменённые заметки этой сотни – одним вызовом (multi)
         for note in invoke("notesInfo", notes=ids[start:start + 100]):
             if TAG not in [t.lower() for t in note.get("tags", [])]:
                 continue  # только карточки приложения
@@ -633,8 +640,11 @@ def recolor_notes(note_ids: list[int], speakers: dict | None = None, colors: dic
                 names = []
             new_front, new_back = decorate(front, back, names, c)
             if (new_front, new_back) != (front, back):
-                invoke("updateNoteFields", note={"id": note["noteId"], "fields": {model()["front"]: new_front, model()["back"]: new_back}})
-                changed += 1
+                updates.append({"action": "updateNoteFields", "params": {"note": {
+                    "id": note["noteId"], "fields": {model()["front"]: new_front, model()["back"]: new_back}}}})
+        if updates:
+            invoke("multi", actions=updates)
+            changed += len(updates)
         if progress:
             progress(min(len(ids), start + 100), len(ids))
     return changed

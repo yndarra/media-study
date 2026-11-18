@@ -143,6 +143,47 @@ class Worker:
         self.speakers: dict[str, set[str]] = {}  # говорящие по видео (для меток Anki)
         self.anki_down_until = 0.0
         self.reorder_needed = False  # создавались/удалялись карточки — выровнять порядок
+        self._media_dir: Path | None = None  # папка медиа Anki (collection.media)
+
+    # -- промежуточные клипы ---------------------------------------------------------
+    #
+    # Клип нарезается в export/ проекта, а при создании карточки Anki копирует
+    # его к себе (collection.media) – дальше копия в export/ только занимает
+    # место (столько же, сколько клипы в Anki). Удаляется, когда тот же файл
+    # (того же размера) уже лежит в медиа Anki и карточка не ждёт обновления.
+    # Понадобится снова (вернули фрагмент, правка только текста) – клип просто
+    # нарежется из оригинала заново.
+    def media_dir(self) -> Path | None:
+        if self._media_dir is None and self._anki_available():
+            try:
+                self._media_dir = Path(anki.invoke("getMediaDirPath"))
+            except (anki.AnkiUnavailable, RuntimeError):
+                return None
+        return self._media_dir
+
+    def drop_local_clips(self, project: Path, index: list[dict]) -> int:
+        """Удалить клипы export/, которые уже есть в медиа Anki. Возвращает, сколько удалено."""
+        media = self.media_dir()
+        if media is None or not media.is_dir():
+            return 0
+        dropped = 0
+        for entry in index:
+            if not entry.get("anki_note_id") or entry.get("redo") or entry.get("anki_update_pending") or entry.get("unvoiced"):
+                continue
+            local = project / "export" / entry["clip"]
+            if not local.is_file():
+                continue
+            # Имя в медиа Anki – как при передаче (регистр Windows не различает).
+            in_anki = media / f"{project.name}_{entry['clip']}"
+            try:
+                if in_anki.is_file() and in_anki.stat().st_size == local.stat().st_size:
+                    local.unlink()
+                    dropped += 1
+            except OSError:
+                pass  # занят и т.п. – удалится в следующий раз
+        if dropped:
+            print(f"{project.name}: промежуточные клипы, уже лежащие в Anki, удалены: {dropped}", flush=True)
+        return dropped
 
     def projects(self) -> list[Path]:
         if self.only_project:
@@ -403,6 +444,7 @@ class Worker:
             except RuntimeError as error:
                 print(f"Обратные карточки: {error}", flush=True)
         waiting = any((not e.get("anki_note_id") and not e.get("orphan")) or e.get("anki_update_pending") for e in index)
+        self.drop_local_clips(project, read_json(project / "export" / "index.json", []))
         self.status(project, "waiting_anki" if waiting else "idle",
                     "Жду Anki, чтобы создать карточки" if waiting else "", seconds_per_frame=spf)
         return did, waiting
