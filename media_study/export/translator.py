@@ -253,6 +253,20 @@ def _post(data_dir: Path, path: str, body: dict | None = None, method: str = "PO
             # 402 — на ключе нет денег: тот же запрос — с запасным ключом.
             if error.code == 402 and attempt == 0 and _switch_to_next_key(data_dir):
                 continue
+            # 403 "Access denied by security policy" отдаёт Cloudflare перед
+            # OpenRouter, когда запрос идёт из страны, где OpenRouter закрыт
+            # (из России – напрямую, мимо VPN): ключ и модель тут ни при чём.
+            try:
+                detail = error.read().decode("utf-8", "replace")[:300]
+            except OSError:
+                detail = ""
+            if error.code == 403 and "security policy" in detail:
+                raise RuntimeError(
+                    "OpenRouter недоступен из этой сети (403: доступ закрыт по стране) – "
+                    "нужен VPN для openrouter.ai (Python ходит мимо раздельного туннеля)"
+                ) from error
+            if detail:
+                raise RuntimeError(f"OpenRouter: HTTP {error.code}: {detail}") from error
             raise
 
 
